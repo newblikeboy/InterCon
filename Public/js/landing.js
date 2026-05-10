@@ -84,13 +84,40 @@ authTabs.forEach((tab) => {
 });
 
 authForms.forEach((form) => {
-  form.addEventListener("submit", (event) => {
+  form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const message = form.querySelector("[data-form-message]");
     const isSignup = form.dataset.authForm === "signup";
-    message.textContent = isSignup
-      ? "Your request is ready. Our team can review it and prepare your WhatsApp setup plan."
-      : "Login demo submitted. Connect this form to your backend when ready.";
+    const submitButton = form.querySelector("button[type='submit']");
+    const formData = Object.fromEntries(new FormData(form).entries());
+
+    message.textContent = "";
+    submitButton.disabled = true;
+    submitButton.textContent = isSignup ? "Creating account..." : "Logging in...";
+
+    try {
+      const response = await fetch(isSignup ? "/api/auth/signup" : "/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        credentials: "include",
+        body: JSON.stringify(formData)
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Something went wrong");
+      }
+
+      message.textContent = data.message || "Success";
+      window.location.href = "/customer";
+    } catch (error) {
+      message.textContent = error.message;
+    } finally {
+      submitButton.disabled = false;
+      submitButton.textContent = isSignup ? "Request solution plan" : "Login";
+    }
   });
 });
 

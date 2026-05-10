@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InterCon Admin Portal</title>
+  <meta name="description" content="InterCon admin portal for monitoring customers, WhatsApp onboarding, WABAs, webhooks, campaigns, billing, and support.">
+  <link rel="stylesheet" href="style/admin-portal.css">
+</head>
+<body class="portal-body admin-body">
+  <div class="portal-shell">
+    <aside class="portal-sidebar" data-portal-sidebar>
+      <a class="brand portal-brand" href="index.html" aria-label="InterCon home">
+        <span class="brand-mark">IC</span>
+        <span>
+          <strong>InterCon</strong>
+          <small>Admin Portal</small>
+        </span>
+      </a>
+
+      <nav class="portal-nav" aria-label="Admin portal">
+        <a class="active" href="#overview"><span>01</span>Overview</a>
+        <a href="#customers"><span>02</span>Customers</a>
+        <a href="#onboarding"><span>03</span>Onboarding</a>
+        <a href="#wabas"><span>04</span>WABAs</a>
+        <a href="#webhooks"><span>05</span>Webhooks</a>
+        <a href="#templates"><span>06</span>Templates</a>
+        <a href="#campaigns"><span>07</span>Campaigns</a>
+        <a href="#billing"><span>08</span>Billing</a>
+        <a href="#support"><span>09</span>Support</a>
+        <a href="#settings"><span>10</span>Settings</a>
+      </nav>
+
+      <div class="portal-side-note">
+        <strong>Admin scope</strong>
+        <span>Monitor platform health. Customers should complete setup through Embedded Signup.</span>
+      </div>
+    </aside>
+
+    <main class="portal-main">
+      <header class="portal-topbar">
+        <button class="portal-menu" type="button" aria-label="Open portal menu" aria-expanded="false" data-portal-menu>
+          <span></span><span></span><span></span>
+        </button>
+        <div>
+          <p class="eyebrow">Platform operations</p>
+          <h1>Admin Dashboard</h1>
+        </div>
+        <div class="portal-actions">
+          <button class="btn btn-outline" type="button">Export report</button>
+          <button class="btn" type="button">Review alerts</button>
+        </div>
+      </header>
+
+      <section class="portal-hero-panel" id="overview" aria-label="Platform readiness">
+        <div class="portal-hero-copy">
+          <span class="status-pill warning">12 items need review</span>
+          <h2>Track every customer from signup to live WhatsApp messaging.</h2>
+          <p>Use this portal to monitor Embedded Signup completions, connected WABAs, phone numbers, webhook health, template status, campaigns, usage, billing, and support tickets.</p>
+          <div class="portal-hero-actions">
+            <a class="btn" href="#onboarding">View onboarding</a>
+            <a class="btn btn-ghost-light" href="#webhooks">Check webhooks</a>
+          </div>
+        </div>
+
+        <div class="readiness-panel">
+          <div class="panel-topline dark">
+            <span>Platform health</span>
+            <strong>91%</strong>
+          </div>
+          <div class="progress-track portal-progress"><span style="width:91%"></span></div>
+          <ul class="setup-list portal-steps">
+            <li class="done">API reachable</li>
+            <li class="done">Webhook receiver online</li>
+            <li class="done">Message workers active</li>
+            <li class="active">2 customers missing payment method</li>
+            <li>3 templates pending review</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="portal-grid portal-stats" aria-label="Admin metrics">
+        <article>
+          <span>Customers</span>
+          <strong>38</strong>
+          <small>21 fully connected</small>
+        </article>
+        <article>
+          <span>WABAs</span>
+          <strong>24</strong>
+          <small>3 need attention</small>
+        </article>
+        <article>
+          <span>Messages</span>
+          <strong>82k</strong>
+          <small>This month</small>
+        </article>
+        <article>
+          <span>Tickets</span>
+          <strong>9</strong>
+          <small>4 open today</small>
+        </article>
+      </section>
+
+      <section class="portal-section" id="customers">
+        <div class="portal-section-head compact">
+          <div>
+            <p class="eyebrow">Accounts</p>
+            <h2>Customers</h2>
+          </div>
+          <button class="btn btn-outline" type="button">Add internal note</button>
+        </div>
+        <div class="table-panel">
+          <div class="table-row table-head">
+            <span>Business</span><span>Status</span><span>Plan</span><span>Action</span>
+          </div>
+          <div class="table-row">
+            <strong>Aarav Kitchens</strong><span>Setup pending</span><em class="pending">Review</em><button type="button">Open</button>
+          </div>
+          <div class="table-row">
+            <strong>Nexa Motors</strong><span>Live</span><em class="approved">Healthy</em><button type="button">Open</button>
+          </div>
+          <div class="table-row">
+            <strong>HealthSure Clinic</strong><span>Template pending</span><em class="pending">Watch</em><button type="button">Open</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="portal-section split" id="onboarding">
+        <div>
+          <p class="eyebrow">Embedded Signup</p>
+          <h2>Onboarding Monitor</h2>
+          <p>See who started signup, who returned WABA and phone IDs, who needs payment, and who failed before completion.</p>
+          <button class="btn" type="button">View failed sessions</button>
+        </div>
+        <div class="campaign-stack">
+          <article><strong>Started</strong><span>8 sessions in the last 24 hours</span></article>
+          <article><strong>Completed</strong><span>5 customers returned WABA details</span></article>
+          <article><strong>Blocked</strong><span>2 customers need Meta payment setup</span></article>
+        </div>
+      </section>
+
+      <section class="portal-grid two-col">
+        <article class="portal-section mini" id="wabas">
+          <p class="eyebrow">Assets</p>
+          <h2>WABAs & Numbers</h2>
+          <p>Monitor WABA IDs, phone number IDs, quality rating, throughput, display name status, and token health.</p>
+          <button class="btn btn-outline" type="button">Open registry</button>
+        </article>
+        <article class="portal-section mini" id="webhooks">
+          <p class="eyebrow">Events</p>
+          <h2>Webhook Health</h2>
+          <p>Track inbound messages, status callbacks, retries, duplicate events, and processing latency.</p>
+          <button class="btn btn-outline" type="button">View logs</button>
+        </article>
+      </section>
+
+      <section class="portal-grid two-col">
+        <article class="portal-section mini" id="templates">
+          <p class="eyebrow">Compliance</p>
+          <h2>Templates</h2>
+          <p>Monitor approvals, rejections, category changes, quality warnings, and customer template usage.</p>
+          <button class="btn btn-outline" type="button">Review templates</button>
+        </article>
+        <article class="portal-section mini" id="campaigns">
+          <p class="eyebrow">Volume</p>
+          <h2>Campaigns</h2>
+          <p>Watch campaign queue, delivery failures, throttling, opt-out spikes, and suspicious activity.</p>
+          <button class="btn btn-outline" type="button">Open campaigns</button>
+        </article>
+      </section>
+
+      <section class="portal-grid two-col">
+        <article class="portal-section mini" id="billing">
+          <p class="eyebrow">Revenue</p>
+          <h2>Billing</h2>
+          <p>Track InterCon plans, usage ledger, invoices, failed payments, and customer wallet status.</p>
+          <button class="btn btn-outline" type="button">View billing</button>
+        </article>
+        <article class="portal-section mini" id="support">
+          <p class="eyebrow">Helpdesk</p>
+          <h2>Support</h2>
+          <p>Handle failed onboarding, webhook errors, template rejections, billing issues, and delivery problems.</p>
+          <button class="btn" type="button">Open tickets</button>
+        </article>
+      </section>
+
+      <section class="portal-section" id="settings">
+        <div class="portal-section-head compact">
+          <div>
+            <p class="eyebrow">Configuration</p>
+            <h2>Platform Settings</h2>
+            <p>Manage Meta app settings, webhook endpoint status, plan limits, alert rules, and admin permissions.</p>
+          </div>
+          <button class="btn btn-outline" type="button">Manage settings</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="js/admin-portal.js"></script>
+</body>
+</html>

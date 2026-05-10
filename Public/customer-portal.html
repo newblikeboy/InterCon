@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InterCon Customer Portal</title>
+  <meta name="description" content="InterCon customer portal for connecting WhatsApp Business, managing templates, contacts, campaigns, inbox, automation, analytics, billing, and support.">
+  <link rel="stylesheet" href="style/customer-portal.css">
+</head>
+<body class="portal-body">
+  <div class="portal-shell">
+    <aside class="portal-sidebar" data-portal-sidebar>
+      <a class="brand portal-brand" href="index.html" aria-label="InterCon home">
+        <span class="brand-mark">IC</span>
+        <span>
+          <strong>InterCon</strong>
+          <small>Customer Portal</small>
+        </span>
+      </a>
+
+      <nav class="portal-nav" aria-label="Customer portal">
+        <a class="active" href="#overview"><span>01</span>Overview</a>
+        <a href="#connect"><span>02</span>Connect WhatsApp</a>
+        <a href="#contacts"><span>03</span>Contacts</a>
+        <a href="#templates"><span>04</span>Templates</a>
+        <a href="#send-whatsapp"><span>05</span>Send WhatsApp</a>
+        <a href="#campaigns"><span>06</span>Campaigns</a>
+        <a href="#inbox"><span>07</span>Inbox</a>
+        <a href="#automation"><span>08</span>Automation</a>
+        <a href="#analytics"><span>09</span>Analytics</a>
+        <a href="#billing"><span>10</span>Billing</a>
+        <a href="#support"><span>11</span>Support</a>
+      </nav>
+
+      <div class="portal-side-note">
+        <strong>Need help?</strong>
+        <span>Use support tickets only when a step fails. The portal is built for self-service setup.</span>
+      </div>
+    </aside>
+
+    <main class="portal-main">
+      <header class="portal-topbar">
+        <button class="portal-menu" type="button" aria-label="Open portal menu" aria-expanded="false" data-portal-menu>
+          <span></span><span></span><span></span>
+        </button>
+        <div></div>
+        <div class="portal-actions">
+          <div class="profile-menu" data-profile-menu>
+            <button class="profile-trigger" type="button" aria-label="Open profile menu" aria-expanded="false" data-profile-trigger>
+              <span class="avatar teal">AK</span>
+            </button>
+            <div class="profile-dropdown" hidden data-profile-dropdown>
+              <div class="profile-summary">
+                <strong>Aarav Kitchens</strong>
+                <span>Owner account</span>
+              </div>
+              <button type="button" data-profile-action="profile">My Profile</button>
+              <button type="button" data-profile-action="password">Change Password</button>
+              <button type="button" data-logout>Logout</button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div class="portal-view" id="overview" data-portal-view>
+        <section class="portal-section overview-dashboard" aria-label="Setup overview">
+          <div class="portal-section-head">
+            <div>
+              <p class="eyebrow">Setup overview</p>
+              <h2>Complete these steps to start using WhatsApp.</h2>
+              <p>Your portal unlocks messaging features as each setup step is completed. Start with Meta connection, then prepare contacts and templates.</p>
+            </div>
+            <span class="status-pill warning">3 of 6 completed</span>
+          </div>
+
+          <div class="overview-layout">
+            <div class="setup-status-card">
+              <div class="panel-topline">
+                <span>Current step</span>
+                <strong>Connect WhatsApp</strong>
+              </div>
+              <div class="progress-track"><span style="width:50%"></span></div>
+              <p>Connect your WhatsApp Business Account using Meta Embedded Signup. This links your WABA and business phone number with InterCon.</p>
+              <a class="btn" href="#connect">Continue setup</a>
+            </div>
+
+            <div class="setup-roadmap">
+              <article class="done">
+                <span>1</span>
+                <div>
+                  <strong>Account created</strong>
+                  <small>Business profile and owner login are ready.</small>
+                </div>
+              </article>
+              <article class="done">
+                <span>2</span>
+                <div>
+                  <strong>Plan selected</strong>
+                  <small>Your InterCon workspace is active.</small>
+                </div>
+              </article>
+              <article class="active">
+                <span>3</span>
+                <div>
+                  <strong>Connect WhatsApp</strong>
+                  <small>Use Meta Embedded Signup to connect WABA and phone number.</small>
+                </div>
+              </article>
+              <article>
+                <span>4</span>
+                <div>
+                  <strong>Import opted-in contacts</strong>
+                  <small>Add customers with consent proof before sending campaigns.</small>
+                </div>
+              </article>
+              <article>
+                <span>5</span>
+                <div>
+                  <strong>Create templates</strong>
+                  <small>Submit utility, marketing, or authentication templates for approval.</small>
+                </div>
+              </article>
+              <article>
+                <span>6</span>
+                <div>
+                  <strong>Start messaging</strong>
+                  <small>Use campaigns, inbox, automation, analytics, and billing.</small>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="portal-grid portal-stats" aria-label="Quick metrics">
+          <article>
+            <span>Contacts</span>
+            <strong>1,248</strong>
+            <small>932 have WhatsApp opt-in</small>
+          </article>
+          <article>
+            <span>Templates</span>
+            <strong>6</strong>
+            <small>4 approved, 2 pending</small>
+          </article>
+          <article>
+            <span>Campaigns</span>
+            <strong>3</strong>
+            <small>1 scheduled this week</small>
+          </article>
+          <article>
+            <span>Inbox</span>
+            <strong>18</strong>
+            <small>7 waiting for reply</small>
+          </article>
+        </section>
+
+        <section class="portal-section ready-section" aria-label="After setup shortcuts">
+          <div class="portal-section-head compact">
+            <div>
+              <p class="eyebrow">After setup is complete</p>
+              <h2>Daily workspace</h2>
+            </div>
+          </div>
+          <div class="work-grid">
+            <article class="work-card">
+              <strong>Send WhatsApp</strong>
+              <p>Send approved-template messages to opted-in customers.</p>
+              <a href="#send-whatsapp">Open sender</a>
+            </article>
+            <article class="work-card">
+              <strong>Reply to customers</strong>
+              <p>Manage incoming WhatsApp replies inside the service window.</p>
+              <a href="#inbox">Open inbox</a>
+            </article>
+            <article class="work-card">
+              <strong>Check performance</strong>
+              <p>Track sent, delivered, read, failed, and reply metrics.</p>
+              <a href="#analytics">View analytics</a>
+            </article>
+          </div>
+        </section>
+      </div>
+
+      <section class="portal-section portal-view" id="connect" data-portal-view hidden>
+        <div class="portal-section-head">
+          <div>
+            <p class="eyebrow">Step 1</p>
+            <h2>Connect WhatsApp</h2>
+            <p>Use Meta Embedded Signup to connect your own WhatsApp Business Account, business phone number, and permissions to InterCon.</p>
+          </div>
+          <button class="btn" type="button" data-connect-whatsapp>Connect with Meta</button>
+        </div>
+
+        <div class="connect-layout">
+          <div class="connect-checklist">
+            <article class="check-row done">
+              <span></span>
+              <div>
+                <strong>InterCon account</strong>
+                <small>Your portal account is active.</small>
+              </div>
+            </article>
+            <article class="check-row active">
+              <span></span>
+              <div>
+                <strong>Meta Embedded Signup</strong>
+                <small>Connect your Business Portfolio, WABA, and number.</small>
+              </div>
+            </article>
+            <article class="check-row">
+              <span></span>
+              <div>
+                <strong>Webhook connection</strong>
+                <small>InterCon receives messages and delivery status updates.</small>
+              </div>
+            </article>
+            <article class="check-row">
+              <span></span>
+              <div>
+                <strong>Payment method</strong>
+                <small>Add billing in WhatsApp Manager if Meta requires it.</small>
+              </div>
+            </article>
+            <article class="check-row">
+              <span></span>
+              <div>
+                <strong>Ready to send</strong>
+                <small>Use templates, campaigns, and inbox after connection.</small>
+              </div>
+            </article>
+          </div>
+
+          <aside class="connection-card">
+            <span class="status-pill">Current status</span>
+            <dl>
+              <div><dt>WABA</dt><dd>Not connected</dd></div>
+              <div><dt>Phone number</dt><dd>Not connected</dd></div>
+              <div><dt>Webhook</dt><dd>Waiting</dd></div>
+              <div><dt>Sending</dt><dd>Locked until setup</dd></div>
+            </dl>
+          </aside>
+        </div>
+      </section>
+
+      <section class="portal-section portal-view" id="contacts" data-portal-view hidden>
+        <div class="portal-section-head compact">
+          <div>
+            <p class="eyebrow">Audience</p>
+            <h2>Contacts & Opt-In</h2>
+            <p>Import opted-in customers, create segments, and keep opt-outs away from campaigns.</p>
+          </div>
+          <button class="btn btn-outline" type="button" data-contact-upload>Upload CSV</button>
+          <input type="file" accept=".csv,text/csv" hidden data-contact-file>
+        </div>
+
+        <div class="work-grid contact-actions">
+          <article class="work-card">
+            <strong>Import customers</strong>
+            <p>Upload contacts with name, phone number, tags, city, source, and opt-in proof.</p>
+            <button type="button" data-contact-upload>Start import</button>
+          </article>
+          <article class="work-card">
+            <strong>Segment audience</strong>
+            <p>Create groups for leads, repeat buyers, abandoned carts, appointments, or support customers.</p>
+            <button type="button" data-create-segment>Create segment</button>
+          </article>
+          <article class="work-card">
+            <strong>Manage opt-outs</strong>
+            <p>Keep unsubscribe and blocked customers out of campaigns automatically.</p>
+            <button type="button" data-view-optouts>View list</button>
+          </article>
+        </div>
+
+        <p class="contact-message" data-contact-message></p>
+
+        <div class="contact-panel" hidden data-segment-panel>
+          <div class="portal-section-head compact">
+            <div>
+              <p class="eyebrow">Segment</p>
+              <h2>Create segment by tag</h2>
+            </div>
+          </div>
+          <form class="contact-form" data-segment-form>
+            <input type="text" name="name" required placeholder="Segment name, e.g. Repeat Buyers">
+            <input type="text" name="tag" required placeholder="Tag, e.g. repeat-buyer">
+            <button class="btn" type="submit">Save segment</button>
+          </form>
+          <div class="segment-list" data-segment-list></div>
+        </div>
+
+        <div class="contact-panel" hidden data-optout-panel>
+          <div class="portal-section-head compact">
+            <div>
+              <p class="eyebrow">Suppression list</p>
+              <h2>Opt-outs and blocked contacts</h2>
+            </div>
+          </div>
+          <div class="table-panel">
+            <div class="table-row contact-table-row table-head">
+              <span>Name</span><span>Phone</span><span>Status</span><span>Updated</span>
+            </div>
+            <div data-optout-list></div>
+          </div>
+        </div>
+
+        <div class="contact-panel">
+          <div class="portal-section-head compact">
+            <div>
+              <p class="eyebrow">Customer list</p>
+              <h2>Imported contacts</h2>
+            </div>
+            <button class="btn btn-outline" type="button" data-refresh-contacts>Refresh</button>
+          </div>
+          <div class="table-panel">
+            <div class="table-row contact-table-row table-head">
+              <span>Name</span><span>Phone</span><span>Opt-in</span><span>Tags</span>
+            </div>
+            <div data-contact-list></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="portal-section portal-view" id="templates" data-portal-view hidden>
+        <div class="portal-section-head compact">
+          <div>
+            <p class="eyebrow">Template approval</p>
+            <h2>Create policy-ready WhatsApp templates</h2>
+            <p>Templates are reviewed by Meta before they can be used for business-initiated messages. Prepare the right category, variables, samples, and opt-in proof before submission.</p>
+          </div>
+          <button class="btn" type="button" data-submit-template>Submit template</button>
+        </div>
+
+        <div class="template-builder">
+          <div class="template-form-panel">
+            <div class="form-grid">
+              <label>
+                Template name
+                <input type="text" name="name" placeholder="order_update_v1" data-template-name>
+              </label>
+              <label>
+                Language
+                <select name="language" data-template-language>
+                  <option value="en">English</option>
+                  <option value="hi">Hindi</option>
+                  <option value="en_IN">English (India)</option>
+                </select>
+              </label>
+            </div>
+
+            <label>
+              Category
+              <select name="category" data-template-category>
+                <option value="utility">Utility - order, account, payment, appointment, service update</option>
+                <option value="marketing">Marketing - offers, promotions, re-engagement, recommendations</option>
+                <option value="authentication">Authentication - OTP, login code, account verification</option>
+              </select>
+            </label>
+
+            <label>
+              Message body
+              <textarea rows="6" name="body" placeholder="Hi {{1}}, your order {{2}} has been shipped and will arrive by {{3}}." data-template-body></textarea>
+            </label>
+
+            <label>
+              Variable samples
+              <input type="text" name="variableSamples" placeholder="{{1}} = Priya, {{2}} = ORD1234, {{3}} = 12 May" data-template-samples>
+            </label>
+
+            <div class="template-actions">
+              <button class="btn btn-outline" type="button" data-save-template-draft>Save draft</button>
+              <button class="btn" type="button" data-submit-template>Send for Meta review</button>
+            </div>
+            <p class="contact-message" data-template-message></p>
+          </div>
+
+          <aside class="template-compliance">
+            <span class="status-pill warning">Required before approval</span>
+            <h3>Compliance checklist</h3>
+            <label><input type="checkbox"> Customer has opted in for this message category.</label>
+            <label><input type="checkbox"> Template category matches the message purpose.</label>
+            <label><input type="checkbox"> Variables use samples and correct format like {{1}}.</label>
+            <label><input type="checkbox"> Message does not mislead, spam, or surprise customers.</label>
+            <label><input type="checkbox"> No prohibited goods, sensitive identifiers, or restricted claims.</label>
+            <label><input type="checkbox"> Clear opt-out wording is included where needed.</label>
+          </aside>
+        </div>
+
+        <div class="template-policy-grid">
+          <article>
+            <strong>Utility</strong>
+            <p>Use for requested or transaction-related updates such as orders, invoices, appointments, account alerts, and service changes.</p>
+          </article>
+          <article>
+            <strong>Marketing</strong>
+            <p>Use for offers, promotions, announcements, product recommendations, abandoned cart nudges, and re-engagement.</p>
+          </article>
+          <article>
+            <strong>Authentication</strong>
+            <p>Use for one-time passcodes, login verification, account recovery, and security confirmation messages.</p>
+          </article>
+        </div>
+
+        <div class="template-status-area">
+          <div class="portal-section-head compact">
+            <div>
+              <p class="eyebrow">Submitted templates</p>
+              <h2>Approval status</h2>
+            </div>
+          </div>
+          <div class="table-panel">
+            <div class="table-row table-head">
+              <span>Name</span><span>Category</span><span>Status</span><span>Action</span>
+            </div>
+            <div class="table-row">
+              <strong>order_confirmed</strong><span>Utility</span><em class="approved">Active - High</em><button type="button">View</button>
+            </div>
+            <div class="table-row">
+              <strong>appointment_reminder</strong><span>Utility</span><em class="approved">Active - Pending</em><button type="button">View</button>
+            </div>
+            <div class="table-row">
+              <strong>festival_offer</strong><span>Marketing</span><em class="pending">In review</em><button type="button">View</button>
+            </div>
+            <div class="table-row">
+              <strong>loan_discount_push</strong><span>Marketing</span><em class="rejected">Rejected</em><button type="button">Fix</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="policy-note">
+          <strong>Important:</strong>
+          <span>Only approved templates can start conversations outside the 24-hour service window. Meta may reject, pause, or disable templates if content violates policy or receives negative feedback.</span>
+        </div>
+      </section>
+
+      <section class="portal-section portal-view" id="send-whatsapp" data-portal-view hidden>
+        <div class="portal-section-head compact">
+          <div>
+            <p class="eyebrow">Send WhatsApp</p>
+            <h2>Send approved template message</h2>
+            <p>Direct WhatsApp sending is handled only here. Select an opted-in contact and a Meta-approved template.</p>
+          </div>
+          <button class="btn btn-outline" type="button" data-refresh-send-data>Refresh</button>
+        </div>
+
+        <div class="send-layout">
+          <form class="send-form" data-send-message-form>
+            <label>
+              Contact
+              <select name="contactId" required data-send-contact-select>
+                <option value="">Loading contacts...</option>
+              </select>
+            </label>
+            <label>
+              Approved template
+              <select name="templateName" required data-send-template-select>
+                <option value="">Loading approved templates...</option>
+              </select>
+            </label>
+            <label>
+              Language
+              <select name="language">
+                <option value="en">English</option>
+                <option value="hi">Hindi</option>
+                <option value="en_IN">English (India)</option>
+              </select>
+            </label>
+            <label>
+              Template variables
+              <input type="text" name="variables" placeholder="Priya, ORD1234, 12 May">
+            </label>
+            <div class="campaign-checks">
+              <label><input type="checkbox" required> Contact has WhatsApp opt-in.</label>
+              <label><input type="checkbox" required> Selected template is approved by Meta.</label>
+              <label><input type="checkbox" required> This message is expected by the customer.</label>
+            </div>
+            <button class="btn" type="submit">Send WhatsApp</button>
+            <p class="contact-message" data-send-message-status></p>
+          </form>
+
+          <aside class="send-preview">
+            <span class="status-pill">Preview</span>
+            <div class="message-bubble outbound">
+              <p data-send-preview-text>Select a template and enter variables to preview the outgoing WhatsApp message.</p>
+              <span>Template message</span>
+            </div>
+            <dl>
+              <div><dt>Allowed</dt><dd>Opted-in contacts</dd></div>
+              <div><dt>Template</dt><dd>Approved only</dd></div>
+              <div><dt>Send API</dt><dd>Phone Number ID</dd></div>
+            </dl>
+          </aside>
+        </div>
+
+        <div class="send-history-panel">
+          <div class="portal-section-head compact">
+            <div>
+              <p class="eyebrow">Message history</p>
+              <h2>Recent sends</h2>
+            </div>
+          </div>
+          <div class="table-panel">
+            <div class="table-row send-table-row table-head">
+              <span>To</span><span>Template</span><span>Status</span><span>Sent at</span>
+            </div>
+            <div data-send-history></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="portal-section portal-view" id="campaigns" data-portal-view hidden>
+        <div class="portal-section-head compact">
+          <div>
+            <p class="eyebrow">Broadcasts</p>
+            <h2>Campaigns</h2>
+            <p>Create campaigns only for opted-in customers. Choose an approved template, audience tag, and schedule.</p>
+          </div>
+          <button class="btn btn-outline" type="button" data-refresh-campaigns>Refresh</button>
+        </div>
+
+        <div class="campaign-layout">
+          <form class="campaign-form" data-campaign-form>
+            <div class="form-grid">
+              <label>
+                Campaign name
+                <input type="text" name="name" required placeholder="May payment reminder">
+              </label>
+              <label>
+                Meta-approved template
+                <select name="templateName" required data-campaign-template-select>
+                  <option value="">Loading approved templates...</option>
+                </select>
+              </label>
+            </div>
+            <div class="form-grid">
+              <label>
+                Category
+                <select name="category" required>
+                  <option value="">Select category</option>
+                  <option value="utility">Utility</option>
+                  <option value="marketing">Marketing</option>
+                  <option value="authentication">Authentication</option>
+                </select>
+              </label>
+              <label>
+                Audience tag
+                <input type="text" name="audienceTag" placeholder="repeat-buyer">
+              </label>
+            </div>
+            <label>
+              Schedule date and time
+              <input type="datetime-local" name="scheduledAt">
+            </label>
+            <div class="campaign-checks">
+              <label><input type="checkbox" required> Audience has WhatsApp opt-in.</label>
+              <label><input type="checkbox" required> Template is approved by Meta.</label>
+              <label><input type="checkbox" required> Campaign category matches template purpose.</label>
+            </div>
+            <div class="template-actions">
+              <button class="btn btn-outline" type="reset">Clear</button>
+              <button class="btn" type="submit">Save campaign</button>
+            </div>
+            <p class="contact-message" data-campaign-message></p>
+          </form>
+
+          <aside class="campaign-summary-card">
+            <span class="status-pill warning">Before sending</span>
+            <h3>Campaign safety checks</h3>
+            <p>InterCon will count only active contacts with opt-in. Opt-outs and blocked contacts must never receive campaigns.</p>
+            <dl>
+              <div><dt>Allowed audience</dt><dd>Opted-in contacts</dd></div>
+              <div><dt>Template</dt><dd>Approved only</dd></div>
+              <div><dt>Outside 24h</dt><dd>Template required</dd></div>
+            </dl>
+          </aside>
+        </div>
+
+        <div class="campaign-list-panel">
+          <div class="portal-section-head compact">
+            <div>
+              <p class="eyebrow">Campaign list</p>
+              <h2>Drafts and scheduled broadcasts</h2>
+            </div>
+          </div>
+          <div class="table-panel">
+            <div class="table-row campaign-table-row table-head">
+              <span>Name</span><span>Template</span><span>Status</span><span>Recipients</span><span>Action</span>
+            </div>
+            <div data-campaign-list></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="portal-view inbox-workspace" id="inbox" data-portal-view hidden>
+        <div class="inbox-column conversation-list">
+          <div class="inbox-panel-head">
+            <div>
+              <p class="eyebrow">Inbox</p>
+              <h2>Chats</h2>
+            </div>
+            <span class="status-pill">18 open</span>
+          </div>
+          <label class="chat-search">
+            <input type="search" placeholder="Search customer or phone">
+          </label>
+          <div class="chat-filter-row">
+            <button class="active" type="button">All</button>
+            <button type="button">Unread</button>
+            <button type="button">Assigned</button>
+          </div>
+          <div class="chat-list">
+            <button class="chat-item active" type="button">
+              <span class="avatar teal">PS</span>
+              <span>
+                <strong>Priya Sharma</strong>
+                <small>Need delivery update</small>
+              </span>
+              <em>2m</em>
+            </button>
+            <button class="chat-item" type="button">
+              <span class="avatar blue">RM</span>
+              <span>
+                <strong>Rohit Mehta</strong>
+                <small>Asked for quotation</small>
+              </span>
+              <em>18m</em>
+            </button>
+            <button class="chat-item" type="button">
+              <span class="avatar">NC</span>
+              <span>
+                <strong>Neha Clinic</strong>
+                <small>Appointment confirmed</small>
+              </span>
+              <em>1h</em>
+            </button>
+          </div>
+        </div>
+
+        <div class="inbox-column chat-window">
+          <div class="chat-header">
+            <div class="chat-person">
+              <span class="avatar teal">PS</span>
+              <div>
+                <strong>Priya Sharma</strong>
+                <small>+91 98765 43210 - Service window open</small>
+              </div>
+            </div>
+            <div class="chat-tools">
+              <button type="button">Assign</button>
+              <button type="button">Template</button>
+            </div>
+          </div>
+
+          <div class="message-thread" aria-label="Conversation messages">
+            <div class="message-date">Today</div>
+            <article class="message-bubble inbound">
+              <p>Hi, can you tell me where my order is?</p>
+              <span>10:42 AM</span>
+            </article>
+            <article class="message-bubble outbound">
+              <p>Hi Priya, your order is packed and waiting for courier pickup.</p>
+              <span>10:43 AM - Sent</span>
+            </article>
+            <article class="message-bubble outbound">
+              <p>You will receive tracking details once the courier scans it.</p>
+              <span>10:43 AM - Delivered</span>
+            </article>
+            <article class="message-bubble inbound">
+              <p>Okay, please update me when it is shipped.</p>
+              <span>10:45 AM</span>
+            </article>
+          </div>
+
+          <form class="chat-composer">
+            <button type="button">+</button>
+            <input type="text" placeholder="Type a message">
+            <button type="button">Quick reply</button>
+            <button class="btn" type="submit">Send</button>
+          </form>
+        </div>
+
+        <aside class="inbox-column customer-context">
+          <div class="context-card">
+            <span class="avatar teal">PS</span>
+            <strong>Priya Sharma</strong>
+            <small>Customer - Delhi</small>
+          </div>
+          <dl class="context-list">
+            <div><dt>Status</dt><dd>Open</dd></div>
+            <div><dt>Assigned to</dt><dd>Sales team</dd></div>
+            <div><dt>Last order</dt><dd>ORD1234</dd></div>
+            <div><dt>Tags</dt><dd>Repeat buyer</dd></div>
+            <div><dt>Opt-in</dt><dd>Confirmed</dd></div>
+          </dl>
+          <div class="context-actions">
+            <button type="button">Add note</button>
+            <button type="button">Mark resolved</button>
+            <button type="button">Block contact</button>
+          </div>
+        </aside>
+      </section>
+
+      <section class="portal-section portal-view" id="automation" data-portal-view hidden>
+        <div class="portal-section-head compact">
+          <div>
+            <p class="eyebrow">Automation</p>
+            <h2>Build customer journeys without coding</h2>
+            <p>Create simple WhatsApp flows for FAQs, lead capture, appointment booking, order updates, and human handoff.</p>
+          </div>
+          <button class="btn btn-outline" type="button" data-refresh-automations>Refresh</button>
+        </div>
+
+        <div class="automation-layout">
+          <div class="automation-flow-panel flow-builder" data-flow-builder>
+            <div class="flow-builder-toolbar">
+              <div>
+                <p class="eyebrow">Flow builder</p>
+                <input class="flow-name-input" type="text" value="Lead qualification flow" aria-label="Flow name" data-flow-name>
+              </div>
+              <div class="flow-toolbar-actions">
+                <button type="button" data-add-question-node>Add question</button>
+                <button type="button" data-add-handoff-node>Add handoff</button>
+                <button class="btn" type="button" data-save-flow>Save flow</button>
+              </div>
+            </div>
+
+            <div class="flow-canvas" data-flow-canvas>
+              <article class="flow-builder-node trigger-node">
+                <div class="node-icon">01</div>
+                <div class="node-body">
+                  <span>Trigger</span>
+                  <strong>Customer starts conversation</strong>
+                  <div class="node-fields">
+                    <select data-trigger-type>
+                      <option value="keyword">Keyword</option>
+                      <option value="ad_click">Ad click</option>
+                      <option value="qr_scan">QR scan</option>
+                      <option value="after_hours">After-hours</option>
+                      <option value="unknown_reply">Unknown reply</option>
+                    </select>
+                    <input type="text" value="hi" placeholder="Keyword or event value" data-trigger-value>
+                  </div>
+                </div>
+              </article>
+
+              <div class="flow-line"></div>
+
+              <article class="flow-builder-node message-node">
+                <div class="node-icon">02</div>
+                <div class="node-body">
+                  <span>Auto reply</span>
+                  <strong>Send first response</strong>
+                  <textarea rows="3" data-first-reply>Hi, thanks for contacting us. Please choose what you need help with.</textarea>
+                </div>
+              </article>
+
+              <div class="flow-line"></div>
+
+              <article class="flow-builder-node question-node" data-dynamic-node>
+                <div class="node-icon">03</div>
+                <div class="node-body">
+                  <span>Question</span>
+                  <strong>Collect requirement</strong>
+                  <input type="text" value="What product or service are you interested in?" data-question-text>
+                </div>
+              </article>
+
+              <div class="flow-line"></div>
+
+              <article class="flow-builder-node handoff-node" data-dynamic-node>
+                <div class="node-icon">04</div>
+                <div class="node-body">
+                  <span>Handoff</span>
+                  <strong>Route to team</strong>
+                  <select data-route-to>
+                    <option value="human_agent">Human agent</option>
+                    <option value="sales">Sales</option>
+                    <option value="support">Support</option>
+                    <option value="billing">Billing</option>
+                  </select>
+                </div>
+              </article>
+            </div>
+
+            <div class="automation-control-grid">
+              <label><input type="checkbox" data-flow-control="stopOnAgentJoin" checked> Stop when agent joins</label>
+              <label><input type="checkbox" data-flow-control="respectServiceWindow" checked> Respect 24-hour window</label>
+              <label><input type="checkbox" data-flow-control="requireOptInForTemplate" checked> Require opt-in for templates</label>
+              <label><input type="checkbox" data-flow-control="fallbackForUnknownReply" checked> Unknown reply fallback</label>
+            </div>
+            <p class="contact-message" data-automation-message></p>
+          </div>
+
+          <aside class="automation-rules">
+            <h3>Flow templates</h3>
+            <div class="flow-template-list">
+              <button type="button" data-automation-template="faq"><strong>FAQ bot</strong><span>Answer common questions instantly.</span></button>
+              <button type="button" data-automation-template="lead"><strong>Lead capture</strong><span>Collect requirement and route to sales.</span></button>
+              <button type="button" data-automation-template="appointment"><strong>Appointment booking</strong><span>Collect preferred time and route to support.</span></button>
+            </div>
+            <h3>Required controls</h3>
+            <label><input type="checkbox" checked disabled> Stop automation when an agent joins.</label>
+            <label><input type="checkbox" checked disabled> Respect 24-hour service window.</label>
+            <label><input type="checkbox" checked disabled> Send templates only after customer opt-in.</label>
+          </aside>
+        </div>
+
+        <div class="automation-list-panel">
+          <div class="portal-section-head compact">
+            <div>
+              <p class="eyebrow">Saved automations</p>
+              <h2>Flows</h2>
+            </div>
+          </div>
+          <div class="table-panel">
+            <div class="table-row automation-table-row table-head">
+              <span>Name</span><span>Trigger</span><span>Route</span><span>Status</span><span>Action</span>
+            </div>
+            <div data-automation-list></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="portal-section portal-view mini" id="analytics" data-portal-view hidden>
+          <p class="eyebrow">Performance</p>
+          <h2>Analytics</h2>
+          <div class="mini-bars">
+            <span style="height:58%"></span><span style="height:82%"></span><span style="height:44%"></span><span style="height:70%"></span><span style="height:92%"></span>
+          </div>
+      </section>
+
+      <section class="portal-section portal-view mini" id="billing" data-portal-view hidden>
+          <p class="eyebrow">Plan</p>
+          <h2>Billing</h2>
+          <p>Track InterCon plan, usage, invoices, wallet balance, and Meta message charges separately.</p>
+          <button class="btn btn-outline" type="button">View billing</button>
+      </section>
+
+      <section class="portal-section portal-view mini" id="support" data-portal-view hidden>
+          <p class="eyebrow">Help</p>
+          <h2>Support</h2>
+          <p>Create a ticket for failed signup, webhook issue, template rejection, billing issue, or campaign delivery problem.</p>
+          <button class="btn" type="button">Create ticket</button>
+      </section>
+    </main>
+  </div>
+
+  <script src="js/customer-portal.js"></script>
+</body>
+</html>

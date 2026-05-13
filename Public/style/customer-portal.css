@@ -3227,12 +3227,12 @@ address {
   }
 
   .portal-topbar {
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto 1fr auto;
   }
 
   .portal-actions {
-    grid-column: 1 / -1;
-    justify-content: start;
+    grid-column: auto;
+    justify-content: end;
   }
 
   .portal-hero-panel,

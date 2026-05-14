@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { decryptSecret, encryptSecret } = require("../utils/crypto");
 
 const tenantSchema = new mongoose.Schema(
   {
@@ -38,6 +39,11 @@ const tenantSchema = new mongoose.Schema(
       default: "account_created"
     },
     meta: {
+      businessId: {
+        type: String,
+        trim: true,
+        maxlength: 80
+      },
       wabaId: {
         type: String,
         trim: true,
@@ -48,8 +54,40 @@ const tenantSchema = new mongoose.Schema(
         trim: true,
         maxlength: 80
       },
+      appId: {
+        type: String,
+        trim: true,
+        maxlength: 80
+      },
+      tokenType: {
+        type: String,
+        trim: true,
+        maxlength: 40
+      },
+      tokenExpiresAt: {
+        type: Date
+      },
+      connectedAt: {
+        type: Date
+      },
+      signupSessionId: {
+        type: String,
+        trim: true,
+        maxlength: 120
+      },
+      lastSignupEvent: {
+        type: String,
+        trim: true,
+        maxlength: 120
+      },
+      lastSignupError: {
+        type: String,
+        trim: true,
+        maxlength: 500
+      },
       accessToken: {
         type: String,
+        set: encryptSecret,
         select: false
       }
     },
@@ -66,7 +104,12 @@ const tenantSchema = new mongoose.Schema(
 
 tenantSchema.index({ businessEmail: 1 });
 tenantSchema.index({ status: 1 });
+tenantSchema.index({ "meta.businessId": 1 });
 tenantSchema.index({ "meta.wabaId": 1 });
 tenantSchema.index({ "meta.phoneNumberId": 1 });
+
+tenantSchema.methods.getMetaAccessToken = function getMetaAccessToken() {
+  return decryptSecret(this.meta?.accessToken);
+};
 
 module.exports = mongoose.model("Tenant", tenantSchema);

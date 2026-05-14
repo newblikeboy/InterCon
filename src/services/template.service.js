@@ -97,14 +97,16 @@ async function submitTemplateForMetaReview(tenantId, body) {
   const payload = buildMetaTemplatePayload(body);
   const tenant = await Tenant.findById(tenantId).select("+meta.accessToken");
 
-  if (!tenant?.meta?.wabaId || !tenant?.meta?.accessToken) {
+  const accessToken = tenant?.getMetaAccessToken();
+
+  if (!tenant?.meta?.wabaId || !accessToken) {
     throw new HttpError(409, "Connect WhatsApp first. WABA ID and Meta access token are required before template submission.");
   }
 
   const response = await fetch(`https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.wabaId}/message_templates`, {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${tenant.meta.accessToken}`,
+      "Authorization": `Bearer ${accessToken}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({

@@ -29,8 +29,18 @@ const userSchema = new mongoose.Schema(
     },
     passwordHash: {
       type: String,
-      required: true,
+      required() {
+        return !this.authProviders?.facebookId;
+      },
       select: false
+    },
+    authProviders: {
+      facebookId: {
+        type: String,
+        trim: true,
+        index: true,
+        sparse: true
+      }
     },
     role: {
       type: String,

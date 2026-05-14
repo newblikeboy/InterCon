@@ -3,6 +3,12 @@ const portalSidebar = document.querySelector("[data-portal-sidebar]");
 const portalNavLinks = document.querySelectorAll(".portal-nav a");
 const portalViews = document.querySelectorAll("[data-portal-view]");
 const connectWhatsAppButtons = document.querySelectorAll("[data-connect-whatsapp]");
+const metaBusinessId = document.querySelector("[data-meta-business-id]");
+const metaWabaId = document.querySelector("[data-meta-waba-id]");
+const metaPhoneNumberId = document.querySelector("[data-meta-phone-number-id]");
+const metaWebhookStatus = document.querySelector("[data-meta-webhook-status]");
+const metaSendingStatus = document.querySelector("[data-meta-sending-status]");
+const metaConnectMessage = document.querySelector("[data-meta-connect-message]");
 const profileMenu = document.querySelector("[data-profile-menu]");
 const profileTrigger = document.querySelector("[data-profile-trigger]");
 const profileDropdown = document.querySelector("[data-profile-dropdown]");
@@ -51,6 +57,8 @@ const automationList = document.querySelector("[data-automation-list]");
 const refreshAutomationsButton = document.querySelector("[data-refresh-automations]");
 const automationTemplateButtons = document.querySelectorAll("[data-automation-template]");
 const defaultPortalView = "overview";
+let facebookSdkPromise;
+let embeddedSignupSessionInfo = null;
 
 function closePortalMenu() {
   document.body.classList.remove("portal-menu-open");
@@ -143,6 +151,12 @@ function setSendMessage(message, isError = false) {
   sendMessageStatus.classList.toggle("error", isError);
 }
 
+function setMetaConnectMessage(message, isError = false) {
+  if (!metaConnectMessage) return;
+  metaConnectMessage.textContent = message;
+  metaConnectMessage.classList.toggle("error", isError);
+}
+
 async function requestJson(url, options = {}) {
   const response = await fetch(url, {
     credentials: "include",
@@ -159,6 +173,123 @@ async function requestJson(url, options = {}) {
   }
 
   return data;
+}
+
+function parseEmbeddedSignupMessage(event) {
+  if (!String(event.origin || "").endsWith("facebook.com")) {
+    return null;
+  }
+
+  let payload = event.data;
+  if (typeof payload === "string") {
+    try {
+      payload = JSON.parse(payload);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  if (payload?.type !== "WA_EMBEDDED_SIGNUP") {
+    return null;
+  }
+
+  return payload;
+}
+
+window.addEventListener("message", (event) => {
+  const payload = parseEmbeddedSignupMessage(event);
+  if (!payload) return;
+
+  embeddedSignupSessionInfo = payload;
+
+  if (payload.event === "CANCEL") {
+    setMetaConnectMessage(payload.data?.error_message || "Embedded Signup was cancelled.", true);
+    return;
+  }
+
+  setMetaConnectMessage("Meta signup details received. Complete the login popup to finish connection.");
+});
+
+async function loadFacebookSdk() {
+  if (window.FB) {
+    return window.FB;
+  }
+
+  if (facebookSdkPromise) {
+    return facebookSdkPromise;
+  }
+
+  facebookSdkPromise = requestJson("/api/meta/facebook-sdk-config")
+    .then((data) => data.config)
+    .then((config) => new Promise((resolve, reject) => {
+      window.fbAsyncInit = function () {
+        window.FB.init({
+          appId: config.appId,
+          autoLogAppEvents: true,
+          xfbml: true,
+          version: config.version || "v25.0"
+        });
+        resolve({
+          FB: window.FB,
+          config
+        });
+      };
+
+      const existingScript = document.getElementById("facebook-jssdk");
+      if (existingScript) {
+        existingScript.addEventListener("load", () => resolve({ FB: window.FB, config }));
+        existingScript.addEventListener("error", () => reject(new Error("Unable to load Facebook SDK")));
+        return;
+      }
+
+      const firstScript = document.getElementsByTagName("script")[0];
+      const sdkScript = document.createElement("script");
+      sdkScript.id = "facebook-jssdk";
+      sdkScript.async = true;
+      sdkScript.defer = true;
+      sdkScript.crossOrigin = "anonymous";
+      sdkScript.src = "https://connect.facebook.net/en_US/sdk.js";
+      sdkScript.onerror = () => reject(new Error("Unable to load Facebook SDK"));
+      firstScript.parentNode.insertBefore(sdkScript, firstScript);
+    }));
+
+  return facebookSdkPromise;
+}
+
+function launchEmbeddedSignup(FB, config) {
+  return new Promise((resolve) => {
+    FB.login(resolve, {
+      config_id: config.loginConfigId,
+      response_type: "code",
+      override_default_response_type: true,
+      ...(config.redirectUri ? { redirect_uri: config.redirectUri } : {}),
+      extras: config.loginExtras || {
+        setup: {},
+        sessionInfoVersion: "3"
+      }
+    });
+  });
+}
+
+function renderOnboardingStatus(tenant) {
+  const meta = tenant?.meta || {};
+
+  if (metaBusinessId) metaBusinessId.textContent = meta.businessId || "Not connected";
+  if (metaWabaId) metaWabaId.textContent = meta.wabaId || "Not connected";
+  if (metaPhoneNumberId) metaPhoneNumberId.textContent = meta.phoneNumberId || "Not connected";
+  if (metaWebhookStatus) metaWebhookStatus.textContent = meta.wabaId ? "Subscribed or pending confirmation" : "Waiting";
+  if (metaSendingStatus) metaSendingStatus.textContent = meta.phoneNumberId ? "Ready after templates are approved" : "Locked until setup";
+
+  if (meta.connectedAt) {
+    setMetaConnectMessage(`Connected on ${new Date(meta.connectedAt).toLocaleString()}.`);
+  } else if (meta.lastSignupError) {
+    setMetaConnectMessage(meta.lastSignupError, true);
+  }
+}
+
+async function loadOnboardingStatus() {
+  const data = await requestJson("/api/meta/onboarding");
+  renderOnboardingStatus(data.tenant);
 }
 
 function parseCsv(text) {
@@ -531,22 +662,33 @@ connectWhatsAppButtons.forEach((button) => {
     button.textContent = "Opening Meta...";
 
     try {
-      const response = await fetch("/api/meta/embedded-signup-url", {
-        credentials: "include"
+      const { FB, config } = await loadFacebookSdk();
+      if (!config.loginConfigId) {
+        throw new Error("Meta Embedded Signup configuration ID is missing");
+      }
+
+      embeddedSignupSessionInfo = null;
+      setMetaConnectMessage("Complete the Meta popup to connect your WhatsApp account.");
+      const loginResponse = await launchEmbeddedSignup(FB, config);
+      const code = loginResponse.authResponse?.code;
+
+      if (!code) {
+        throw new Error("Meta did not return an authorization code");
+      }
+
+      const result = await requestJson("/api/meta/embedded-signup/complete", {
+        method: "POST",
+        body: JSON.stringify({
+          code,
+          redirectUri: config.redirectUri,
+          sessionInfo: embeddedSignupSessionInfo
+        })
       });
 
-      if (!response.ok) {
-        throw new Error("Missing backend endpoint");
-      }
-
-      const data = await response.json();
-      if (!data.url) {
-        throw new Error("Missing signup URL");
-      }
-
-      window.location.href = data.url;
+      renderOnboardingStatus(result.tenant);
+      setMetaConnectMessage("WhatsApp account connected.");
     } catch (error) {
-      window.alert("Connect WhatsApp should open your Meta Embedded Signup URL. Add a backend route at /api/meta/embedded-signup-url that returns { url } from EMBED_SIGN_UP.");
+      setMetaConnectMessage(error.message, true);
     } finally {
       button.disabled = false;
       button.textContent = originalText;
@@ -947,6 +1089,7 @@ if (logoutButton) {
 }
 
 showPortalView(getInitialViewId(), true);
+loadOnboardingStatus().catch((error) => setMetaConnectMessage(error.message, true));
 loadContacts().catch((error) => setContactMessage(error.message, true));
 loadCampaigns().catch((error) => setCampaignMessage(error.message, true));
 loadApprovedTemplates().catch((error) => setCampaignMessage(error.message, true));

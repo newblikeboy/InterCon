@@ -6,10 +6,32 @@ const WebhookEvent = require("../models/WebhookEvent");
 const env = require("../config/env");
 const HttpError = require("../utils/httpError");
 
+function getWebhookAppSecret() {
+  return env.metaAppSecret || env.facebookAppSecret;
+}
+
+function getMetaWebhookSetup(req) {
+  const publicBaseUrl = env.clientOrigin || `${req.protocol}://${req.get("host")}`;
+
+  return {
+    callbackUrl: `${publicBaseUrl.replace(/\/$/, "")}/api/webhooks/meta`,
+    verifyTokenConfigured: Boolean(env.metaWebhookVerifyToken),
+    appSecretConfigured: Boolean(getWebhookAppSecret()),
+    requiredSubscriptionFields: [
+      "messages",
+      "message_template_status_update"
+    ]
+  };
+}
+
 function verifyMetaChallenge(query) {
   const mode = query["hub.mode"];
   const token = query["hub.verify_token"];
   const challenge = query["hub.challenge"];
+
+  if (!env.metaWebhookVerifyToken) {
+    throw new HttpError(500, "META_WEBHOOK_VERIFY_TOKEN is not configured");
+  }
 
   if (mode === "subscribe" && token && token === env.metaWebhookVerifyToken) {
     return challenge;
@@ -19,7 +41,13 @@ function verifyMetaChallenge(query) {
 }
 
 function verifyMetaSignature(req) {
-  if (!env.metaAppSecret) {
+  const appSecret = getWebhookAppSecret();
+
+  if (!appSecret) {
+    if (env.nodeEnv === "production") {
+      throw new HttpError(500, "META_APP_SECRET or FB_APP_SECRET is required for Meta webhook signature validation");
+    }
+
     return;
   }
 
@@ -29,7 +57,7 @@ function verifyMetaSignature(req) {
   }
 
   const expected = `sha256=${crypto
-    .createHmac("sha256", env.metaAppSecret)
+    .createHmac("sha256", appSecret)
     .update(req.rawBody)
     .digest("hex")}`;
 
@@ -185,6 +213,7 @@ async function processMetaWebhook(req) {
 }
 
 module.exports = {
+  getMetaWebhookSetup,
   verifyMetaChallenge,
   processMetaWebhook
 };

@@ -25,9 +25,11 @@ function signAuthToken(user) {
 }
 
 function setAuthCookie(res, token) {
+  const secureCookie = env.nodeEnv === "production" || env.clientOrigin.startsWith("https://");
+
   res.cookie(env.authCookieName, token, {
     httpOnly: true,
-    secure: env.nodeEnv === "production",
+    secure: secureCookie,
     sameSite: "lax",
     maxAge: env.authCookieMaxAgeMs,
     path: "/"
@@ -35,9 +37,11 @@ function setAuthCookie(res, token) {
 }
 
 function clearAuthCookie(res) {
+  const secureCookie = env.nodeEnv === "production" || env.clientOrigin.startsWith("https://");
+
   res.clearCookie(env.authCookieName, {
     httpOnly: true,
-    secure: env.nodeEnv === "production",
+    secure: secureCookie,
     sameSite: "lax",
     path: "/"
   });

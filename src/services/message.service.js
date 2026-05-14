@@ -60,7 +60,9 @@ async function sendTemplateMessage(tenantId, body) {
     throw new HttpError(400, "Select a Meta-approved template");
   }
 
-  if (!tenant?.meta?.phoneNumberId || !tenant?.meta?.accessToken) {
+  const accessToken = tenant?.getMetaAccessToken();
+
+  if (!tenant?.meta?.phoneNumberId || !accessToken) {
     throw new HttpError(409, "Connect WhatsApp first. Phone number ID and Meta access token are required before sending messages.");
   }
 
@@ -94,7 +96,7 @@ async function sendTemplateMessage(tenantId, body) {
   const response = await fetch(`https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.phoneNumberId}/messages`, {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${tenant.meta.accessToken}`,
+      "Authorization": `Bearer ${accessToken}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify(payload)

@@ -26,6 +26,18 @@ const login = asyncHandler(async (req, res) => {
   });
 });
 
+const facebookLogin = asyncHandler(async (req, res) => {
+  const { user, tenant, created } = await authService.loginWithFacebook(req.body);
+  const token = signAuthToken(user);
+  setAuthCookie(res, token);
+
+  res.status(created ? 201 : 200).json({
+    success: true,
+    message: created ? "Signup successful" : "Login successful",
+    user: authService.publicUser(user, tenant)
+  });
+});
+
 const logout = asyncHandler(async (req, res) => {
   clearAuthCookie(res);
 
@@ -47,6 +59,7 @@ const me = asyncHandler(async (req, res) => {
 module.exports = {
   signup,
   login,
+  facebookLogin,
   logout,
   me
 };

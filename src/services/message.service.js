@@ -28,6 +28,33 @@ function buildTemplateComponents(variables) {
   }];
 }
 
+async function assertWabaCanSendTemplates(tenant, accessToken) {
+  if (!tenant?.meta?.wabaId || !accessToken) return;
+
+  const response = await fetch(`https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.wabaId}?fields=health_status`, {
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    }
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok || data.error) {
+    throw new HttpError(response.status || 400, data.error?.message || "Unable to verify WABA health before sending", data.error || data);
+  }
+
+  const entities = data.health_status?.entities || [];
+  const wabaEntity = entities.find((entity) => String(entity.entity_type || "").toUpperCase() === "WABA");
+  const paymentError = wabaEntity?.errors?.find((error) => {
+    const description = `${error.error_description || ""} ${error.possible_solution || ""}`.toLowerCase();
+    return description.includes("payment method") || description.includes("payment");
+  });
+
+  if (paymentError) {
+    throw new HttpError(403, paymentError.possible_solution || "Add a valid payment method in WhatsApp Manager before sending template messages.", paymentError);
+  }
+}
+
 async function listMessages(tenantId) {
   return Message.find({ tenantId }).sort({ createdAt: -1 }).limit(100);
 }
@@ -65,6 +92,8 @@ async function sendTemplateMessage(tenantId, body) {
   if (!tenant?.meta?.phoneNumberId || !accessToken) {
     throw new HttpError(409, "Connect WhatsApp first. Phone number ID and Meta access token are required before sending messages.");
   }
+
+  await assertWabaCanSendTemplates(tenant, accessToken);
 
   const message = await Message.create({
     tenantId,

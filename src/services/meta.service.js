@@ -81,13 +81,18 @@ function publicTenant(tenant) {
       businessId: tenant.meta?.businessId,
       wabaId: tenant.meta?.wabaId,
       phoneNumberId: tenant.meta?.phoneNumberId,
+      displayPhoneNumber: tenant.meta?.displayPhoneNumber,
+      phoneStatus: tenant.meta?.phoneStatus,
+      accountMode: tenant.meta?.accountMode,
+      codeVerificationStatus: tenant.meta?.codeVerificationStatus,
       appId: tenant.meta?.appId,
       tokenType: tenant.meta?.tokenType,
       tokenExpiresAt: tenant.meta?.tokenExpiresAt,
       connectedAt: tenant.meta?.connectedAt,
       signupSessionId: tenant.meta?.signupSessionId,
       lastSignupEvent: tenant.meta?.lastSignupEvent,
-      lastSignupError: tenant.meta?.lastSignupError
+      lastSignupError: tenant.meta?.lastSignupError,
+      lastPhoneSetupError: tenant.meta?.lastPhoneSetupError
     }
   };
 }
@@ -183,6 +188,175 @@ async function subscribeAppToWaba(wabaId, accessToken) {
   });
 }
 
+function requireConfiguredRegistrationPin() {
+  if (!env.facebookRegistrationPin) {
+    throw new HttpError(500, "FB_REG_PIN is not configured");
+  }
+}
+
+async function getTenantWithMetaToken(tenantId) {
+  const tenant = await Tenant.findById(tenantId).select("+meta.accessToken");
+  const accessToken = tenant?.getMetaAccessToken();
+
+  if (!tenant) {
+    throw new HttpError(404, "Tenant not found");
+  }
+
+  if (!tenant.meta?.wabaId || !tenant.meta?.phoneNumberId || !accessToken) {
+    throw new HttpError(409, "Connect WhatsApp first. WABA ID, phone number ID, and Meta access token are required.");
+  }
+
+  return {
+    tenant,
+    accessToken
+  };
+}
+
+function publicPhoneDetails(data = {}) {
+  return {
+    id: data.id,
+    displayPhoneNumber: data.display_phone_number || data.displayPhoneNumber || "",
+    status: data.status || "",
+    accountMode: data.account_mode || data.accountMode || "",
+    codeVerificationStatus: data.code_verification_status || data.codeVerificationStatus || "",
+    verifiedName: data.verified_name || data.verifiedName || ""
+  };
+}
+
+async function savePhoneDetails(tenantId, details, error = "") {
+  const update = {
+    ...(details.displayPhoneNumber ? { "meta.displayPhoneNumber": details.displayPhoneNumber } : {}),
+    ...(details.status ? { "meta.phoneStatus": details.status } : {}),
+    ...(details.accountMode ? { "meta.accountMode": details.accountMode } : {}),
+    ...(details.codeVerificationStatus ? { "meta.codeVerificationStatus": details.codeVerificationStatus } : {}),
+    "meta.lastPhoneSetupError": error
+  };
+
+  const tenant = await Tenant.findByIdAndUpdate(
+    tenantId,
+    { $set: update },
+    { new: true }
+  );
+
+  return tenant ? publicTenant(tenant) : null;
+}
+
+async function getPhoneNumberStatus(tenantId) {
+  const { tenant, accessToken } = await getTenantWithMetaToken(tenantId);
+  const data = await fetchMetaJson(
+    `${tenant.meta.phoneNumberId}?fields=status,account_mode,display_phone_number,code_verification_status,verified_name`,
+    accessToken
+  );
+  const details = publicPhoneDetails(data);
+  const updatedTenant = await savePhoneDetails(tenantId, details);
+
+  return {
+    tenant: updatedTenant,
+    phone: details
+  };
+}
+
+async function requestPhoneVerificationCode(tenantId, body = {}) {
+  const { tenant, accessToken } = await getTenantWithMetaToken(tenantId);
+  const codeMethod = String(body.codeMethod || body.code_method || "SMS").toUpperCase();
+  const language = String(body.language || "en").trim() || "en";
+
+  if (!["SMS", "VOICE"].includes(codeMethod)) {
+    throw new HttpError(400, "Verification code method must be SMS or VOICE");
+  }
+
+  const result = await fetchMetaJson(
+    `${tenant.meta.phoneNumberId}/request_code?code_method=${encodeURIComponent(codeMethod)}&language=${encodeURIComponent(language)}`,
+    accessToken,
+    { method: "POST", body: JSON.stringify({}) }
+  );
+
+  return {
+    phoneNumberId: tenant.meta.phoneNumberId,
+    meta: result
+  };
+}
+
+async function verifyPhoneCode(tenantId, body = {}) {
+  const otpCode = String(body.otpCode || body.otp_code || body.code || "").trim();
+
+  if (!otpCode) {
+    throw new HttpError(400, "Verification code is required");
+  }
+
+  const { tenant, accessToken } = await getTenantWithMetaToken(tenantId);
+  const result = await fetchMetaJson(
+    `${tenant.meta.phoneNumberId}/verify_code?code=${encodeURIComponent(otpCode)}`,
+    accessToken,
+    { method: "POST", body: JSON.stringify({}) }
+  );
+
+  const status = await getPhoneNumberStatus(tenantId).catch(() => null);
+
+  return {
+    phoneNumberId: tenant.meta.phoneNumberId,
+    phone: status?.phone,
+    tenant: status?.tenant,
+    meta: result
+  };
+}
+
+async function registerPhoneNumber(tenantId) {
+  requireConfiguredRegistrationPin();
+  const { tenant, accessToken } = await getTenantWithMetaToken(tenantId);
+
+  const result = await fetchMetaJson(`${tenant.meta.phoneNumberId}/register`, accessToken, {
+    method: "POST",
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      pin: env.facebookRegistrationPin
+    })
+  });
+
+  const status = await getPhoneNumberStatus(tenantId).catch(() => null);
+  const updatedTenant = await Tenant.findByIdAndUpdate(
+    tenantId,
+    {
+      $set: {
+        onboardingStatus: "meta_connected",
+        "meta.lastPhoneSetupError": ""
+      }
+    },
+    { new: true }
+  );
+
+  return {
+    tenant: updatedTenant ? publicTenant(updatedTenant) : status?.tenant,
+    phone: status?.phone,
+    meta: result
+  };
+}
+
+async function deregisterPhoneNumber(tenantId) {
+  const { tenant, accessToken } = await getTenantWithMetaToken(tenantId);
+  const result = await fetchMetaJson(`${tenant.meta.phoneNumberId}/deregister`, accessToken, {
+    method: "POST",
+    body: JSON.stringify({})
+  });
+
+  const updatedTenant = await Tenant.findByIdAndUpdate(
+    tenantId,
+    {
+      $set: {
+        onboardingStatus: "meta_pending",
+        "meta.phoneStatus": "DEREGISTERED",
+        "meta.lastPhoneSetupError": ""
+      }
+    },
+    { new: true }
+  );
+
+  return {
+    tenant: updatedTenant ? publicTenant(updatedTenant) : null,
+    meta: result
+  };
+}
+
 async function getOnboardingStatus(tenantId) {
   const tenant = await Tenant.findById(tenantId);
   if (!tenant) {
@@ -238,6 +412,7 @@ async function completeEmbeddedSignup(tenantId, body) {
         "meta.businessId": businessId || "",
         "meta.wabaId": wabaId,
         "meta.phoneNumberId": phoneNumberId || "",
+        "meta.lastPhoneSetupError": "",
         "meta.appId": env.facebookAppId,
         "meta.tokenType": tokenData.token_type || "",
         ...(tokenExpiresAt ? { "meta.tokenExpiresAt": tokenExpiresAt } : {}),
@@ -298,5 +473,10 @@ module.exports = {
   getFacebookSdkConfig,
   getOnboardingStatus,
   completeEmbeddedSignup,
-  exchangeOAuthCode
+  exchangeOAuthCode,
+  getPhoneNumberStatus,
+  requestPhoneVerificationCode,
+  verifyPhoneCode,
+  registerPhoneNumber,
+  deregisterPhoneNumber
 };

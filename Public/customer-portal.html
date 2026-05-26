@@ -236,9 +236,19 @@
               <div><dt>Business</dt><dd data-meta-business-id>Not connected</dd></div>
               <div><dt>WABA</dt><dd data-meta-waba-id>Not connected</dd></div>
               <div><dt>Phone number</dt><dd data-meta-phone-number-id>Not connected</dd></div>
+              <div><dt>Phone status</dt><dd data-meta-phone-status>Waiting</dd></div>
               <div><dt>Webhook</dt><dd data-meta-webhook-status>Waiting</dd></div>
               <div><dt>Sending</dt><dd data-meta-sending-status>Locked until setup</dd></div>
             </dl>
+            <div class="template-actions">
+              <button class="btn btn-outline" type="button" data-meta-refresh-phone>Status</button>
+              <button class="btn btn-outline" type="button" data-meta-request-code>Request OTP</button>
+            </div>
+            <form class="contact-form" data-meta-verify-form>
+              <input type="text" name="otpCode" inputmode="numeric" autocomplete="one-time-code" placeholder="Enter Meta OTP">
+              <button class="btn" type="submit">Verify</button>
+            </form>
+            <button class="btn" type="button" data-meta-register-phone>Register number</button>
             <p class="contact-message" data-meta-connect-message></p>
           </aside>
         </div>

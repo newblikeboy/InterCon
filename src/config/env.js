@@ -16,6 +16,7 @@ const env = {
   metaAppSecret: process.env.META_APP_SECRET || "",
   facebookAppId: process.env.FB_APP_ID || "",
   facebookAppSecret: process.env.FB_APP_SECRET || process.env.META_APP_SECRET || "",
+  facebookRegistrationPin: process.env.FB_REG_PIN || "",
   facebookSdkVersion: process.env.FACEBOOK_SDK_VERSION || "v25.0",
   facebookOAuthRedirectUri: process.env.FB_OAUTH_REDIRECT_URI || "",
   facebookLoginConfigId: process.env.FB_LOGIN_CONFIG_ID || "",

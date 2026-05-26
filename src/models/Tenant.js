@@ -54,6 +54,26 @@ const tenantSchema = new mongoose.Schema(
         trim: true,
         maxlength: 80
       },
+      displayPhoneNumber: {
+        type: String,
+        trim: true,
+        maxlength: 40
+      },
+      phoneStatus: {
+        type: String,
+        trim: true,
+        maxlength: 80
+      },
+      accountMode: {
+        type: String,
+        trim: true,
+        maxlength: 80
+      },
+      codeVerificationStatus: {
+        type: String,
+        trim: true,
+        maxlength: 80
+      },
       appId: {
         type: String,
         trim: true,
@@ -81,6 +101,11 @@ const tenantSchema = new mongoose.Schema(
         maxlength: 120
       },
       lastSignupError: {
+        type: String,
+        trim: true,
+        maxlength: 500
+      },
+      lastPhoneSetupError: {
         type: String,
         trim: true,
         maxlength: 500

@@ -6,9 +6,14 @@ const connectWhatsAppButtons = document.querySelectorAll("[data-connect-whatsapp
 const metaBusinessId = document.querySelector("[data-meta-business-id]");
 const metaWabaId = document.querySelector("[data-meta-waba-id]");
 const metaPhoneNumberId = document.querySelector("[data-meta-phone-number-id]");
+const metaPhoneStatus = document.querySelector("[data-meta-phone-status]");
 const metaWebhookStatus = document.querySelector("[data-meta-webhook-status]");
 const metaSendingStatus = document.querySelector("[data-meta-sending-status]");
 const metaConnectMessage = document.querySelector("[data-meta-connect-message]");
+const metaRefreshPhoneButton = document.querySelector("[data-meta-refresh-phone]");
+const metaRequestCodeButton = document.querySelector("[data-meta-request-code]");
+const metaVerifyForm = document.querySelector("[data-meta-verify-form]");
+const metaRegisterPhoneButton = document.querySelector("[data-meta-register-phone]");
 const profileMenu = document.querySelector("[data-profile-menu]");
 const profileTrigger = document.querySelector("[data-profile-trigger]");
 const profileDropdown = document.querySelector("[data-profile-dropdown]");
@@ -59,6 +64,7 @@ const automationTemplateButtons = document.querySelectorAll("[data-automation-te
 const defaultPortalView = "overview";
 let facebookSdkPromise;
 let embeddedSignupSessionInfo = null;
+let embeddedSignupSessionResolvers = [];
 
 function closePortalMenu() {
   document.body.classList.remove("portal-menu-open");
@@ -196,11 +202,37 @@ function parseEmbeddedSignupMessage(event) {
   return payload;
 }
 
+function resolveEmbeddedSignupSessionInfo(payload) {
+  embeddedSignupSessionResolvers.forEach((resolve) => resolve(payload));
+  embeddedSignupSessionResolvers = [];
+}
+
+function waitForEmbeddedSignupSessionInfo(timeoutMs = 8000) {
+  if (embeddedSignupSessionInfo) {
+    return Promise.resolve(embeddedSignupSessionInfo);
+  }
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      embeddedSignupSessionResolvers = embeddedSignupSessionResolvers.filter((item) => item !== resolveSession);
+      reject(new Error("Meta signup details were not received. Please complete the full Embedded Signup flow and try again."));
+    }, timeoutMs);
+
+    function resolveSession(payload) {
+      clearTimeout(timer);
+      resolve(payload);
+    }
+
+    embeddedSignupSessionResolvers.push(resolveSession);
+  });
+}
+
 window.addEventListener("message", (event) => {
   const payload = parseEmbeddedSignupMessage(event);
   if (!payload) return;
 
   embeddedSignupSessionInfo = payload;
+  resolveEmbeddedSignupSessionInfo(payload);
 
   if (payload.event === "CANCEL") {
     setMetaConnectMessage(payload.data?.error_message || "Embedded Signup was cancelled.", true);
@@ -278,7 +310,8 @@ function renderOnboardingStatus(tenant) {
 
   if (metaBusinessId) metaBusinessId.textContent = meta.businessId || "Not connected";
   if (metaWabaId) metaWabaId.textContent = meta.wabaId || "Not connected";
-  if (metaPhoneNumberId) metaPhoneNumberId.textContent = meta.phoneNumberId || "Not connected";
+  if (metaPhoneNumberId) metaPhoneNumberId.textContent = meta.displayPhoneNumber || meta.phoneNumberId || "Not connected";
+  if (metaPhoneStatus) metaPhoneStatus.textContent = meta.codeVerificationStatus || meta.phoneStatus || "Waiting";
   if (metaWebhookStatus) metaWebhookStatus.textContent = meta.wabaId ? "Subscribed or pending confirmation" : "Waiting";
   if (metaSendingStatus) metaSendingStatus.textContent = meta.phoneNumberId ? "Ready after templates are approved" : "Locked until setup";
 
@@ -294,6 +327,42 @@ function renderOnboardingStatus(tenant) {
 async function loadOnboardingStatus() {
   const data = await requestJson("/api/meta/onboarding");
   renderOnboardingStatus(data.tenant);
+}
+
+async function refreshPhoneStatus() {
+  setMetaConnectMessage("Refreshing phone status...");
+  const data = await requestJson("/api/meta/phone/status");
+  renderOnboardingStatus(data.tenant);
+  setMetaConnectMessage("Phone status refreshed.");
+}
+
+async function requestPhoneCode() {
+  setMetaConnectMessage("Requesting verification code...");
+  await requestJson("/api/meta/phone/request-code", {
+    method: "POST",
+    body: JSON.stringify({ codeMethod: "SMS", language: "en" })
+  });
+  setMetaConnectMessage("Verification code requested. Enter the OTP sent by Meta.");
+}
+
+async function verifyPhoneCode(otpCode) {
+  setMetaConnectMessage("Verifying phone code...");
+  const data = await requestJson("/api/meta/phone/verify-code", {
+    method: "POST",
+    body: JSON.stringify({ otpCode })
+  });
+  if (data.tenant) renderOnboardingStatus(data.tenant);
+  setMetaConnectMessage("Phone code verified. Register the number to activate sending.");
+}
+
+async function registerPhoneNumber() {
+  setMetaConnectMessage("Registering WhatsApp phone number...");
+  const data = await requestJson("/api/meta/phone/register", {
+    method: "POST",
+    body: JSON.stringify({})
+  });
+  if (data.tenant) renderOnboardingStatus(data.tenant);
+  setMetaConnectMessage("WhatsApp phone number registered.");
 }
 
 function parseCsv(text) {
@@ -680,12 +749,14 @@ connectWhatsAppButtons.forEach((button) => {
         throw new Error("Meta did not return an authorization code");
       }
 
+      const sessionInfo = await waitForEmbeddedSignupSessionInfo();
+
       const result = await requestJson("/api/meta/embedded-signup/complete", {
         method: "POST",
         body: JSON.stringify({
           code,
           redirectUri: config.redirectUri,
-          sessionInfo: embeddedSignupSessionInfo
+          sessionInfo
         })
       });
 
@@ -701,6 +772,58 @@ connectWhatsAppButtons.forEach((button) => {
     }
   });
 });
+
+if (metaRefreshPhoneButton) {
+  metaRefreshPhoneButton.addEventListener("click", async () => {
+    metaRefreshPhoneButton.disabled = true;
+    try {
+      await refreshPhoneStatus();
+    } catch (error) {
+      setMetaConnectMessage(error.message, true);
+    } finally {
+      metaRefreshPhoneButton.disabled = false;
+    }
+  });
+}
+
+if (metaRequestCodeButton) {
+  metaRequestCodeButton.addEventListener("click", async () => {
+    metaRequestCodeButton.disabled = true;
+    try {
+      await requestPhoneCode();
+    } catch (error) {
+      setMetaConnectMessage(error.message, true);
+    } finally {
+      metaRequestCodeButton.disabled = false;
+    }
+  });
+}
+
+if (metaVerifyForm) {
+  metaVerifyForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const formData = Object.fromEntries(new FormData(metaVerifyForm).entries());
+    try {
+      await verifyPhoneCode(formData.otpCode);
+      metaVerifyForm.reset();
+    } catch (error) {
+      setMetaConnectMessage(error.message, true);
+    }
+  });
+}
+
+if (metaRegisterPhoneButton) {
+  metaRegisterPhoneButton.addEventListener("click", async () => {
+    metaRegisterPhoneButton.disabled = true;
+    try {
+      await registerPhoneNumber();
+    } catch (error) {
+      setMetaConnectMessage(error.message, true);
+    } finally {
+      metaRegisterPhoneButton.disabled = false;
+    }
+  });
+}
 
 contactUploadButtons.forEach((button) => {
   button.addEventListener("click", () => {

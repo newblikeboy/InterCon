@@ -53,6 +53,55 @@ const exchangeOAuthCode = asyncHandler(async (req, res) => {
   });
 });
 
+const getPhoneNumberStatus = asyncHandler(async (req, res) => {
+  const result = await metaService.getPhoneNumberStatus(req.tenantId);
+
+  res.json({
+    success: true,
+    ...result
+  });
+});
+
+const requestPhoneVerificationCode = asyncHandler(async (req, res) => {
+  const result = await metaService.requestPhoneVerificationCode(req.tenantId, req.body);
+
+  res.json({
+    success: true,
+    message: "Verification code requested",
+    ...result
+  });
+});
+
+const verifyPhoneCode = asyncHandler(async (req, res) => {
+  const result = await metaService.verifyPhoneCode(req.tenantId, req.body);
+
+  res.json({
+    success: true,
+    message: "Phone verification code accepted",
+    ...result
+  });
+});
+
+const registerPhoneNumber = asyncHandler(async (req, res) => {
+  const result = await metaService.registerPhoneNumber(req.tenantId);
+
+  res.json({
+    success: true,
+    message: "WhatsApp phone number registered",
+    ...result
+  });
+});
+
+const deregisterPhoneNumber = asyncHandler(async (req, res) => {
+  const result = await metaService.deregisterPhoneNumber(req.tenantId);
+
+  res.json({
+    success: true,
+    message: "WhatsApp phone number deregistered",
+    ...result
+  });
+});
+
 const handleOAuthCallback = asyncHandler(async (req, res) => {
   const result = await metaService.exchangeOAuthCode({
     code: req.query.code,
@@ -71,5 +120,10 @@ module.exports = {
   getOnboardingStatus,
   completeEmbeddedSignup,
   exchangeOAuthCode,
+  getPhoneNumberStatus,
+  requestPhoneVerificationCode,
+  verifyPhoneCode,
+  registerPhoneNumber,
+  deregisterPhoneNumber,
   handleOAuthCallback
 };

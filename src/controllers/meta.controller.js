@@ -26,10 +26,13 @@ const getOnboardingStatus = asyncHandler(async (req, res) => {
 
 const completeEmbeddedSignup = asyncHandler(async (req, res) => {
   const result = await metaService.completeEmbeddedSignup(req.tenantId, req.body);
+  const isConnected = result.tenant?.onboardingStatus === "meta_connected" && Boolean(result.tenant?.meta?.phoneNumberId);
 
   res.json({
     success: true,
-    message: "WhatsApp account connected",
+    message: isConnected
+      ? "WhatsApp account connected"
+      : "Meta signup saved, but WhatsApp phone number connection is pending",
     ...result
   });
 });

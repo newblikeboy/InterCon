@@ -273,6 +273,8 @@ function launchEmbeddedSignup(FB, config) {
 
 function renderOnboardingStatus(tenant) {
   const meta = tenant?.meta || {};
+  const isMetaConnected = tenant?.onboardingStatus === "meta_connected" && Boolean(meta.phoneNumberId);
+  const hasPartialMetaConnection = Boolean(meta.wabaId || meta.connectedAt);
 
   if (metaBusinessId) metaBusinessId.textContent = meta.businessId || "Not connected";
   if (metaWabaId) metaWabaId.textContent = meta.wabaId || "Not connected";
@@ -280,10 +282,12 @@ function renderOnboardingStatus(tenant) {
   if (metaWebhookStatus) metaWebhookStatus.textContent = meta.wabaId ? "Subscribed or pending confirmation" : "Waiting";
   if (metaSendingStatus) metaSendingStatus.textContent = meta.phoneNumberId ? "Ready after templates are approved" : "Locked until setup";
 
-  if (meta.connectedAt) {
+  if (isMetaConnected && meta.connectedAt) {
     setMetaConnectMessage(`Connected on ${new Date(meta.connectedAt).toLocaleString()}.`);
   } else if (meta.lastSignupError) {
     setMetaConnectMessage(meta.lastSignupError, true);
+  } else if (hasPartialMetaConnection) {
+    setMetaConnectMessage("Meta signup was saved, but the WhatsApp phone number is not connected yet. Complete phone number selection or verification in Meta and connect again.", true);
   }
 }
 
@@ -686,7 +690,9 @@ connectWhatsAppButtons.forEach((button) => {
       });
 
       renderOnboardingStatus(result.tenant);
-      setMetaConnectMessage("WhatsApp account connected.");
+      if (result.tenant?.onboardingStatus === "meta_connected" && result.tenant?.meta?.phoneNumberId) {
+        setMetaConnectMessage("WhatsApp account connected.");
+      }
     } catch (error) {
       setMetaConnectMessage(error.message, true);
     } finally {

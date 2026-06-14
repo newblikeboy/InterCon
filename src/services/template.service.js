@@ -175,6 +175,40 @@ function isMetaSampleTemplate(templateName) {
   return String(templateName || "").trim().toLowerCase() === "hello_world";
 }
 
+function getMetaTemplateSubmissionError(metaError = {}, category = "") {
+  const rawMessage = String(metaError.message || "");
+  const rawDetails = String(metaError.error_data?.details || metaError.error_user_msg || "");
+  const combined = `${rawMessage} ${rawDetails}`.toLowerCase();
+
+  if (
+    category === "authentication"
+    && (
+      Number(metaError.code) === 10
+      || combined.includes("does not have permission")
+      || combined.includes("permission for this action")
+      || combined.includes("permission to create")
+      || combined.includes("मैसेज टेंप्लेट")
+    )
+  ) {
+    return "Meta is allowing Utility templates, but this WhatsApp Business Account is not eligible to create Authentication/OTP templates yet. Complete or resolve Business Verification in Meta, then create the OTP template again.";
+  }
+
+  if (
+    Number(metaError.code) === 10
+    || combined.includes("does not have permission")
+    || combined.includes("permission for this action")
+    || combined.includes("permission to create")
+    || combined.includes("मैसेज टेंप्लेट")
+  ) {
+    return "Meta did not allow this app to create templates for the connected WhatsApp Business Account. Create the template in WhatsApp Manager, then refresh/sync templates in InterCon. To create templates from InterCon, the Meta app must have approved WhatsApp Business Management access for client WABAs.";
+  }
+
+  const errorDetails = rawDetails.trim();
+  return errorDetails
+    ? `${rawMessage || "Meta template submission failed"}: ${errorDetails}`
+    : rawMessage || "Meta template submission failed";
+}
+
 async function syncMetaTemplates(tenantId) {
   const cacheKey = String(tenantId);
   const cached = templateSyncCache.get(cacheKey);
@@ -341,11 +375,7 @@ async function submitTemplateForMetaReview(tenantId, body) {
 
   if (!response.ok) {
     const metaError = metaResponse.error || metaResponse;
-    const errorDetails = metaResponse.error?.error_data?.details || metaResponse.error?.error_user_msg;
-    const message = errorDetails
-      ? `${metaResponse.error?.message || "Meta template submission failed"}: ${errorDetails}`
-      : metaResponse.error?.message || "Meta template submission failed";
-    throw new HttpError(response.status, message, metaError);
+    throw new HttpError(response.status, getMetaTemplateSubmissionError(metaError, payload.localCategory), metaError);
   }
 
   const template = await Template.findOneAndUpdate(

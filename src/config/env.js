@@ -29,7 +29,13 @@ const env = {
   authCookieName: process.env.AUTH_COOKIE_NAME || "intercon_token",
   authCookieMaxAgeMs: Number(process.env.AUTH_COOKIE_MAX_AGE_MS || 7 * 24 * 60 * 60 * 1000),
   rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),
-  rateLimitMax: Number(process.env.RATE_LIMIT_MAX || 300)
+  rateLimitMax: Number(process.env.RATE_LIMIT_MAX || 300),
+  messageWorkerPollMs: Number(process.env.MESSAGE_WORKER_POLL_MS || 1000),
+  messageQueueLockMs: Number(process.env.MESSAGE_QUEUE_LOCK_MS || 60 * 1000),
+  messageQueueMaxRetries: Number(process.env.MESSAGE_QUEUE_MAX_RETRIES || 5),
+  whatsappDefaultMps: Number(process.env.WHATSAPP_DEFAULT_MPS || 3),
+  whatsappPairMinIntervalMs: Number(process.env.WHATSAPP_PAIR_MIN_INTERVAL_MS || 3000),
+  whatsappDailyUniqueLimit: Number(process.env.WHATSAPP_DAILY_UNIQUE_LIMIT || 250)
 };
 
 module.exports = env;

@@ -189,6 +189,8 @@ function summarizeMessages(messages = []) {
   }, {
     total: 0,
     queued: 0,
+    scheduled: 0,
+    processing: 0,
     accepted: 0,
     sent: 0,
     delivered: 0,
@@ -251,12 +253,78 @@ async function resolveContact(tenantId, body) {
   ).lean();
 }
 
+function getIdempotencyKey(body = {}) {
+  return String(body.idempotencyKey || body.idempotency_key || body.requestId || body.request_id || "").trim();
+}
+
+function buildMetaMessagePayload(message, template) {
+  const payload = {
+    messaging_product: "whatsapp",
+    to: message.to.replace(/^\+/, ""),
+    type: "template",
+    template: {
+      name: template.name,
+      language: {
+        code: message.language || template.language || "en"
+      }
+    }
+  };
+
+  const components = buildTemplateComponents(message.variables || [], template);
+  if (components) {
+    payload.template.components = components;
+  }
+
+  return payload;
+}
+
+function getMetaSendErrorMessage(metaError = {}, tenant = {}) {
+  if (Number(metaError.code) === 133010) {
+    return "Phone number is not registered for WhatsApp Cloud API. Register the connected phone number before sending messages.";
+  }
+
+  if (Number(metaError.code) === 131058) {
+    return "Meta's hello_world sample template can only be sent from public test numbers. Create and use your own approved template for this WhatsApp number.";
+  }
+
+  if (Number(metaError.code) === 131037) {
+    return isMetaProvided555Number(tenant.meta?.displayPhoneNumber)
+      ? "Meta blocked this send because the sender is a Meta-provided +1 555 number without an approved display name. Use your own business phone number, or change/submit the 555 number display name in WhatsApp Manager and wait for approval."
+      : "Meta blocked this send because the sender display name still needs approval. Check the phone number display name status in WhatsApp Manager, then refresh and retry.";
+  }
+
+  return metaError.message || "Meta message send failed";
+}
+
+function isRetryableMetaError(statusCode, metaError = {}) {
+  const code = Number(metaError.code);
+  return statusCode >= 500
+    || [1, 2, 4, 17, 32, 613, 130429, 131048, 131056, 131057].includes(code);
+}
+
+function getRetryDelayMs(attempts) {
+  const baseDelayMs = 30 * 1000;
+  const maxDelayMs = 30 * 60 * 1000;
+  return Math.min(baseDelayMs * Math.max(1, 2 ** Math.max(0, attempts - 1)), maxDelayMs);
+}
+
 async function sendTemplateMessage(tenantId, body = {}) {
   await requireActivePaidPlan(tenantId);
 
   const templateName = String(body.templateName || body.template_name || "").trim();
   const language = String(body.language || "").trim();
   const variables = normalizeVariables(body.variables ?? body.parameters ?? body.templateParams);
+  const idempotencyKey = getIdempotencyKey(body);
+
+  if (idempotencyKey) {
+    const existingMessage = await Message.findOne({ tenantId, idempotencyKey }).lean();
+    if (existingMessage) {
+      return {
+        queued: true,
+        message: existingMessage
+      };
+    }
+  }
 
   if (!templateName) {
     throw new HttpError(400, "Approved template is required");
@@ -300,34 +368,208 @@ async function sendTemplateMessage(tenantId, body = {}) {
     throw new HttpError(409, "Connect WhatsApp first. Phone number ID and Meta access token are required before sending messages.");
   }
 
-  await assertWabaCanSendTemplates(tenant, accessToken);
-
   const message = await Message.create({
     tenantId,
     contactId: contact._id,
     to: contact.phone,
+    wabaId: tenant.meta.wabaId,
+    phoneNumberId: tenant.meta.phoneNumberId,
     templateName,
-    language,
+    language: language || template.language || "en",
     variables,
-    status: "queued"
+    status: "queued",
+    nextAttemptAt: new Date(),
+    maxAttempts: env.messageQueueMaxRetries,
+    ...(idempotencyKey ? { idempotencyKey } : {})
   });
 
-  const payload = {
-    messaging_product: "whatsapp",
-    to: contact.phone.replace(/^\+/, ""),
-    type: "template",
-    template: {
-      name: template.name,
-      language: {
-        code: language || template.language || "en"
+  return {
+    queued: true,
+    message
+  };
+}
+
+async function hasDailyUniqueCapacity(message) {
+  if (!env.whatsappDailyUniqueLimit || env.whatsappDailyUniqueLimit <= 0) return true;
+
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const sentStatuses = ["accepted", "sent", "delivered", "read"];
+  const distinctRecipients = await Message.distinct("to", {
+    tenantId: message.tenantId,
+    phoneNumberId: message.phoneNumberId,
+    status: { $in: sentStatuses },
+    acceptedAt: { $gte: since }
+  });
+
+  return distinctRecipients.includes(message.to) || distinctRecipients.length < env.whatsappDailyUniqueLimit;
+}
+
+async function getPairDelayMs(message) {
+  if (!env.whatsappPairMinIntervalMs || env.whatsappPairMinIntervalMs <= 0) return 0;
+
+  const lastMessage = await Message.findOne({
+    tenantId: message.tenantId,
+    to: message.to,
+    _id: { $ne: message._id },
+    lastAttemptAt: { $exists: true }
+  }).sort({ lastAttemptAt: -1 }).select("lastAttemptAt").lean();
+
+  if (!lastMessage?.lastAttemptAt) return 0;
+
+  const elapsedMs = Date.now() - new Date(lastMessage.lastAttemptAt).getTime();
+  return Math.max(env.whatsappPairMinIntervalMs - elapsedMs, 0);
+}
+
+async function rescheduleMessage(message, delayMs, error = "") {
+  const nextAttemptAt = new Date(Date.now() + Math.max(delayMs, 1000));
+  await Message.updateOne(
+    { _id: message._id },
+    {
+      $set: {
+        status: "scheduled",
+        nextAttemptAt,
+        lockedAt: null,
+        lockedBy: "",
+        ...(error ? { error } : {})
       }
     }
-  };
+  );
 
-  const components = buildTemplateComponents(variables, template);
-  if (components) {
-    payload.template.components = components;
+  return {
+    action: "scheduled",
+    messageId: message._id,
+    nextAttemptAt
+  };
+}
+
+async function failMessage(message, error, metaError = {}) {
+  await Message.updateOne(
+    { _id: message._id },
+    {
+      $set: {
+        status: "failed",
+        error,
+        metaErrorCode: metaError.code ? String(metaError.code) : "",
+        lockedAt: null,
+        lockedBy: ""
+      }
+    }
+  );
+
+  return {
+    action: "failed",
+    messageId: message._id,
+    phoneNumberId: message.phoneNumberId,
+    error
+  };
+}
+
+async function acceptMessage(message, metaResponse = {}) {
+  const metaMessageId = metaResponse.messages?.[0]?.id || "";
+  await Message.updateOne(
+    { _id: message._id },
+    {
+      $set: {
+        status: "accepted",
+        metaMessageId,
+        acceptedAt: new Date(),
+        lockedAt: null,
+        lockedBy: "",
+        error: ""
+      }
+    }
+  );
+
+  return {
+    action: "accepted",
+    messageId: message._id,
+    phoneNumberId: message.phoneNumberId,
+    metaMessageId
+  };
+}
+
+async function claimNextQueuedMessage(workerId) {
+  const now = new Date();
+  const staleLockCutoff = new Date(Date.now() - env.messageQueueLockMs);
+
+  return Message.findOneAndUpdate(
+    {
+      $or: [
+        {
+          status: { $in: ["queued", "scheduled"] },
+          nextAttemptAt: { $lte: now }
+        },
+        {
+          status: "processing",
+          lockedAt: { $lt: staleLockCutoff }
+        }
+      ]
+    },
+    {
+      $set: {
+        status: "processing",
+        lockedAt: now,
+        lockedBy: workerId
+      }
+    },
+    {
+      returnDocument: "after",
+      sort: { nextAttemptAt: 1, createdAt: 1 }
+    }
+  ).lean();
+}
+
+async function processQueuedMessage(message) {
+  const [tenant, template] = await Promise.all([
+    Tenant.findById(message.tenantId).select("+meta.accessToken"),
+    Template.findOne({
+      tenantId: message.tenantId,
+      name: message.templateName,
+      language: message.language,
+      status: "approved"
+    }).select("name language category status body parameterCount").lean()
+  ]);
+
+  if (!tenant) {
+    return failMessage(message, "Tenant not found for queued message.");
   }
+
+  const accessToken = tenant.getMetaAccessToken();
+  if (!tenant.meta?.phoneNumberId || !accessToken) {
+    return failMessage(message, "Connect WhatsApp first. Phone number ID and Meta access token are required before sending messages.");
+  }
+
+  if (!template) {
+    return failMessage(message, `Template "${message.templateName}" is not approved for language ${message.language}.`);
+  }
+
+  if (!await hasDailyUniqueCapacity(message)) {
+    return rescheduleMessage(
+      message,
+      15 * 60 * 1000,
+      `Daily unique customer limit reached for this phone. Message will retry automatically. Current safety limit: ${env.whatsappDailyUniqueLimit}.`
+    );
+  }
+
+  const pairDelayMs = await getPairDelayMs(message);
+  if (pairDelayMs > 0) {
+    return rescheduleMessage(message, pairDelayMs, "Waiting to avoid sending too many messages to the same customer too quickly.");
+  }
+
+  await assertWabaCanSendTemplates(tenant, accessToken);
+
+  const attempts = Number(message.attempts || 0) + 1;
+  await Message.updateOne(
+    { _id: message._id },
+    {
+      $set: {
+        attempts,
+        lastAttemptAt: new Date(),
+        wabaId: tenant.meta.wabaId,
+        phoneNumberId: tenant.meta.phoneNumberId
+      }
+    }
+  );
 
   const response = await fetch(`https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.phoneNumberId}/messages`, {
     method: "POST",
@@ -335,42 +577,60 @@ async function sendTemplateMessage(tenantId, body = {}) {
       "Authorization": `Bearer ${accessToken}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(buildMetaMessagePayload(message, template))
   });
 
   const metaResponse = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    message.status = "failed";
     const metaError = metaResponse.error || {};
-    if (Number(metaError.code) === 133010) {
-      message.error = "Phone number is not registered for WhatsApp Cloud API. Register the connected phone number before sending messages.";
-    } else if (Number(metaError.code) === 131058) {
-      message.error = "Meta's hello_world sample template can only be sent from public test numbers. Create and use your own approved template for this WhatsApp number.";
-    } else if (Number(metaError.code) === 131037) {
-      message.error = isMetaProvided555Number(tenant.meta.displayPhoneNumber)
-        ? "Meta blocked this send because the sender is a Meta-provided +1 555 number without an approved display name. Use your own business phone number, or change/submit the 555 number display name in WhatsApp Manager and wait for approval."
-        : "Meta blocked this send because the sender display name still needs approval. Check the phone number display name status in WhatsApp Manager, then refresh and retry.";
-    } else {
-      message.error = metaError.message || "Meta message send failed";
+    const errorMessage = getMetaSendErrorMessage(metaError, tenant);
+
+    if (isRetryableMetaError(response.status, metaError) && attempts < message.maxAttempts) {
+      return rescheduleMessage(message, getRetryDelayMs(attempts), errorMessage);
     }
-    await message.save();
-    throw new HttpError(response.status, message.error, metaError || metaResponse);
+
+    return failMessage(message, errorMessage, metaError);
   }
 
-  message.status = "accepted";
-  message.metaMessageId = metaResponse.messages?.[0]?.id || "";
-  await message.save();
+  return acceptMessage(message, metaResponse);
+}
 
-  return {
-    message,
-    meta: metaResponse
-  };
+async function processNextQueuedMessage(workerId) {
+  const message = await claimNextQueuedMessage(workerId);
+  if (!message) return null;
+
+  try {
+    return await processQueuedMessage(message);
+  } catch (error) {
+    const attempts = Number(message.attempts || 0) + 1;
+    const errorDetails = error.details || {};
+    await Message.updateOne(
+      { _id: message._id },
+      {
+        $set: {
+          attempts,
+          lastAttemptAt: new Date()
+        }
+      }
+    );
+
+    if (isRetryableMetaError(error.statusCode || 500, errorDetails) && attempts < Number(message.maxAttempts || env.messageQueueMaxRetries)) {
+      return rescheduleMessage(message, getRetryDelayMs(attempts), error.message);
+    }
+
+    if ((!error.statusCode || error.statusCode >= 500) && attempts < Number(message.maxAttempts || env.messageQueueMaxRetries)) {
+      return rescheduleMessage(message, getRetryDelayMs(attempts), error.message);
+    }
+
+    return failMessage(message, error.message, errorDetails);
+  }
 }
 
 module.exports = {
   getMessage,
   listMessages,
+  processNextQueuedMessage,
   summarizeMessages,
   sendTemplateMessage
 };

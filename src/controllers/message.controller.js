@@ -15,7 +15,7 @@ const sendTemplateMessage = asyncHandler(async (req, res) => {
 
   res.status(201).json({
     success: true,
-    message: "WhatsApp message sent",
+    message: "WhatsApp message queued",
     ...result
   });
 });

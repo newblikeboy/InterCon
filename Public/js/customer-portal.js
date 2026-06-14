@@ -1585,7 +1585,7 @@ if (sendMessageForm) {
     try {
       if (!requirePaidPlanBeforeAction(setSendMessage)) return;
 
-      setSendMessage("Sending WhatsApp message...");
+      setSendMessage("Queueing WhatsApp message...");
       await requestJson("/api/messages/send-template", {
         method: "POST",
         body: JSON.stringify(formData)
@@ -1593,7 +1593,7 @@ if (sendMessageForm) {
       sendMessageForm.reset();
       updateSendVariableHint();
       await loadSendHistory();
-      setSendMessage("WhatsApp message sent.");
+      setSendMessage("WhatsApp message queued. Delivery status will update automatically.");
     } catch (error) {
       setSendMessage(getSendFailureMessage(error), true);
       if (Number(error.details?.code || error.details?.error_subcode) === 131037 || String(error.message || "").toLowerCase().includes("display name approval")) {

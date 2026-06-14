@@ -22,7 +22,10 @@ function securityMiddleware(app) {
   const allowedOrigins = getAllowedOrigins();
 
   app.use(helmet({
-    contentSecurityPolicy: false
+    contentSecurityPolicy: false,
+    crossOriginOpenerPolicy: {
+      policy: "same-origin-allow-popups"
+    }
   }));
 
   app.use(cors({

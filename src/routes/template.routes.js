@@ -6,6 +6,7 @@ const router = express.Router();
 
 router.use(authenticate);
 
+router.get("/", templateController.listTemplates);
 router.post("/", templateController.submitTemplateForMetaReview);
 router.post("/drafts", templateController.createTemplateDraft);
 router.get("/approved", templateController.listApprovedTemplates);

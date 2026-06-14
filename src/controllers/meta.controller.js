@@ -24,6 +24,15 @@ const getOnboardingStatus = asyncHandler(async (req, res) => {
   });
 });
 
+const getMetaDiagnostics = asyncHandler(async (req, res) => {
+  const diagnostics = await metaService.getMetaDiagnostics(req.tenantId, req);
+
+  res.json({
+    success: true,
+    diagnostics
+  });
+});
+
 const completeEmbeddedSignup = asyncHandler(async (req, res) => {
   const result = await metaService.completeEmbeddedSignup(req.tenantId, req.body);
   const isConnected = result.tenant?.onboardingStatus === "meta_connected" && Boolean(result.tenant?.meta?.phoneNumberId);
@@ -118,6 +127,7 @@ module.exports = {
   getEmbeddedSignupUrl,
   getFacebookSdkConfig,
   getOnboardingStatus,
+  getMetaDiagnostics,
   completeEmbeddedSignup,
   exchangeOAuthCode,
   getPhoneNumberStatus,

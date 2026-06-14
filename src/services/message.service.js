@@ -2,8 +2,14 @@ const Contact = require("../models/Contact");
 const Message = require("../models/Message");
 const Template = require("../models/Template");
 const Tenant = require("../models/Tenant");
+const mongoose = require("mongoose");
 const env = require("../config/env");
 const HttpError = require("../utils/httpError");
+const { isMetaSampleTemplate } = require("./template.service");
+const { requireActivePaidPlan } = require("./billing.service");
+
+const wabaSendHealthCache = new Map();
+const WABA_SEND_HEALTH_TTL_MS = 30 * 1000;
 
 function normalizeVariables(variables) {
   if (Array.isArray(variables)) {
@@ -14,6 +20,16 @@ function normalizeVariables(variables) {
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
+}
+
+function normalizePhone(phone) {
+  const digits = String(phone || "").replace(/[^\d+]/g, "").replace(/^\+/, "").trim();
+
+  if (/^[6-9]\d{9}$/.test(digits)) {
+    return `91${digits}`;
+  }
+
+  return digits;
 }
 
 function buildTemplateComponents(variables) {
@@ -28,9 +44,48 @@ function buildTemplateComponents(variables) {
   }];
 }
 
+function assertTemplateParameterCount(template, variables) {
+  if (!Number.isInteger(template.parameterCount)) return;
+
+  const expectedCount = template.parameterCount;
+  if (variables.length === expectedCount) return;
+
+  throw new HttpError(
+    400,
+    `Template "${template.name}" expects ${expectedCount} body parameter${expectedCount === 1 ? "" : "s"}, but ${variables.length} ${variables.length === 1 ? "was" : "were"} provided.`,
+    {
+      code: "TEMPLATE_PARAMETER_COUNT_MISMATCH",
+      expectedCount,
+      providedCount: variables.length,
+      templateName: template.name,
+      language: template.language
+    }
+  );
+}
+
 async function assertWabaCanSendTemplates(tenant, accessToken) {
   if (!tenant?.meta?.wabaId || !accessToken) return;
 
+  const cacheKey = String(tenant.meta.wabaId);
+  const cached = wabaSendHealthCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.promise;
+  }
+
+  const promise = fetchWabaCanSendTemplates(tenant, accessToken).catch((error) => {
+    wabaSendHealthCache.delete(cacheKey);
+    throw error;
+  });
+
+  wabaSendHealthCache.set(cacheKey, {
+    expiresAt: Date.now() + WABA_SEND_HEALTH_TTL_MS,
+    promise
+  });
+
+  return promise;
+}
+
+async function fetchWabaCanSendTemplates(tenant, accessToken) {
   const response = await fetch(`https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.wabaId}?fields=health_status`, {
     headers: {
       "Authorization": `Bearer ${accessToken}`,
@@ -51,41 +106,164 @@ async function assertWabaCanSendTemplates(tenant, accessToken) {
   });
 
   if (paymentError) {
+    wabaSendHealthCache.delete(String(tenant.meta.wabaId));
     throw new HttpError(403, paymentError.possible_solution || "Add a valid payment method in WhatsApp Manager before sending template messages.", paymentError);
   }
 }
 
-async function listMessages(tenantId) {
-  return Message.find({ tenantId }).sort({ createdAt: -1 }).limit(100);
+function buildMessageFilter(tenantId, query = {}) {
+  const filter = { tenantId };
+
+  if (query.status) {
+    filter.status = String(query.status).trim();
+  }
+
+  if (query.to || query.phone || query.mobile) {
+    filter.to = normalizePhone(query.to || query.phone || query.mobile);
+  }
+
+  if (query.from || query.to_date || query.until) {
+    filter.createdAt = {};
+    if (query.from) filter.createdAt.$gte = new Date(query.from);
+    if (query.to_date || query.until) filter.createdAt.$lte = new Date(query.to_date || query.until);
+  }
+
+  return filter;
 }
 
-async function sendTemplateMessage(tenantId, body) {
-  const contactId = body.contactId || body.contact_id;
-  const templateName = String(body.templateName || body.template_name || "").trim();
-  const language = String(body.language || "en").trim();
-  const variables = normalizeVariables(body.variables);
+async function listMessages(tenantId, query = {}) {
+  const limit = Math.min(Number(query.limit) || 100, 500);
+  return Message.find(buildMessageFilter(tenantId, query)).sort({ createdAt: -1 }).limit(limit).lean();
+}
 
-  if (!contactId || !templateName) {
-    throw new HttpError(400, "Contact and approved template are required");
+async function getMessage(tenantId, messageId) {
+  const clauses = [{ metaMessageId: messageId }];
+  if (mongoose.Types.ObjectId.isValid(messageId)) {
+    clauses.push({ _id: messageId });
+  }
+
+  const message = await Message.findOne({ tenantId, $or: clauses }).lean();
+
+  if (!message) {
+    throw new HttpError(404, "Message not found");
+  }
+
+  return message;
+}
+
+function summarizeMessages(messages = []) {
+  return messages.reduce((summary, message) => {
+    const status = message.status || "queued";
+    summary.total += 1;
+    summary[status] = (summary[status] || 0) + 1;
+    return summary;
+  }, {
+    total: 0,
+    queued: 0,
+    accepted: 0,
+    sent: 0,
+    delivered: 0,
+    read: 0,
+    failed: 0
+  });
+}
+
+async function resolveContact(tenantId, body) {
+  const contactId = body.contactId || body.contact_id;
+  if (contactId) {
+    if (!mongoose.Types.ObjectId.isValid(contactId)) {
+      throw new HttpError(400, "Contact ID is invalid");
+    }
+
+    const contact = await Contact.findOne({ _id: contactId, tenantId }).select("phone name status optIn").lean();
+    if (!contact) {
+      throw new HttpError(404, "Contact not found");
+    }
+    return contact;
+  }
+
+  const phone = normalizePhone(body.phone || body.mobile || body.whatsapp_number || body.to);
+  if (!phone) {
+    throw new HttpError(400, "Contact or customer phone number is required");
+  }
+
+  if (!/^\d{11,15}$/.test(phone)) {
+    throw new HttpError(400, "Customer WhatsApp number must include country code, for example 919210699076");
+  }
+
+  const optInValue = body.optIn ?? body.opt_in ?? body.consent;
+  const hasOptIn = optInValue === true || ["true", "yes", "1"].includes(String(optInValue).trim().toLowerCase());
+  if (!hasOptIn) {
+    throw new HttpError(400, "Customer WhatsApp opt-in is required before sending");
+  }
+
+  return Contact.findOneAndUpdate(
+    { tenantId, phone },
+    {
+      $set: {
+        tenantId,
+        phone,
+        name: String(body.name || body.customer_name || body.customerName || phone).trim(),
+        email: body.email || "",
+        city: body.city || "",
+        source: body.source || "api",
+        tags: Array.isArray(body.tags)
+          ? body.tags.map((tag) => String(tag).trim()).filter(Boolean)
+          : String(body.tags || "api").split(",").map((tag) => tag.trim()).filter(Boolean),
+        optIn: {
+          status: true,
+          proof: body.optInProof || body.opt_in_proof || body.proof || "API consent flag",
+          capturedAt: body.optInAt || body.opt_in_at ? new Date(body.optInAt || body.opt_in_at) : new Date()
+        },
+        status: "active"
+      }
+    },
+    { returnDocument: "after", upsert: true, setDefaultsOnInsert: true }
+  ).lean();
+}
+
+async function sendTemplateMessage(tenantId, body = {}) {
+  await requireActivePaidPlan(tenantId);
+
+  const templateName = String(body.templateName || body.template_name || "").trim();
+  const language = String(body.language || "").trim();
+  const variables = normalizeVariables(body.variables ?? body.parameters ?? body.templateParams);
+
+  if (!templateName) {
+    throw new HttpError(400, "Approved template is required");
+  }
+
+  if (isMetaSampleTemplate(templateName)) {
+    throw new HttpError(400, "Meta's hello_world sample template can only be sent from public test numbers. Create and use your own approved template for this WhatsApp number.", { code: 131058 });
+  }
+
+  const templateFilter = {
+    tenantId,
+    name: templateName,
+    status: "approved"
+  };
+
+  if (language) {
+    templateFilter.language = language;
   }
 
   const [tenant, contact, template] = await Promise.all([
     Tenant.findById(tenantId).select("+meta.accessToken"),
-    Contact.findOne({ _id: contactId, tenantId }),
-    Template.findOne({ tenantId, name: templateName, status: "approved" })
+    resolveContact(tenantId, body),
+    Template.findOne(templateFilter).select("name language status body parameterCount").lean()
   ]);
-
-  if (!contact) {
-    throw new HttpError(404, "Contact not found");
-  }
 
   if (contact.status !== "active" || !contact.optIn?.status) {
     throw new HttpError(400, "Only active opted-in contacts can receive WhatsApp messages");
   }
 
   if (!template) {
-    throw new HttpError(400, "Select a Meta-approved template");
+    throw new HttpError(400, language
+      ? `Select a Meta-approved template for language ${language}`
+      : "Select a Meta-approved template");
   }
+
+  assertTemplateParameterCount(template, variables);
 
   const accessToken = tenant?.getMetaAccessToken();
 
@@ -135,12 +313,21 @@ async function sendTemplateMessage(tenantId, body) {
 
   if (!response.ok) {
     message.status = "failed";
-    message.error = metaResponse.error?.message || "Meta message send failed";
+    const metaError = metaResponse.error || {};
+    if (Number(metaError.code) === 133010) {
+      message.error = "Phone number is not registered for WhatsApp Cloud API. Register the connected phone number before sending messages.";
+    } else if (Number(metaError.code) === 131058) {
+      message.error = "Meta's hello_world sample template can only be sent from public test numbers. Create and use your own approved template for this WhatsApp number.";
+    } else if (Number(metaError.code) === 131037) {
+      message.error = "Meta says the sender phone number still needs display name approval before sending. If WhatsApp Manager shows the display name is available or approved, check business verification, WABA billing/payment, and allow time for Meta status sync.";
+    } else {
+      message.error = metaError.message || "Meta message send failed";
+    }
     await message.save();
-    throw new HttpError(response.status, message.error, metaResponse.error || metaResponse);
+    throw new HttpError(response.status, message.error, metaError || metaResponse);
   }
 
-  message.status = "sent";
+  message.status = "accepted";
   message.metaMessageId = metaResponse.messages?.[0]?.id || "";
   await message.save();
 
@@ -151,6 +338,8 @@ async function sendTemplateMessage(tenantId, body) {
 }
 
 module.exports = {
+  getMessage,
   listMessages,
+  summarizeMessages,
   sendTemplateMessage
 };

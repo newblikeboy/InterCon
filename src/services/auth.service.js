@@ -40,6 +40,15 @@ function publicUser(user, tenant = null) {
             connectedAt: tenant.meta?.connectedAt,
             lastSignupEvent: tenant.meta?.lastSignupEvent,
             lastSignupError: tenant.meta?.lastSignupError
+          },
+          billing: {
+            plan: tenant.billing?.plan || "none",
+            status: tenant.billing?.status || "not_started",
+            amount: tenant.billing?.amount || 0,
+            currency: tenant.billing?.currency || "INR",
+            selectedAt: tenant.billing?.selectedAt,
+            activatedAt: tenant.billing?.activatedAt,
+            currentPeriodEnd: tenant.billing?.currentPeriodEnd
           }
         }
       : undefined
@@ -199,7 +208,7 @@ async function exchangeFacebookCode(code, redirectUri) {
   }
 
   if (!env.facebookAppSecret) {
-    throw new HttpError(500, "FB_APP_SECRET or META_APP_SECRET is not configured");
+    throw new HttpError(500, "FB_APP_SECRET is not configured");
   }
 
   const response = await fetch(`https://graph.facebook.com/${env.facebookSdkVersion}/oauth/access_token`, {

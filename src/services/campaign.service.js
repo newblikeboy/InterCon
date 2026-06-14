@@ -77,7 +77,7 @@ async function updateCampaignStatus(tenantId, campaignId, status) {
   const campaign = await Campaign.findOneAndUpdate(
     { _id: campaignId, tenantId },
     { $set: { status } },
-    { new: true }
+    { returnDocument: "after" }
   );
 
   if (!campaign) {

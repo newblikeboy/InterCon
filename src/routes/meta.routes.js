@@ -7,6 +7,7 @@ const router = express.Router();
 router.get("/embedded-signup-url", metaController.getEmbeddedSignupUrl);
 router.get("/facebook-sdk-config", metaController.getFacebookSdkConfig);
 router.get("/onboarding", authenticate, metaController.getOnboardingStatus);
+router.get("/diagnostics", authenticate, metaController.getMetaDiagnostics);
 router.post("/embedded-signup/complete", authenticate, metaController.completeEmbeddedSignup);
 router.get("/phone/status", authenticate, metaController.getPhoneNumberStatus);
 router.post("/phone/request-code", authenticate, metaController.requestPhoneVerificationCode);

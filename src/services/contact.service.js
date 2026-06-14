@@ -3,7 +3,13 @@ const ContactSegment = require("../models/ContactSegment");
 const HttpError = require("../utils/httpError");
 
 function normalizePhone(phone) {
-  return String(phone || "").replace(/[^\d+]/g, "").trim();
+  const digits = String(phone || "").replace(/[^\d+]/g, "").replace(/^\+/, "").trim();
+
+  if (/^[6-9]\d{9}$/.test(digits)) {
+    return `91${digits}`;
+  }
+
+  return digits;
 }
 
 function normalizeTags(tags) {
@@ -15,6 +21,12 @@ function normalizeTags(tags) {
     .split(",")
     .map((tag) => tag.trim())
     .filter(Boolean);
+}
+
+function assertValidWhatsappPhone(phone) {
+  if (!/^\d{11,15}$/.test(phone)) {
+    throw new HttpError(400, "WhatsApp number must include country code, for example 919210699076");
+  }
 }
 
 function normalizeContact(input) {
@@ -48,7 +60,7 @@ async function listContacts(tenantId, query = {}) {
     ];
   }
 
-  return Contact.find(filter).sort({ createdAt: -1 }).limit(100);
+  return Contact.find(filter).sort({ createdAt: -1 }).limit(100).lean();
 }
 
 async function createContact(tenantId, body) {
@@ -57,11 +69,12 @@ async function createContact(tenantId, body) {
   if (!contact.name || !contact.phone) {
     throw new HttpError(400, "Contact name and phone are required");
   }
+  assertValidWhatsappPhone(contact.phone);
 
   return Contact.findOneAndUpdate(
     { tenantId, phone: contact.phone },
     { $set: { ...contact, tenantId } },
-    { new: true, upsert: true, setDefaultsOnInsert: true }
+    { returnDocument: "after", upsert: true, setDefaultsOnInsert: true }
   );
 }
 
@@ -76,9 +89,26 @@ async function importContacts(tenantId, contacts = []) {
     errors: []
   };
 
+  const operations = [];
+
   for (const row of contacts.slice(0, 1000)) {
     try {
-      await createContact(tenantId, row);
+      const contact = normalizeContact(row);
+      if (!contact.name || !contact.phone) {
+        throw new HttpError(400, "Contact name and phone are required");
+      }
+      assertValidWhatsappPhone(contact.phone);
+
+      operations.push({
+        updateOne: {
+          filter: { tenantId, phone: contact.phone },
+          update: {
+            $set: { ...contact, tenantId },
+            $setOnInsert: { status: "active" }
+          },
+          upsert: true
+        }
+      });
       results.imported += 1;
     } catch (error) {
       results.skipped += 1;
@@ -86,11 +116,15 @@ async function importContacts(tenantId, contacts = []) {
     }
   }
 
+  if (operations.length) {
+    await Contact.bulkWrite(operations, { ordered: false });
+  }
+
   return results;
 }
 
 async function listOptOuts(tenantId) {
-  return Contact.find({ tenantId, status: { $in: ["opted_out", "blocked"] } }).sort({ updatedAt: -1 }).limit(100);
+  return Contact.find({ tenantId, status: { $in: ["opted_out", "blocked"] } }).sort({ updatedAt: -1 }).limit(100).lean();
 }
 
 async function createSegment(tenantId, body) {
@@ -111,12 +145,12 @@ async function createSegment(tenantId, body) {
         description: body.description || ""
       }
     },
-    { new: true, upsert: true, setDefaultsOnInsert: true }
+    { returnDocument: "after", upsert: true, setDefaultsOnInsert: true }
   );
 }
 
 async function listSegments(tenantId) {
-  return ContactSegment.find({ tenantId }).sort({ createdAt: -1 });
+  return ContactSegment.find({ tenantId }).sort({ createdAt: -1 }).lean();
 }
 
 module.exports = {

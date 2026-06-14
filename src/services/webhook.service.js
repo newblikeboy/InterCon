@@ -7,7 +7,14 @@ const env = require("../config/env");
 const HttpError = require("../utils/httpError");
 
 function getWebhookAppSecret() {
-  return env.metaAppSecret || env.facebookAppSecret;
+  return env.facebookAppSecret || env.metaAppSecret;
+}
+
+function getWebhookAppSecrets() {
+  return [...new Set([
+    env.facebookAppSecret,
+    env.metaAppSecret
+  ].filter(Boolean))];
 }
 
 function getMetaWebhookSetup(req) {
@@ -41,11 +48,11 @@ function verifyMetaChallenge(query) {
 }
 
 function verifyMetaSignature(req) {
-  const appSecret = getWebhookAppSecret();
+  const appSecrets = getWebhookAppSecrets();
 
-  if (!appSecret) {
+  if (!appSecrets.length) {
     if (env.nodeEnv === "production") {
-      throw new HttpError(500, "META_APP_SECRET or FB_APP_SECRET is required for Meta webhook signature validation");
+      throw new HttpError(500, "FB_APP_SECRET or META_APP_SECRET is required for Meta webhook signature validation");
     }
 
     return;
@@ -56,15 +63,18 @@ function verifyMetaSignature(req) {
     throw new HttpError(403, "Missing Meta webhook signature");
   }
 
-  const expected = `sha256=${crypto
-    .createHmac("sha256", appSecret)
-    .update(req.rawBody)
-    .digest("hex")}`;
-
   const signatureBuffer = Buffer.from(signature);
-  const expectedBuffer = Buffer.from(expected);
+  const isValid = appSecrets.some((appSecret) => {
+    const expected = `sha256=${crypto
+      .createHmac("sha256", appSecret)
+      .update(req.rawBody)
+      .digest("hex")}`;
+    const expectedBuffer = Buffer.from(expected);
 
-  if (signatureBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)) {
+    return signatureBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(signatureBuffer, expectedBuffer);
+  });
+
+  if (!isValid) {
     throw new HttpError(403, "Invalid Meta webhook signature");
   }
 }
@@ -118,6 +128,7 @@ async function processTemplateStatus(tenantId, value) {
   const metaTemplateId = value.message_template_id || value.id;
   const status = mapTemplateStatus(value.event || value.status);
   const qualityRating = String(value.reason || value.quality_score?.score || "unknown").toLowerCase();
+  const rejectedReason = value.rejected_reason || value.reason_info?.reason || value.reason || "";
 
   if (!templateName && !metaTemplateId) {
     return;
@@ -137,10 +148,11 @@ async function processTemplateStatus(tenantId, value) {
       $set: {
         status,
         ...(qualityRating ? { qualityRating: ["high", "medium", "low"].includes(qualityRating) ? qualityRating : "unknown" } : {}),
-        ...(metaTemplateId ? { metaTemplateId } : {})
+        ...(metaTemplateId ? { metaTemplateId } : {}),
+        rejectedReason
       }
     },
-    { new: true }
+    { returnDocument: "after" }
   );
 }
 
@@ -152,17 +164,44 @@ async function processMessageStatuses(tenantId, statuses = []) {
       : "sent";
 
     if (!metaMessageId) continue;
+    const error = status.errors?.[0];
+    const errorMessage = error
+      ? [error.code, error.title || error.message, error.error_data?.details]
+        .filter(Boolean)
+        .join(" - ")
+      : "";
 
     await Message.findOneAndUpdate(
       { tenantId, metaMessageId },
       {
         $set: {
           status: mappedStatus,
-          ...(status.errors?.[0]?.title ? { error: status.errors[0].title } : {})
+          ...(errorMessage ? { error: errorMessage } : {})
         }
       }
     );
   }
+}
+
+async function processPhoneNameUpdate(tenantId, value = {}) {
+  const displayPhoneNumber = String(value.display_phone_number || "").replace(/^\+/, "");
+  const requestedName = value.requested_verified_name || value.verified_name || "";
+
+  const filter = {
+    tenantId,
+    ...(displayPhoneNumber ? { "meta.displayPhoneNumber": new RegExp(`${displayPhoneNumber}$`) } : {})
+  };
+
+  await Tenant.findOneAndUpdate(
+    filter,
+    {
+      $set: {
+        ...(requestedName ? { "meta.verifiedName": requestedName } : {}),
+        ...(value.decision ? { "meta.displayNameDecision": value.decision } : {}),
+        ...(value.rejection_reason ? { "meta.displayNameRejectionReason": value.rejection_reason } : {})
+      }
+    }
+  );
 }
 
 async function processChange(entry, change, payload) {
@@ -182,6 +221,10 @@ async function processChange(entry, change, payload) {
   try {
     if (tenant && eventType === "message_template_status_update") {
       await processTemplateStatus(tenant._id, change.value || {});
+    }
+
+    if (tenant && eventType === "phone_number_name_update") {
+      await processPhoneNameUpdate(tenant._id, change.value || {});
     }
 
     if (tenant && change.value?.statuses?.length) {

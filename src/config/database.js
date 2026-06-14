@@ -11,6 +11,9 @@ async function connectDatabase() {
 
   try {
     const connection = await mongoose.connect(env.mongoUri, {
+      maxPoolSize: 20,
+      minPoolSize: env.nodeEnv === "production" ? 2 : 0,
+      maxIdleTimeMS: 30000,
       serverSelectionTimeoutMS: 10000
     });
 

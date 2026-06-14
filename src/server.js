@@ -7,6 +7,8 @@ async function startServer() {
   await connectDatabase();
 
   const server = http.createServer(app);
+  server.keepAliveTimeout = 65000;
+  server.headersTimeout = 66000;
 
   server.listen(env.port, () => {
     console.log(`InterCon is running on http://localhost:${env.port}`);

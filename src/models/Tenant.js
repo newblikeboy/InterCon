@@ -74,6 +74,31 @@ const tenantSchema = new mongoose.Schema(
         trim: true,
         maxlength: 80
       },
+      verifiedName: {
+        type: String,
+        trim: true,
+        maxlength: 160
+      },
+      nameStatus: {
+        type: String,
+        trim: true,
+        maxlength: 80
+      },
+      newNameStatus: {
+        type: String,
+        trim: true,
+        maxlength: 80
+      },
+      displayNameDecision: {
+        type: String,
+        trim: true,
+        maxlength: 80
+      },
+      displayNameRejectionReason: {
+        type: String,
+        trim: true,
+        maxlength: 300
+      },
       appId: {
         type: String,
         trim: true,
@@ -116,6 +141,58 @@ const tenantSchema = new mongoose.Schema(
         select: false
       }
     },
+    billing: {
+      plan: {
+        type: String,
+        enum: ["none", "monthly", "quarterly", "yearly"],
+        default: "none"
+      },
+      status: {
+        type: String,
+        enum: ["not_started", "pending_payment", "active", "past_due", "cancelled"],
+        default: "not_started",
+        index: true
+      },
+      amount: {
+        type: Number,
+        default: 0
+      },
+      currency: {
+        type: String,
+        default: "INR",
+        trim: true,
+        maxlength: 8
+      },
+      selectedAt: {
+        type: Date
+      },
+      activatedAt: {
+        type: Date
+      },
+      currentPeriodEnd: {
+        type: Date
+      },
+      razorpayOrderId: {
+        type: String,
+        trim: true,
+        maxlength: 120
+      },
+      razorpayPaymentId: {
+        type: String,
+        trim: true,
+        maxlength: 120
+      },
+      razorpaySignature: {
+        type: String,
+        trim: true,
+        maxlength: 180
+      },
+      receipt: {
+        type: String,
+        trim: true,
+        maxlength: 120
+      }
+    },
     status: {
       type: String,
       enum: ["active", "suspended", "deleted"],
@@ -132,6 +209,7 @@ tenantSchema.index({ status: 1 });
 tenantSchema.index({ "meta.businessId": 1 });
 tenantSchema.index({ "meta.wabaId": 1 });
 tenantSchema.index({ "meta.phoneNumberId": 1 });
+tenantSchema.index({ "billing.status": 1, "billing.plan": 1 });
 
 tenantSchema.methods.getMetaAccessToken = function getMetaAccessToken() {
   return decryptSecret(this.meta?.accessToken);

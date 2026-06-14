@@ -50,7 +50,7 @@ async function updateAutomationStatus(tenantId, flowId, status) {
   const flow = await AutomationFlow.findOneAndUpdate(
     { _id: flowId, tenantId },
     { $set: { status } },
-    { new: true }
+    { returnDocument: "after" }
   );
 
   if (!flow) {

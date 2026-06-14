@@ -1,6 +1,15 @@
 const asyncHandler = require("../utils/asyncHandler");
 const templateService = require("../services/template.service");
 
+const listTemplates = asyncHandler(async (req, res) => {
+  const templates = await templateService.listTemplates(req.tenantId);
+
+  res.json({
+    success: true,
+    templates
+  });
+});
+
 const listApprovedTemplates = asyncHandler(async (req, res) => {
   const templates = await templateService.listApprovedTemplates(req.tenantId);
 
@@ -31,6 +40,7 @@ const submitTemplateForMetaReview = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  listTemplates,
   listApprovedTemplates,
   createTemplateDraft,
   submitTemplateForMetaReview

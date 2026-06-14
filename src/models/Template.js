@@ -25,6 +25,17 @@ const templateSchema = new mongoose.Schema(
       trim: true,
       maxlength: 20
     },
+    body: {
+      type: String,
+      trim: true,
+      maxlength: 2000
+    },
+    parameterCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100
+    },
     status: {
       type: String,
       enum: ["draft", "in_review", "approved", "rejected", "paused", "disabled"],
@@ -40,6 +51,11 @@ const templateSchema = new mongoose.Schema(
       type: String,
       trim: true,
       maxlength: 120
+    },
+    rejectedReason: {
+      type: String,
+      trim: true,
+      maxlength: 500
     }
   },
   {

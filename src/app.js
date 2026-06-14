@@ -28,7 +28,20 @@ if (env.nodeEnv !== "test") {
   app.use(morgan(env.nodeEnv === "production" ? "combined" : "dev"));
 }
 
-app.use(express.static(publicPath));
+app.use(express.static(publicPath, {
+  maxAge: env.nodeEnv === "production" ? "7d" : 0,
+  etag: true,
+  setHeaders(res, filePath) {
+    if (filePath.endsWith(".html")) {
+      res.setHeader("Cache-Control", "no-cache");
+      return;
+    }
+
+    if (env.nodeEnv === "production" && /\.(?:css|js|ico|png|jpg|jpeg|webp|svg|woff2?)$/i.test(filePath)) {
+      res.setHeader("Cache-Control", "public, max-age=604800, immutable");
+    }
+  }
+}));
 
 app.get("/", (req, res) => {
   res.sendFile(path.join(publicPath, "index.html"));

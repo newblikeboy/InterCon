@@ -32,8 +32,37 @@ function normalizePhone(phone) {
   return digits;
 }
 
-function buildTemplateComponents(variables) {
+function isMetaProvided555Number(value) {
+  return /^\+?1\s*555[\s-]?/i.test(String(value || ""));
+}
+
+function buildTemplateComponents(variables, template = {}) {
   if (!variables.length) return undefined;
+
+  if (template.category === "authentication") {
+    return [
+      {
+        type: "body",
+        parameters: [
+          {
+            type: "text",
+            text: variables[0]
+          }
+        ]
+      },
+      {
+        type: "button",
+        sub_type: "url",
+        index: "0",
+        parameters: [
+          {
+            type: "text",
+            text: variables[0]
+          }
+        ]
+      }
+    ];
+  }
 
   return [{
     type: "body",
@@ -250,7 +279,7 @@ async function sendTemplateMessage(tenantId, body = {}) {
   const [tenant, contact, template] = await Promise.all([
     Tenant.findById(tenantId).select("+meta.accessToken"),
     resolveContact(tenantId, body),
-    Template.findOne(templateFilter).select("name language status body parameterCount").lean()
+    Template.findOne(templateFilter).select("name language category status body parameterCount").lean()
   ]);
 
   if (contact.status !== "active" || !contact.optIn?.status) {
@@ -295,7 +324,7 @@ async function sendTemplateMessage(tenantId, body = {}) {
     }
   };
 
-  const components = buildTemplateComponents(variables);
+  const components = buildTemplateComponents(variables, template);
   if (components) {
     payload.template.components = components;
   }
@@ -319,7 +348,9 @@ async function sendTemplateMessage(tenantId, body = {}) {
     } else if (Number(metaError.code) === 131058) {
       message.error = "Meta's hello_world sample template can only be sent from public test numbers. Create and use your own approved template for this WhatsApp number.";
     } else if (Number(metaError.code) === 131037) {
-      message.error = "Meta blocked this send with display-name approval error. Open Connect WhatsApp, click Sync registration, then retry. If it still fails, resolve the Business verification request in Meta.";
+      message.error = isMetaProvided555Number(tenant.meta.displayPhoneNumber)
+        ? "Meta blocked this send because the sender is a Meta-provided +1 555 number without an approved display name. Use your own business phone number, or change/submit the 555 number display name in WhatsApp Manager and wait for approval."
+        : "Meta blocked this send because the sender display name still needs approval. Check the phone number display name status in WhatsApp Manager, then refresh and retry.";
     } else {
       message.error = metaError.message || "Meta message send failed";
     }

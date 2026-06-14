@@ -6,6 +6,9 @@ const { requireActivePaidPlan } = require("./billing.service");
 
 const templateSyncCache = new Map();
 const TEMPLATE_SYNC_TTL_MS = 30 * 1000;
+const TEMPLATE_STALE_GRACE_MS = 5 * 60 * 1000;
+const AUTHENTICATION_CODE_EXPIRATION_MINUTES = 10;
+const AUTHENTICATION_TEMPLATE_BODY = `{{1}} is your verification code. For your security, do not share this code. This code expires in ${AUTHENTICATION_CODE_EXPIRATION_MINUTES} minutes.`;
 
 function normalizeCategory(category) {
   const normalized = String(category || "").toLowerCase().trim();
@@ -51,6 +54,14 @@ function getBodyTextFromComponents(components = []) {
   return String(getBodyComponent(components)?.text || "").trim();
 }
 
+function getStoredTemplateBody(template) {
+  if (String(template?.category || "").toLowerCase() === "authentication") {
+    return AUTHENTICATION_TEMPLATE_BODY;
+  }
+
+  return getBodyTextFromComponents(template?.components || []);
+}
+
 function assertSequentialPlaceholders(placeholders) {
   placeholders.forEach((placeholder, index) => {
     const expected = index + 1;
@@ -86,8 +97,40 @@ function buildMetaTemplatePayload(body) {
   const language = normalizeLanguage(body.language);
   const text = String(body.body || body.messageBody || body.message_body || "").trim();
 
-  if (!name || !text) {
+  if (!name || (!text && category !== "authentication")) {
     throw new HttpError(400, "Template name and message body are required");
+  }
+
+  if (category === "authentication") {
+    return {
+      name,
+      category: category.toUpperCase(),
+      language,
+      components: [
+        {
+          type: "BODY",
+          add_security_recommendation: true
+        },
+        {
+          type: "FOOTER",
+          code_expiration_minutes: AUTHENTICATION_CODE_EXPIRATION_MINUTES
+        },
+        {
+          type: "BUTTONS",
+          buttons: [
+            {
+              type: "OTP",
+              otp_type: "COPY_CODE",
+              text: "Copy Code"
+            }
+          ]
+        }
+      ],
+      messageSendTtlSeconds: AUTHENTICATION_CODE_EXPIRATION_MINUTES * 60,
+      localCategory: category,
+      body: AUTHENTICATION_TEMPLATE_BODY,
+      parameterCount: 1
+    };
   }
 
   const placeholders = extractBodyPlaceholders(text);
@@ -176,8 +219,9 @@ async function doSyncMetaTemplates(tenantId) {
 
   const templates = Array.isArray(metaResponse.data) ? metaResponse.data : [];
   await Promise.all(templates.map((template) => {
-    const body = getBodyTextFromComponents(template.components || []);
-    const placeholders = extractBodyPlaceholders(body);
+    const category = String(template.category || "utility").toLowerCase();
+    const body = getStoredTemplateBody(template);
+    const placeholders = category === "authentication" ? [1] : extractBodyPlaceholders(body);
 
     return Template.findOneAndUpdate(
       { tenantId, name: template.name, language: template.language || "en" },
@@ -185,7 +229,7 @@ async function doSyncMetaTemplates(tenantId) {
         $set: {
           tenantId,
           name: template.name,
-          category: String(template.category || "utility").toLowerCase(),
+          category,
           language: template.language || "en",
           body,
           parameterCount: placeholders.length,
@@ -200,6 +244,27 @@ async function doSyncMetaTemplates(tenantId) {
       { returnDocument: "after", upsert: true, setDefaultsOnInsert: true }
     );
   }));
+
+  const staleFilter = {
+    tenantId,
+    name: { $ne: "hello_world" },
+    status: { $in: ["approved", "in_review", "paused"] },
+    updatedAt: { $lt: new Date(Date.now() - TEMPLATE_STALE_GRACE_MS) }
+  };
+
+  if (templates.length) {
+    staleFilter.$nor = templates.map((template) => ({
+      name: template.name,
+      language: template.language || "en"
+    }));
+  }
+
+  await Template.updateMany(staleFilter, {
+    $set: {
+      status: "disabled",
+      rejectedReason: "Template is not available in the connected WABA. Submit it again for this WhatsApp account."
+    }
+  });
 }
 
 function invalidateTemplateSync(tenantId) {
@@ -267,14 +332,20 @@ async function submitTemplateForMetaReview(tenantId, body) {
       name: payload.name,
       category: payload.category,
       language: payload.language,
-      components: payload.components
+      components: payload.components,
+      ...(payload.messageSendTtlSeconds ? { message_send_ttl_seconds: payload.messageSendTtlSeconds } : {})
     })
   });
 
   const metaResponse = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new HttpError(response.status, metaResponse.error?.message || "Meta template submission failed", metaResponse.error || metaResponse);
+    const metaError = metaResponse.error || metaResponse;
+    const errorDetails = metaResponse.error?.error_data?.details || metaResponse.error?.error_user_msg;
+    const message = errorDetails
+      ? `${metaResponse.error?.message || "Meta template submission failed"}: ${errorDetails}`
+      : metaResponse.error?.message || "Meta template submission failed";
+    throw new HttpError(response.status, message, metaError);
   }
 
   const template = await Template.findOneAndUpdate(

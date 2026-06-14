@@ -1209,9 +1209,14 @@ function renderSendHistory(messages) {
   `).join("");
 }
 
+function isMetaProvided555Number(value) {
+  return /^\+?1\s*555[\s-]?/i.test(String(value || ""));
+}
+
 function getSendFailureMessage(error) {
   const code = error.details?.code || error.details?.error_subcode;
   const rawMessage = String(error.message || "");
+  const senderNumber = setupState.tenant?.meta?.displayPhoneNumber || "";
 
   if (code === "TEMPLATE_PARAMETER_COUNT_MISMATCH") {
     return rawMessage;
@@ -1226,7 +1231,9 @@ function getSendFailureMessage(error) {
   }
 
   if (Number(code) === 131037 || rawMessage.toLowerCase().includes("display name approval")) {
-    return "Meta blocked this send with display-name approval error. Open Connect WhatsApp, click Sync registration, then retry. If it still fails, resolve the Business verification request in Meta.";
+    return isMetaProvided555Number(senderNumber)
+      ? "Meta blocked this send because the sender is a Meta-provided +1 555 number without an approved display name. Use your own business phone number, or change/submit the 555 number display name in WhatsApp Manager and wait for approval."
+      : "Meta blocked this send because the sender display name still needs approval. Check the phone number display name status in WhatsApp Manager, then refresh and retry.";
   }
 
   return rawMessage || "WhatsApp message failed.";

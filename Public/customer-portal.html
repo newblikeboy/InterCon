@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>InterCon Customer Portal</title>
   <meta name="description" content="InterCon customer portal for connecting WhatsApp Business, managing contacts, creating templates, sending messages, and checking billing readiness.">
-  <link rel="stylesheet" href="style/customer-portal.css">
+  <link rel="stylesheet" href="style/customer-portal.css?v=portal-sync-registration-20260614">
 </head>
 <body class="portal-body">
   <div class="portal-shell">
@@ -62,7 +62,7 @@
             <div>
               <p class="eyebrow">Overview</p>
               <h2>WhatsApp readiness</h2>
-              <p>Only the items that affect sending are shown here.</p>
+              <p>Track only what affects sending.</p>
             </div>
             <span class="status-pill warning" data-setup-progress-count>Loading setup</span>
           </div>
@@ -156,39 +156,48 @@
         </div>
 
         <div class="connect-layout">
+          <div class="connect-progress-panel">
+            <div class="connection-panel-head">
+              <h3>Setup progress</h3>
+              <span class="status-pill">Completion status</span>
+            </div>
             <div class="connect-checklist" data-connect-checklist>
               <article class="check-row" data-connect-step="meta">
                 <span></span>
                 <div>
                   <strong>Phone number</strong>
-                  <small>Connected and registered for Cloud API.</small>
+                  <small>Registered for Cloud API.</small>
                 </div>
               </article>
               <article class="check-row" data-connect-step="webhook">
                 <span></span>
                 <div>
-                  <strong>Webhook connection</strong>
-                  <small>InterCon receives messages and delivery status updates.</small>
+                  <strong>Webhook</strong>
+                  <small>Receiving updates.</small>
                 </div>
               </article>
               <article class="check-row" data-connect-step="billing">
                 <span></span>
                 <div>
                   <strong>Billing</strong>
-                  <small>Add a payment method in Meta if billing blocks sending.</small>
+                  <small>Payment method ready.</small>
                 </div>
               </article>
               <article class="check-row" data-connect-step="health">
                 <span></span>
                 <div>
-                  <strong>Messaging health</strong>
-                  <small>Meta WABA health allows sending.</small>
-              </div>
-            </article>
+                  <strong>Messaging</strong>
+                  <small>Tier 1: 250 conversations.</small>
+                </div>
+              </article>
+            </div>
           </div>
 
           <aside class="connection-card">
-            <span class="status-pill">Current status</span>
+            <div class="connection-panel-head">
+              <h3>Account details</h3>
+              <span class="status-pill">Current status</span>
+            </div>
             <dl>
               <div><dt>WABA ID</dt><dd data-meta-waba-id>Not connected</dd></div>
               <div><dt>Phone number</dt><dd data-meta-phone-number-id>Not connected</dd></div>
@@ -197,14 +206,15 @@
               <div><dt>Webhook</dt><dd data-meta-webhook-status>Waiting</dd></div>
               <div><dt>Billing</dt><dd data-meta-payment-status>Waiting</dd></div>
               <div><dt>Messaging health</dt><dd data-meta-health-status>Waiting</dd></div>
-              <div data-meta-business-health-row hidden><dt>Business limit</dt><dd data-meta-business-health-status>Waiting</dd></div>
+              <div><dt>Conversation tier</dt><dd data-meta-conversation-tier>Waiting</dd></div>
             </dl>
             <div class="template-actions">
               <button class="btn btn-outline" type="button" data-meta-refresh-phone>Refresh</button>
               <button class="btn btn-outline" type="button" data-meta-register-phone hidden>Register</button>
               <a class="btn btn-outline" href="https://business.facebook.com/settings/payments" target="_blank" rel="noreferrer" data-meta-payment-action hidden>Resolve billing</a>
-              <a class="btn btn-outline" href="https://business.facebook.com/settings/security" target="_blank" rel="noreferrer" data-meta-business-verification-action hidden>Review limit</a>
+              <a class="btn btn-outline" href="https://business.facebook.com/settings" target="_blank" rel="noreferrer">Business Settings</a>
             </div>
+            <p class="business-settings-note">Visit Business Settings to enhance your daily limit.</p>
             <p class="contact-message" data-meta-connect-message></p>
           </aside>
         </div>
@@ -215,7 +225,7 @@
           <div>
             <p class="eyebrow">Audience</p>
             <h2>Contacts</h2>
-            <p>Import opted-in customers who can receive approved WhatsApp templates.</p>
+            <p>Import customers with WhatsApp consent.</p>
           </div>
           <button class="btn btn-outline" type="button" data-contact-upload>Upload CSV</button>
           <input type="file" accept=".csv,text/csv" hidden data-contact-file>
@@ -227,7 +237,7 @@
           <div class="portal-section-head compact">
             <div>
               <p class="eyebrow">Customer list</p>
-              <h2>Imported contacts</h2>
+              <h2>Contact list</h2>
             </div>
             <button class="btn btn-outline" type="button" data-refresh-contacts>Refresh</button>
           </div>
@@ -244,8 +254,8 @@
         <div class="portal-section-head compact">
           <div>
             <p class="eyebrow">Templates</p>
-            <h2>Create and submit templates</h2>
-            <p>Create a Meta-approved template before sending messages to opted-in customers.</p>
+            <h2>Templates</h2>
+            <p>Create approved messages for opted-in customers.</p>
           </div>
           <button class="btn" type="button" data-submit-template>Submit template</button>
         </div>
@@ -325,8 +335,8 @@
         <div class="portal-section-head compact">
           <div>
             <p class="eyebrow">Send WhatsApp</p>
-            <h2>Send a template message</h2>
-            <p>Select an opted-in contact, choose an approved template, and send.</p>
+            <h2>Send message</h2>
+            <p>Choose a contact and an approved template.</p>
           </div>
           <button class="btn btn-outline" type="button" data-refresh-send-data>Refresh</button>
         </div>
@@ -383,7 +393,7 @@
           <div>
             <p class="eyebrow">Developer/API</p>
             <h2>API access</h2>
-            <p>Create API keys for automated WhatsApp sending from CRM, ERP, ecommerce, or custom systems.</p>
+            <p>Create keys for CRM, ERP, ecommerce, or custom systems.</p>
           </div>
           <button class="btn btn-outline" type="button" data-refresh-api-keys>Refresh</button>
         </div>
@@ -476,7 +486,7 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
           <div>
             <p class="eyebrow">Plan</p>
             <h2>InterCon subscription</h2>
-            <p>Choose a paid platform plan before submitting templates for Meta review or sending WhatsApp messages.</p>
+            <p>Choose a plan before templates and sending.</p>
           </div>
           <span class="status-pill warning" data-billing-status>Checking</span>
         </div>
@@ -502,6 +512,6 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
     </main>
   </div>
 
-  <script src="js/customer-portal.js?v=portal-polish-20260611"></script>
+  <script src="js/customer-portal.js?v=portal-sync-registration-20260614"></script>
 </body>
 </html>

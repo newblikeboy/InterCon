@@ -488,6 +488,33 @@ async function savePhoneDetails(tenantId, details, error = "") {
   return tenant ? publicTenant(tenant) : null;
 }
 
+async function refreshTenantPhoneDetails(tenant, accessToken) {
+  if (!tenant?.meta?.phoneNumberId || !accessToken) return tenant;
+
+  const data = await fetchMetaJson(
+    `${tenant.meta.phoneNumberId}?fields=status,account_mode,display_phone_number,code_verification_status,verified_name,name_status,new_name_status`,
+    accessToken
+  );
+  const details = publicPhoneDetails(data);
+
+  return Tenant.findByIdAndUpdate(
+    tenant._id,
+    {
+      $set: {
+        ...(details.displayPhoneNumber ? { "meta.displayPhoneNumber": details.displayPhoneNumber } : {}),
+        ...(details.status ? { "meta.phoneStatus": details.status } : {}),
+        ...(details.accountMode ? { "meta.accountMode": details.accountMode } : {}),
+        ...(details.codeVerificationStatus ? { "meta.codeVerificationStatus": details.codeVerificationStatus } : {}),
+        ...(details.verifiedName ? { "meta.verifiedName": details.verifiedName } : {}),
+        ...(details.nameStatus ? { "meta.nameStatus": details.nameStatus } : {}),
+        ...(details.newNameStatus ? { "meta.newNameStatus": details.newNameStatus } : {}),
+        "meta.lastPhoneSetupError": ""
+      }
+    },
+    { returnDocument: "after" }
+  ).select("+meta.accessToken");
+}
+
 async function getPhoneNumberStatus(tenantId) {
   const { tenant, accessToken } = await getTenantWithMetaToken(tenantId);
   const data = await fetchMetaJson(
@@ -640,12 +667,13 @@ async function deregisterPhoneNumber(tenantId) {
 }
 
 async function getOnboardingStatus(tenantId) {
-  const tenant = await Tenant.findById(tenantId).select("+meta.accessToken");
+  let tenant = await Tenant.findById(tenantId).select("+meta.accessToken");
   if (!tenant) {
     throw new HttpError(404, "Tenant not found");
   }
 
   const accessToken = tenant.getMetaAccessToken();
+  tenant = await refreshTenantPhoneDetails(tenant, accessToken).catch(() => tenant);
   const metaState = await getOnboardingMetaState(tenant, accessToken);
 
   return publicTenantWithMeta(tenant, metaState);

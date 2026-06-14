@@ -1254,6 +1254,7 @@ address {
   border-radius: var(--radius);
   color: rgba(255, 255, 255, 0.76);
   font-weight: 760;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
 }
 
 .portal-nav a:hover,
@@ -1261,6 +1262,10 @@ address {
   color: #fff;
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.14);
+}
+
+.portal-nav a:hover {
+  transform: translateX(2px);
 }
 
 .portal-nav span {
@@ -1277,6 +1282,7 @@ address {
 
 .portal-nav a.active span {
   background: var(--brand);
+  box-shadow: 0 10px 18px rgba(15, 159, 110, 0.22);
 }
 
 .portal-side-note {
@@ -1535,6 +1541,26 @@ address {
   margin-top: 0;
 }
 
+.setup-status-card,
+.setup-roadmap article,
+.contact-panel,
+.template-form-panel,
+.template-status-area,
+.send-form,
+.send-history-panel,
+.api-panel,
+.api-docs-panel,
+.api-doc-grid article,
+.billing-status-card,
+.billing-plan-card,
+.portal-stats article {
+  border-color: rgba(15, 159, 110, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 252, 250, 0.96)),
+    #fff;
+  box-shadow: 0 14px 34px rgba(17, 41, 29, 0.07), 0 1px 0 #fff inset;
+}
+
 .overview-dashboard {
   margin-top: 0;
 }
@@ -1548,8 +1574,8 @@ address {
 
 .setup-status-card {
   display: grid;
-  gap: 16px;
-  padding: 22px;
+  gap: 14px;
+  padding: 20px;
   border: 1px solid rgba(15, 159, 110, 0.22);
   border-radius: var(--radius);
   background:
@@ -1576,7 +1602,7 @@ address {
   grid-template-columns: 42px 1fr;
   gap: 14px;
   align-items: start;
-  padding: 15px;
+  padding: 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: #fff;
@@ -1644,6 +1670,9 @@ address {
 
 .contact-panel {
   margin-top: 16px;
+  padding: 18px;
+  border: 1px solid rgba(15, 159, 110, 0.14);
+  border-radius: var(--radius);
 }
 
 .contact-panel[hidden] {
@@ -1651,7 +1680,11 @@ address {
 }
 
 .contact-table-row {
-  grid-template-columns: 1.1fr 0.9fr 0.7fr 1fr;
+  grid-template-columns:
+    minmax(130px, 1.2fr)
+    minmax(120px, 0.9fr)
+    minmax(78px, 0.55fr)
+    minmax(120px, 1fr);
 }
 
 .empty-row {
@@ -1666,7 +1699,7 @@ address {
 }
 
 .portal-stats article {
-  padding: 20px;
+  padding: 18px;
 }
 
 .portal-stats span,
@@ -1718,33 +1751,72 @@ address {
 
 .connect-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 18px;
+  gap: 16px;
+}
+
+.connect-progress-panel,
+.connection-card {
+  overflow: hidden;
+  padding: 18px;
+  border: 1px solid rgba(15, 159, 110, 0.18);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 252, 249, 0.96)),
+    #fff;
+  box-shadow: 0 14px 34px rgba(17, 41, 29, 0.08), 0 1px 0 #fff inset;
+}
+
+.connection-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.connection-panel-head h3 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.15;
 }
 
 .connect-checklist {
+  counter-reset: connect-step;
   display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .check-row {
+  counter-increment: connect-step;
+  position: relative;
   display: grid;
-  grid-template-columns: 34px 1fr;
-  gap: 14px;
+  grid-template-columns: 32px 1fr;
+  gap: 12px;
   align-items: start;
-  padding: 16px;
-  border: 1px solid var(--line);
+  min-height: 116px;
+  padding: 14px;
+  border: 1px solid rgba(223, 232, 227, 0.9);
   border-radius: var(--radius);
   background: #fff;
+  box-shadow: 0 10px 22px rgba(17, 41, 29, 0.05);
 }
 
 .check-row > span {
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   place-items: center;
   border: 2px solid #bfd0c7;
   border-radius: 50%;
+  color: var(--muted);
+  background: #fff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.check-row:not(.done) > span::before {
+  content: counter(connect-step);
 }
 
 .check-row.done > span {
@@ -1763,12 +1835,16 @@ address {
 
 .check-row.active {
   border-color: rgba(216, 154, 36, 0.42);
-  background: #fffaf0;
+  background:
+    linear-gradient(180deg, #fffaf0, #ffffff);
+  box-shadow: 0 14px 30px rgba(216, 154, 36, 0.12);
 }
 
 .check-row.active > span {
+  color: #7a5010;
+  background: #fffaf0;
   border-color: var(--gold);
-  box-shadow: 0 0 0 5px rgba(216, 154, 36, 0.14);
+  box-shadow: 0 0 0 4px rgba(216, 154, 36, 0.14);
 }
 
 .check-row strong,
@@ -1777,48 +1853,58 @@ address {
 }
 
 .check-row small {
-  margin-top: 3px;
+  margin-top: 4px;
   color: var(--muted);
-}
-
-.connection-card {
-  padding: 20px;
-  border: 1px solid rgba(15, 159, 110, 0.2);
-  border-radius: var(--radius);
-  background: linear-gradient(180deg, #f5fbf8, #ffffff);
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 .connection-card dl {
   display: grid;
-  gap: 12px;
-  margin: 18px 0 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
 }
 
-.connection-card div {
+.connection-card dl > div {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--line);
-}
-
-.connection-card div:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid rgba(223, 232, 227, 0.9);
+  border-radius: var(--radius);
+  background: #fff;
 }
 
 .connection-card dt,
 .connection-card dd {
   margin: 0;
+  min-width: 0;
 }
 
 .connection-card dt {
   color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .connection-card dd {
+  color: var(--ink);
   font-weight: 850;
   text-align: end;
+  overflow-wrap: anywhere;
+}
+
+.connection-card .template-actions {
+  margin-top: 14px;
+}
+
+.business-settings-note {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
 }
 
 .billing-status-card {
@@ -1869,6 +1955,13 @@ address {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: #fff;
+}
+
+.billing-plan-card .btn,
+.api-key-form .btn,
+.send-form .btn,
+.template-form-panel .btn {
+  min-height: 44px;
 }
 
 .billing-plan-card.selected {
@@ -1924,20 +2017,37 @@ address {
 }
 
 .table-panel {
-  overflow: hidden;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
 
 .table-row {
   display: grid;
-  grid-template-columns: 1.4fr 0.8fr 0.8fr 0.4fr;
+  grid-template-columns:
+    minmax(140px, 1.25fr)
+    minmax(96px, 0.75fr)
+    minmax(86px, 0.65fr)
+    minmax(120px, 1fr);
   gap: 12px;
   align-items: center;
+  width: 100%;
   min-height: 54px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
   background: #fff;
+}
+
+.table-row > * {
+  min-width: 0;
+}
+
+.table-row strong,
+.table-row span,
+.table-row button {
+  overflow-wrap: anywhere;
 }
 
 .table-row:last-child {
@@ -1954,11 +2064,13 @@ address {
 
 .table-row em {
   justify-self: start;
+  max-width: 100%;
   padding: 5px 9px;
   border-radius: 999px;
   font-size: 12px;
   font-style: normal;
   font-weight: 900;
+  overflow-wrap: anywhere;
 }
 
 .approved {
@@ -1985,13 +2097,13 @@ address {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: #fff;
-  box-shadow: 0 12px 28px rgba(17, 41, 29, 0.06);
+  box-shadow: 0 14px 34px rgba(17, 41, 29, 0.07), 0 1px 0 #fff inset;
 }
 
 .template-form-panel {
   display: grid;
-  gap: 14px;
-  padding: 20px;
+  gap: 13px;
+  padding: 18px;
 }
 
 .template-form-panel label,
@@ -2016,6 +2128,14 @@ address {
   outline: none;
 }
 
+.template-form-panel input,
+.template-form-panel select,
+.send-form input,
+.send-form select,
+.api-key-form input {
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
 .template-form-panel textarea {
   resize: vertical;
 }
@@ -2036,6 +2156,14 @@ address {
 .template-status-area {
   margin-top: 22px;
   padding: 0;
+}
+
+.template-status-area .table-row {
+  grid-template-columns:
+    minmax(150px, 1.25fr)
+    minmax(110px, 0.75fr)
+    minmax(92px, 0.6fr)
+    minmax(150px, 1.15fr);
 }
 
 .campaign-layout {
@@ -2179,9 +2307,9 @@ address {
 
 .send-form {
   display: grid;
-  gap: 14px;
+  gap: 13px;
   max-width: 820px;
-  padding: 20px;
+  padding: 18px;
 }
 
 .send-form label {
@@ -2206,11 +2334,15 @@ address {
 
 .send-history-panel {
   margin-top: 18px;
-  padding: 20px;
+  padding: 18px;
 }
 
 .send-table-row {
-  grid-template-columns: 1fr 1fr 0.7fr 1fr;
+  grid-template-columns:
+    minmax(130px, 0.95fr)
+    minmax(140px, 1.15fr)
+    minmax(86px, 0.6fr)
+    minmax(150px, 0.9fr);
 }
 
 .api-layout {
@@ -2231,7 +2363,7 @@ address {
 
 .api-panel,
 .api-docs-panel {
-  padding: 20px;
+  padding: 18px;
 }
 
 .api-key-form {
@@ -2327,7 +2459,12 @@ address {
 }
 
 .api-key-table-row {
-  grid-template-columns: 1.1fr 1fr 0.6fr 0.9fr 0.5fr;
+  grid-template-columns:
+    minmax(120px, 0.95fr)
+    minmax(160px, 1.25fr)
+    minmax(82px, 0.55fr)
+    minmax(130px, 0.85fr)
+    minmax(74px, 0.45fr);
 }
 
 .api-doc-grid {
@@ -2341,7 +2478,7 @@ address {
   display: grid;
   gap: 12px;
   align-content: start;
-  padding: 18px;
+  padding: 16px;
 }
 
 .api-doc-grid article > span {
@@ -2368,6 +2505,11 @@ address {
   border-radius: var(--radius);
   color: #20342b;
   background: #f7fbf9;
+}
+
+.api-doc-grid pre,
+.api-generated-key code {
+  scrollbar-width: thin;
 }
 
 .automation-layout {
@@ -3290,8 +3432,20 @@ address {
     inset: 0 auto 0 0;
     z-index: 50;
     width: min(320px, 88vw);
+    gap: 18px;
+    padding: 20px 14px;
     transform: translateX(-110%);
     transition: transform 220ms ease;
+  }
+
+  .portal-nav {
+    gap: 4px;
+    padding-right: 2px;
+  }
+
+  .portal-nav a {
+    min-height: 48px;
+    padding: 9px;
   }
 
   .portal-body.portal-menu-open .portal-sidebar {
@@ -3346,6 +3500,11 @@ address {
   .two-col,
   .automation-control-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .connect-checklist,
+  .connection-card dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -3447,6 +3606,35 @@ address {
     padding-inline: 14px;
   }
 
+  .portal-section {
+    padding: 16px;
+  }
+
+  .portal-side-note {
+    display: none;
+  }
+
+  .portal-section-head {
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .portal-section-head h2,
+  .portal-section h2 {
+    margin-bottom: 5px;
+    font-size: 26px;
+    line-height: 1.08;
+  }
+
+  .portal-section-head p {
+    max-width: 30rem;
+    font-size: 14px;
+  }
+
+  .portal-section-head .eyebrow {
+    margin-bottom: 5px;
+  }
+
   .portal-actions .btn,
   .portal-hero-actions .btn,
   .portal-section-head .btn,
@@ -3458,13 +3646,162 @@ address {
     flex-direction: column;
   }
 
-  .portal-stats,
   .work-grid,
   .billing-plan-grid,
   .api-doc-grid,
   .two-col,
   .automation-control-grid {
     grid-template-columns: 1fr;
+  }
+
+  .portal-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .portal-stats article {
+    padding: 14px;
+  }
+
+  .portal-stats strong {
+    font-size: 26px;
+  }
+
+  .overview-layout {
+    gap: 12px;
+  }
+
+  .setup-status-card,
+  .contact-panel,
+  .template-form-panel,
+  .send-form,
+  .send-history-panel,
+  .api-panel,
+  .api-docs-panel,
+  .api-doc-grid article,
+  .billing-status-card,
+  .billing-plan-card {
+    padding: 14px;
+  }
+
+  .setup-roadmap {
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: #fff;
+  }
+
+  .setup-roadmap article {
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .setup-roadmap article:last-child {
+    border-bottom: 0;
+  }
+
+  .setup-roadmap small {
+    font-size: 12px;
+  }
+
+  .connect-checklist,
+  .connection-card dl {
+    grid-template-columns: 1fr;
+  }
+
+  .connect-layout {
+    gap: 12px;
+  }
+
+  .connect-progress-panel,
+  .connection-card {
+    padding: 14px;
+    box-shadow: 0 10px 24px rgba(17, 41, 29, 0.06), 0 1px 0 #fff inset;
+  }
+
+  .connection-panel-head {
+    align-items: center;
+    flex-direction: row;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .connection-panel-head h3 {
+    font-size: 18px;
+  }
+
+  .connection-panel-head .status-pill {
+    flex: 0 0 auto;
+    padding: 6px 9px;
+    font-size: 11px;
+  }
+
+  .connect-checklist {
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: #fff;
+  }
+
+  .check-row {
+    grid-template-columns: 30px minmax(0, 1fr);
+    min-height: 0;
+    padding: 13px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .check-row:last-child {
+    border-bottom: 0;
+  }
+
+  .check-row > span {
+    width: 26px;
+    height: 26px;
+    font-size: 11px;
+  }
+
+  .check-row.done {
+    background: #f4fbf8;
+  }
+
+  .check-row.active {
+    background: #fffaf0;
+    box-shadow: none;
+  }
+
+  .check-row strong {
+    font-size: 15px;
+  }
+
+  .check-row small {
+    font-size: 12px;
+  }
+
+  .connection-card dl {
+    gap: 8px;
+  }
+
+  .connection-card dl > div {
+    display: grid;
+    grid-template-columns: minmax(108px, 0.75fr) minmax(0, 1fr);
+    gap: 10px;
+    padding: 10px 11px;
+  }
+
+  .connection-card dt,
+  .business-settings-note {
+    font-size: 12px;
+  }
+
+  .connection-card dd {
+    font-size: 13px;
   }
 
   .billing-status-card {
@@ -3486,8 +3823,19 @@ address {
     flex-direction: column;
   }
 
+  .template-actions .btn,
+  .template-actions button,
+  .template-actions a {
+    width: 100%;
+  }
+
   .api-key-form {
     grid-template-columns: 1fr;
+  }
+
+  .api-doc-grid pre {
+    padding: 10px;
+    font-size: 12px;
   }
 
   .chat-composer {
@@ -3503,11 +3851,39 @@ address {
   }
 
   .table-panel {
-    overflow-x: auto;
+    overflow: hidden;
   }
 
   .table-row {
-    min-width: 620px;
+    grid-template-columns: 1fr !important;
+    gap: 6px;
+    min-width: 0;
+    min-height: 0;
+    padding: 13px;
+    align-items: start;
+  }
+
+  .table-head {
+    display: none;
+  }
+
+  .table-row strong {
+    font-size: 15px;
+  }
+
+  .table-row span {
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .table-row em {
+    justify-self: start;
+    margin-top: 2px;
+  }
+
+  .table-row button {
+    justify-self: start;
+    padding: 0;
   }
 }
 

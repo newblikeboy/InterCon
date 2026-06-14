@@ -26,11 +26,9 @@ const metaPhoneStatus = document.querySelector("[data-meta-phone-status]");
 const metaDisplayNameStatus = document.querySelector("[data-meta-display-name-status]");
 const metaWebhookStatus = document.querySelector("[data-meta-webhook-status]");
 const metaHealthStatus = document.querySelector("[data-meta-health-status]");
-const metaBusinessHealthRow = document.querySelector("[data-meta-business-health-row]");
-const metaBusinessHealthStatus = document.querySelector("[data-meta-business-health-status]");
+const metaConversationTier = document.querySelector("[data-meta-conversation-tier]");
 const metaPaymentStatus = document.querySelector("[data-meta-payment-status]");
 const metaPaymentAction = document.querySelector("[data-meta-payment-action]");
-const metaBusinessVerificationAction = document.querySelector("[data-meta-business-verification-action]");
 const connectStepCards = document.querySelectorAll("[data-connect-step]");
 const metaConnectMessage = document.querySelector("[data-meta-connect-message]");
 const metaRefreshPhoneButton = document.querySelector("[data-meta-refresh-phone]");
@@ -244,13 +242,12 @@ function getSetupSteps() {
   const hasInReviewTemplate = setupState.templates.some((template) => template.status === "in_review");
   const whatsappConnected = tenant.onboardingStatus === "meta_connected" && Boolean(meta.wabaId && meta.phoneNumberId);
   const phoneRegistered = whatsappConnected && isPhoneRegisteredForCloudApi(meta);
-  const displayNameApproved = isDisplayNameApproved(meta);
   const webhookSubscribed = meta.webhookStatus === "subscribed";
   const contactsReady = optedInContacts.length > 0;
   const templatesReady = approvedTemplates.length > 0;
   const paymentReady = isPaymentReady(meta);
   const paidPlanReady = isInterconPlanActive(setupState.billing);
-  const messagingReady = phoneRegistered && displayNameApproved && webhookSubscribed && contactsReady && templatesReady && paymentReady && paidPlanReady;
+  const messagingReady = phoneRegistered && webhookSubscribed && contactsReady && templatesReady && paymentReady && paidPlanReady;
 
   return [
     {
@@ -258,13 +255,11 @@ function getSetupSteps() {
       label: "WhatsApp connection",
       href: "#connect",
       action: "Open connection",
-      done: phoneRegistered && displayNameApproved && webhookSubscribed && paymentReady,
+      done: phoneRegistered && webhookSubscribed && paymentReady,
       message: !whatsappConnected
         ? "Connect WABA and phone number through Meta Embedded Signup."
         : !phoneRegistered
           ? "Register the connected phone number for Cloud API."
-          : !displayNameApproved
-            ? "Wait for Meta display name approval before sending."
           : !webhookSubscribed
             ? "Confirm the webhook subscription before sending."
             : !paymentReady
@@ -421,13 +416,17 @@ function formatDisplayNameStatus(meta = {}) {
 
   const decisionLabels = {
     APPROVED: "Approved",
-    DEFERRED: "Deferred",
+    DEFERRED: "Deferred - review pending",
     DECLINED: "Declined",
     NONE: ""
   };
-  const label = decision && decision !== "NONE"
+  const statusLabel = labels[status] || (status ? status.replace(/_/g, " ") : "Waiting");
+  const decisionLabel = decision && decision !== "NONE"
     ? decisionLabels[decision] || decision.replace(/_/g, " ")
-    : labels[status] || (status ? status.replace(/_/g, " ") : "Waiting");
+    : "";
+  const label = decisionLabel && decisionLabel !== statusLabel
+    ? `${statusLabel} (review: ${decisionLabel})`
+    : statusLabel;
   const rejection = meta.displayNameRejectionReason && meta.displayNameRejectionReason !== "NONE"
     ? ` (${meta.displayNameRejectionReason})`
     : "";
@@ -442,12 +441,11 @@ function getConnectSteps() {
   const phoneRegistered = metaConnected && isPhoneRegisteredForCloudApi(meta);
   const webhookSubscribed = meta.webhookStatus === "subscribed";
   const paymentReady = isPaymentReady(meta);
-  const displayNameApproved = isDisplayNameApproved(meta);
 
   return [
     {
       key: "meta",
-      done: phoneRegistered && displayNameApproved
+      done: phoneRegistered
     },
     {
       key: "webhook",
@@ -495,7 +493,7 @@ function updateConnectHeader({ isMetaConnected, hasPartialMetaConnection, isPhon
   if (connectTitle) connectTitle.textContent = isReady ? "WhatsApp connected" : "Connect WhatsApp";
   if (connectSubtitle) {
     connectSubtitle.textContent = isReady
-      ? "Your phone, webhook, and WABA health are ready. Manage templates and sending from their dedicated pages."
+      ? "Tier 1: up to 250 business conversations in 24 hours."
       : "Finish only the items that affect sending from this WhatsApp number.";
   }
   if (metaConnectState) {
@@ -965,9 +963,8 @@ function renderOnboardingStatus(tenant) {
   const isMetaConnected = tenant?.onboardingStatus === "meta_connected" && Boolean(meta.phoneNumberId);
   const hasPartialMetaConnection = Boolean(meta.wabaId);
   const isPhoneRegistered = isPhoneRegisteredForCloudApi(meta);
-  const displayNameApproved = isDisplayNameApproved(meta);
   const webhookSubscribed = meta.webhookStatus === "subscribed";
-  const businessLimited = Boolean(meta.businessHealthError) || meta.businessHealthStatus === "limited";
+  const businessLimited = Boolean(meta.businessHealthError) || meta.businessHealthStatus === "blocked";
 
   if (metaWabaId) metaWabaId.textContent = meta.wabaId || "Not connected";
   if (metaPhoneNumberId) metaPhoneNumberId.textContent = meta.displayPhoneNumber || meta.phoneNumberId || "Not connected";
@@ -986,21 +983,24 @@ function renderOnboardingStatus(tenant) {
   paymentStatus.ready = isPaymentReady(meta);
   if (metaPaymentStatus) metaPaymentStatus.textContent = paymentStatus.label;
   if (metaHealthStatus) metaHealthStatus.textContent = formatHealthLabel(meta.canSendMessage, meta.wabaHealthError);
-  if (metaBusinessHealthRow) metaBusinessHealthRow.hidden = !businessLimited;
-  if (metaBusinessHealthStatus) metaBusinessHealthStatus.textContent = formatHealthLabel(meta.businessHealthStatus, meta.businessHealthError);
+  if (metaConversationTier) {
+    metaConversationTier.textContent = isMetaConnected
+      ? "Tier 1 - 250 conversations / 24h"
+      : "Waiting";
+  }
   if (metaPaymentAction) metaPaymentAction.hidden = !paymentStatus.needsAction;
-  if (metaBusinessVerificationAction) metaBusinessVerificationAction.hidden = !businessLimited;
-  if (metaRegisterPhoneButton) metaRegisterPhoneButton.hidden = !meta.phoneNumberId || isPhoneRegistered;
+  if (metaRegisterPhoneButton) {
+    metaRegisterPhoneButton.hidden = !meta.phoneNumberId;
+    metaRegisterPhoneButton.textContent = isPhoneRegistered ? "Sync registration" : "Register";
+  }
   updateConnectHeader({ isMetaConnected, hasPartialMetaConnection, isPhoneRegistered, webhookSubscribed, paymentStatus });
 
   if (isMetaConnected && !isPhoneRegistered) {
     setMetaConnectMessage("Phone number is connected but not registered for Cloud API. Click Register before sending messages.", true);
-  } else if (isMetaConnected && !displayNameApproved) {
-    setMetaConnectMessage(`Display name status from Meta is ${formatDisplayNameStatus(meta)}. If sends fail with display-name approval errors, complete Meta business/display-name review before sending.`, true);
   } else if (businessLimited) {
-    setMetaConnectMessage(meta.businessHealthError || "Meta reports a business-level sending limit. You can continue if WABA health allows sending.", true);
+    setMetaConnectMessage(meta.businessHealthError || "Meta reports a business-level block. Check WABA health and billing before sending.", true);
   } else if (isMetaConnected && meta.connectedAt) {
-    setMetaConnectMessage(`Connected on ${new Date(meta.connectedAt).toLocaleString()}.`);
+    setMetaConnectMessage(`Connected ${new Date(meta.connectedAt).toLocaleString()}. Tier 1: 250 conversations / 24h.`);
   } else if (meta.lastSignupError) {
     setMetaConnectMessage(meta.lastSignupError, true);
   } else if (hasPartialMetaConnection) {
@@ -1023,13 +1023,13 @@ async function refreshPhoneStatus() {
 }
 
 async function registerPhoneNumber() {
-  setMetaConnectMessage("Registering phone number for Cloud API...");
+  setMetaConnectMessage("Syncing phone registration with Cloud API...");
   await requestJson("/api/meta/phone/register", {
     method: "POST",
     body: JSON.stringify({})
   });
   await loadOnboardingStatus();
-  setMetaConnectMessage("Phone number registered for Cloud API.");
+  setMetaConnectMessage("Phone registration synced. Try sending again.");
 }
 
 function parseCsv(text) {
@@ -1207,6 +1207,29 @@ function renderSendHistory(messages) {
       <span>${new Date(message.createdAt).toLocaleString()}</span>
     </div>
   `).join("");
+}
+
+function getSendFailureMessage(error) {
+  const code = error.details?.code || error.details?.error_subcode;
+  const rawMessage = String(error.message || "");
+
+  if (code === "TEMPLATE_PARAMETER_COUNT_MISMATCH") {
+    return rawMessage;
+  }
+
+  if (Number(code) === 133010) {
+    return "Phone number is not registered for Cloud API. Open Connect WhatsApp and click Register, then try sending again.";
+  }
+
+  if (Number(code) === 131058) {
+    return "The hello_world sample only works with Meta public test numbers. Select your own approved template or submit one from Create templates.";
+  }
+
+  if (Number(code) === 131037 || rawMessage.toLowerCase().includes("display name approval")) {
+    return "Meta blocked this send with display-name approval error. Open Connect WhatsApp, click Sync registration, then retry. If it still fails, resolve the Business verification request in Meta.";
+  }
+
+  return rawMessage || "WhatsApp message failed.";
 }
 
 async function loadSendHistory() {
@@ -1565,17 +1588,10 @@ if (sendMessageForm) {
       await loadSendHistory();
       setSendMessage("WhatsApp message sent.");
     } catch (error) {
-      const code = error.details?.code || error.details?.error_subcode;
-      const message = code === "TEMPLATE_PARAMETER_COUNT_MISMATCH"
-        ? error.message
-        : Number(code) === 133010
-        ? "Phone number is not registered for Cloud API. Open Connect WhatsApp and click Register, then try sending again."
-        : Number(code) === 131058
-          ? "The hello_world sample only works with Meta public test numbers. Select your own approved template or submit one from Create templates."
-        : Number(code) === 131037
-          ? "Meta says the sender number still needs display name approval. If WhatsApp Manager shows the name is available or approved, check business verification, WABA billing/payment, and allow time for Meta status sync."
-        : error.message;
-      setSendMessage(message, true);
+      setSendMessage(getSendFailureMessage(error), true);
+      if (Number(error.details?.code || error.details?.error_subcode) === 131037 || String(error.message || "").toLowerCase().includes("display name approval")) {
+        await loadOnboardingStatus().catch(() => null);
+      }
     }
   });
 }

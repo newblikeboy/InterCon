@@ -319,7 +319,7 @@ async function sendTemplateMessage(tenantId, body = {}) {
     } else if (Number(metaError.code) === 131058) {
       message.error = "Meta's hello_world sample template can only be sent from public test numbers. Create and use your own approved template for this WhatsApp number.";
     } else if (Number(metaError.code) === 131037) {
-      message.error = "Meta says the sender phone number still needs display name approval before sending. If WhatsApp Manager shows the display name is available or approved, check business verification, WABA billing/payment, and allow time for Meta status sync.";
+      message.error = "Meta blocked this send with display-name approval error. Open Connect WhatsApp, click Sync registration, then retry. If it still fails, resolve the Business verification request in Meta.";
     } else {
       message.error = metaError.message || "Meta message send failed";
     }

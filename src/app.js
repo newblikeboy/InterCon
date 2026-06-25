@@ -55,6 +55,10 @@ app.get("/admin", (req, res) => {
   res.sendFile(path.join(publicPath, "admin-portal.html"));
 });
 
+app.get("/privacy-policy", (req, res) => {
+  res.sendFile(path.join(publicPath, "privacy-policy.html"));
+});
+
 app.use("/api", routes);
 
 app.use(notFound);

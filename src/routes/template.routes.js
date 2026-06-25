@@ -10,5 +10,6 @@ router.get("/", templateController.listTemplates);
 router.post("/", templateController.submitTemplateForMetaReview);
 router.post("/drafts", templateController.createTemplateDraft);
 router.get("/approved", templateController.listApprovedTemplates);
+router.delete("/:templateId", templateController.deleteTemplate);
 
 module.exports = router;

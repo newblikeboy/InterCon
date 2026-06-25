@@ -2,6 +2,8 @@ const portalMenu = document.querySelector("[data-portal-menu]");
 const portalSidebar = document.querySelector("[data-portal-sidebar]");
 const portalNavLinks = document.querySelectorAll(".portal-nav a");
 const portalViews = document.querySelectorAll("[data-portal-view]");
+const consoleTitle = document.querySelector("[data-console-title]");
+const consoleEyebrow = document.querySelector("[data-console-eyebrow]");
 const setupProgressCount = document.querySelector("[data-setup-progress-count]");
 const setupProgressBar = document.querySelector("[data-setup-progress-bar]");
 const setupCurrentStep = document.querySelector("[data-setup-current-step]");
@@ -17,8 +19,9 @@ const statPendingTemplatesDetail = document.querySelector("[data-stat-pending-te
 const statMessages = document.querySelector("[data-stat-messages]");
 const statMessagesDetail = document.querySelector("[data-stat-messages-detail]");
 const connectWhatsAppButtons = document.querySelectorAll("[data-connect-whatsapp]");
-const connectTitle = document.querySelector("[data-connect-title]");
-const connectSubtitle = document.querySelector("[data-connect-subtitle]");
+const coexistenceButtons = document.querySelectorAll("[data-coexistence-onboard]");
+const coexMessage = document.querySelector("[data-coex-message]");
+const coexState = document.querySelector("[data-coex-state]");
 const metaConnectState = document.querySelector("[data-meta-connect-state]");
 const metaWabaId = document.querySelector("[data-meta-waba-id]");
 const metaPhoneNumberId = document.querySelector("[data-meta-phone-number-id]");
@@ -51,9 +54,17 @@ const templateCategorySelect = document.querySelector("[data-template-category]"
 const templateBodyInput = document.querySelector("[data-template-body]");
 const templateSamplesInput = document.querySelector("[data-template-samples]");
 const templatePresetSelect = document.querySelector("[data-template-preset]");
-const templateMessage = document.querySelector("[data-template-message]");
+const templateMessages = document.querySelectorAll("[data-template-message]");
 const templateStatusList = document.querySelector("[data-template-status-list]");
 const submitTemplateButtons = document.querySelectorAll("[data-submit-template]");
+const templateModal = document.querySelector("[data-template-modal]");
+const openTemplateModalButton = document.querySelector("[data-open-template-modal]");
+const closeTemplateModalButtons = document.querySelectorAll("[data-close-template-modal]");
+const confirmModal = document.querySelector("[data-confirm-modal]");
+const confirmTitle = document.querySelector("[data-confirm-title]");
+const confirmMessage = document.querySelector("[data-confirm-message]");
+const confirmAcceptButton = document.querySelector("[data-confirm-accept]");
+const confirmCancelButtons = document.querySelectorAll("[data-confirm-cancel]");
 const sendMessageForm = document.querySelector("[data-send-message-form]");
 const sendContactSelect = document.querySelector("[data-send-contact-select]");
 const sendTemplateSelect = document.querySelector("[data-send-template-select]");
@@ -62,7 +73,13 @@ const sendVariablesInput = document.querySelector("[data-send-variables]");
 const sendVariableHint = document.querySelector("[data-send-variable-hint]");
 const sendMessageStatus = document.querySelector("[data-send-message-status]");
 const sendHistory = document.querySelector("[data-send-history]");
-const refreshSendDataButton = document.querySelector("[data-refresh-send-data]");
+const refreshSendDataButtons = document.querySelectorAll("[data-refresh-send-data]");
+const previewContact = document.querySelector("[data-preview-contact]");
+const previewMessage = document.querySelector("[data-preview-message]");
+const previewTime = document.querySelector("[data-preview-time]");
+const previewBubbleTime = document.querySelector("[data-preview-bubble-time]");
+const previewTemplate = document.querySelector("[data-preview-template]");
+const previewCategory = document.querySelector("[data-preview-category]");
 const apiKeyForm = document.querySelector("[data-api-key-form]");
 const apiKeyNameInput = document.querySelector("[data-api-key-name]");
 const apiKeyList = document.querySelector("[data-api-key-list]");
@@ -76,7 +93,7 @@ const billingStatus = document.querySelector("[data-billing-status]");
 const billingCurrentPlan = document.querySelector("[data-billing-current-plan]");
 const billingMessage = document.querySelector("[data-billing-message]");
 const billingPlanGrid = document.querySelector("[data-billing-plan-grid]");
-const defaultPortalView = "overview";
+const defaultPortalView = "home";
 let facebookSdkPromise;
 let razorpayCheckoutPromise;
 let embeddedSignupSessionInfo = null;
@@ -118,10 +135,57 @@ function viewExists(viewId) {
   return Boolean(document.getElementById(viewId));
 }
 
+// Top-level launcher pages (rail items) and the feature views they own.
+const PAGES = ["home", "setup", "send-whatsapp", "reports", "payments", "api"];
+const PAGE_TITLES = { home: "Home", setup: "Setup", "send-whatsapp": "Send WhatsApp", reports: "Reports", payments: "Payments", api: "API" };
+const VIEW_PARENT = {
+  connect: "setup",
+  coexistence: "setup",
+  templates: "setup",
+  "template-library": "setup",
+  "media-library": "setup",
+  contacts: "setup",
+  optout: "setup",
+  groups: "setup",
+  blacklist: "setup",
+  billing: "payments",
+  "developer-api": "api"
+};
+const VIEW_META = {
+  connect: { title: "Connected WABA", related: ["templates", "contacts", "coexistence"] },
+  coexistence: { title: "Coexistence Onboarding", related: ["connect", "templates"] },
+  templates: { title: "Manage Template", related: ["template-library", "media-library", "send-whatsapp"] },
+  "template-library": { title: "Template Library", related: ["templates", "media-library"] },
+  "media-library": { title: "Media Library", related: ["templates", "template-library"] },
+  contacts: { title: "WhatsApp Contacts", related: ["optout", "groups", "blacklist"] },
+  optout: { title: "Opt-out Contacts", related: ["contacts", "blacklist"] },
+  groups: { title: "Manage Groups", related: ["contacts", "optout"] },
+  blacklist: { title: "Blacklist Numbers", related: ["contacts", "optout"] },
+  "send-whatsapp": { title: "Send WhatsApp", related: ["templates", "contacts"] },
+  billing: { title: "Billing", related: ["connect"] },
+  "developer-api": { title: "API Access", related: ["contacts", "templates"] }
+};
+
 function setActiveNav(viewId) {
+  const section = VIEW_PARENT[viewId] || viewId;
   portalNavLinks.forEach((link) => {
-    link.classList.toggle("active", link.getAttribute("href") === `#${viewId}`);
+    link.classList.toggle("active", link.getAttribute("href") === `#${section}`);
   });
+}
+
+function updateConsoleTitle(viewId) {
+  const parent = VIEW_PARENT[viewId];
+  const title = VIEW_META[viewId]?.title || PAGE_TITLES[viewId] || "Home";
+
+  if (consoleTitle) {
+    consoleTitle.textContent = title;
+  }
+
+  if (consoleEyebrow) {
+    consoleEyebrow.textContent = parent ? (PAGE_TITLES[parent] || "Your workspace") : "Your workspace";
+  }
+
+  document.title = `InterCon ${title}`;
 }
 
 function showPortalView(viewId, shouldPersist = true) {
@@ -132,6 +196,7 @@ function showPortalView(viewId, shouldPersist = true) {
   });
 
   setActiveNav(nextViewId);
+  updateConsoleTitle(nextViewId);
   closePortalMenu();
   window.scrollTo({ top: 0, behavior: "auto" });
 
@@ -164,9 +229,66 @@ function setContactMessage(message, isError = false) {
 }
 
 function setTemplateMessage(message, isError = false) {
-  if (!templateMessage) return;
-  templateMessage.textContent = message;
-  templateMessage.classList.toggle("error", isError);
+  if (!templateMessages.length) return;
+  templateMessages.forEach((templateMessage) => {
+    templateMessage.textContent = message;
+    templateMessage.classList.toggle("error", isError);
+  });
+}
+
+function openTemplateModal() {
+  if (!templateModal) return;
+  templateModal.hidden = false;
+  document.body.classList.add("modal-open");
+  setTemplateMessage("");
+  setTimeout(() => {
+    templateModal.querySelector("[data-template-preset]")?.focus();
+  }, 50);
+}
+
+function closeTemplateModal() {
+  if (!templateModal) return;
+  templateModal.hidden = true;
+  if (!confirmModal || confirmModal.hidden) {
+    document.body.classList.remove("modal-open");
+  }
+}
+
+let confirmModalResolve = null;
+
+function closeConfirmModal(confirmed = false) {
+  if (!confirmModal) return;
+  confirmModal.hidden = true;
+  if (!templateModal || templateModal.hidden) {
+    document.body.classList.remove("modal-open");
+  }
+  if (confirmModalResolve) {
+    confirmModalResolve(confirmed);
+    confirmModalResolve = null;
+  }
+}
+
+function showConfirmModal({ title, message, confirmText = "Confirm", eyebrow = "Confirm action" }) {
+  if (!confirmModal) {
+    return Promise.resolve(false);
+  }
+
+  if (confirmTitle) confirmTitle.textContent = title;
+  if (confirmMessage) confirmMessage.textContent = message;
+  const eyebrowElement = confirmModal.querySelector("[data-confirm-eyebrow]");
+  if (eyebrowElement) eyebrowElement.textContent = eyebrow;
+  if (confirmAcceptButton) confirmAcceptButton.textContent = confirmText;
+
+  confirmModal.hidden = false;
+  document.body.classList.add("modal-open");
+
+  setTimeout(() => {
+    confirmModal.querySelector("[data-confirm-cancel]")?.focus();
+  }, 50);
+
+  return new Promise((resolve) => {
+    confirmModalResolve = resolve;
+  });
 }
 
 function setSendMessage(message, isError = false) {
@@ -185,6 +307,12 @@ function setMetaConnectMessage(message, isError = false) {
   if (!metaConnectMessage) return;
   metaConnectMessage.textContent = message;
   metaConnectMessage.classList.toggle("error", isError);
+}
+
+function setCoexMessage(message, isError = false) {
+  if (!coexMessage) return;
+  coexMessage.textContent = message;
+  coexMessage.classList.toggle("error", isError);
 }
 
 function getInitials(value) {
@@ -490,12 +618,6 @@ function formatHealthLabel(status, error = "") {
 function updateConnectHeader({ isMetaConnected, hasPartialMetaConnection, isPhoneRegistered, webhookSubscribed, paymentStatus }) {
   const isReady = isMetaConnected && isPhoneRegistered && webhookSubscribed && paymentStatus.ready;
 
-  if (connectTitle) connectTitle.textContent = isReady ? "WhatsApp connected" : "Connect WhatsApp";
-  if (connectSubtitle) {
-    connectSubtitle.textContent = isReady
-      ? "Tier 1: up to 250 business conversations in 24 hours."
-      : "Finish only the items that affect sending from this WhatsApp number.";
-  }
   if (metaConnectState) {
     metaConnectState.textContent = isReady ? "Ready" : hasPartialMetaConnection ? "Needs action" : "Not connected";
     metaConnectState.classList.toggle("approved", isReady);
@@ -503,13 +625,10 @@ function updateConnectHeader({ isMetaConnected, hasPartialMetaConnection, isPhon
   }
 
   connectWhatsAppButtons.forEach((button) => {
-    if (isMetaConnected) {
-      button.hidden = true;
-      return;
-    }
-
     button.hidden = false;
-    button.textContent = hasPartialMetaConnection ? "Finish Meta setup" : "Connect with Meta";
+    button.textContent = hasPartialMetaConnection && !isMetaConnected
+      ? "Finish Meta setup"
+      : "Register New WhatsApp";
   });
 }
 
@@ -876,7 +995,7 @@ async function loadFacebookSdk() {
   return facebookSdkPromise;
 }
 
-function launchEmbeddedSignup(FB, config) {
+function launchEmbeddedSignup(FB, config, overrides = {}) {
   if (window.location.protocol !== "https:") {
     let securePortalUrl = "";
 
@@ -893,7 +1012,7 @@ function launchEmbeddedSignup(FB, config) {
     );
   }
 
-  const extras = getEmbeddedSignupExtras(config);
+  const extras = getEmbeddedSignupExtras(config, overrides);
 
   return new Promise((resolve) => {
     FB.login(resolve, {
@@ -906,7 +1025,7 @@ function launchEmbeddedSignup(FB, config) {
   });
 }
 
-function getEmbeddedSignupExtras(config) {
+function getEmbeddedSignupExtras(config, overrides = {}) {
   const configuredExtras = config.loginExtras && typeof config.loginExtras === "object"
     ? config.loginExtras
     : {};
@@ -916,7 +1035,10 @@ function getEmbeddedSignupExtras(config) {
     sessionInfoVersion: "3"
   };
 
-  if (!Object.prototype.hasOwnProperty.call(extras, "featureType")) {
+  // Coexistence onboarding asks Meta for the WhatsApp Business app flow.
+  if (overrides.featureType) {
+    extras.featureType = overrides.featureType;
+  } else if (!Object.prototype.hasOwnProperty.call(extras, "featureType")) {
     extras.featureType = "";
   }
 
@@ -947,6 +1069,88 @@ function getMetaLoginFailureMessage(loginResponse) {
   }
 
   return `Meta did not return an authorization code (${details}). Finish the Meta popup with Complete it, and make sure the app Login for Business configuration uses WhatsApp Embedded Signup with code response enabled.`;
+}
+
+function escapeText(value) {
+  return String(value == null ? "" : value).replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[char]));
+}
+
+function formatMessagingLimitTier(tier) {
+  const normalized = String(tier || "").toUpperCase();
+  const labels = {
+    TIER_50: "50 / 24h",
+    TIER_250: "250 / 24h",
+    TIER_1K: "1,000 / 24h",
+    TIER_10K: "10,000 / 24h",
+    TIER_100K: "100,000 / 24h",
+    TIER_UNLIMITED: "Unlimited"
+  };
+
+  return labels[normalized] || (normalized ? normalized.replace(/_/g, " ") : "");
+}
+
+function getQualityRatingDisplay(value) {
+  const normalized = String(value || "").toUpperCase();
+  const ratings = {
+    GREEN: { label: "High", cls: "approved" },
+    HIGH: { label: "High", cls: "approved" },
+    YELLOW: { label: "Medium", cls: "pending" },
+    MEDIUM: { label: "Medium", cls: "pending" },
+    RED: { label: "Low", cls: "rejected" },
+    LOW: { label: "Low", cls: "rejected" },
+    UNKNOWN: { label: "Unknown", cls: "pending" }
+  };
+
+  return ratings[normalized] || { label: normalized ? normalized.replace(/_/g, " ") : "Unknown", cls: "pending" };
+}
+
+function renderWabaTable() {
+  const host = document.querySelector("[data-waba-table]");
+  if (!host) return;
+
+  const tenant = setupState.tenant || {};
+  const meta = tenant.meta || {};
+
+  if (!meta.wabaId && !meta.phoneNumberId) {
+    host.innerHTML = '<div class="empty-row">No WhatsApp number connected yet. Click "Register New WhatsApp" to onboard.</div>';
+    return;
+  }
+
+  const connected = tenant.onboardingStatus === "meta_connected" && Boolean(meta.phoneNumberId);
+  const healthMap = {
+    available: { label: "Available", cls: "approved" },
+    limited: { label: "Limited", cls: "pending" },
+    blocked: { label: "Blocked", cls: "rejected" }
+  };
+  const health = healthMap[String(meta.canSendMessage || "").toLowerCase()]
+    || { label: connected ? "Unknown" : "Pending", cls: "pending" };
+  const healthTitle = meta.wabaHealthError ? ` title="${escapeText(meta.wabaHealthError)}"` : "";
+  const quality = getQualityRatingDisplay(meta.qualityRating);
+  const qualityTitle = meta.qualityRating ? ` title="Meta quality_rating: ${escapeText(meta.qualityRating)}"` : "";
+  const webhookOk = meta.webhookStatus === "subscribed";
+  const webhookLabel = webhookOk ? "Subscribed" : meta.webhookStatus === "not_subscribed" ? "Not subscribed" : "NA";
+  const messagingLimit = formatMessagingLimitTier(meta.messagingLimitTier) || (connected ? "250 / 24h" : "—");
+  const configured = meta.connectedAt ? new Date(meta.connectedAt).toLocaleString() : "—";
+
+  host.innerHTML = `
+    <div class="table-row waba-row">
+      <strong>${escapeText(meta.displayPhoneNumber || meta.phoneNumberId || "—")}</strong>
+      <span>${escapeText(meta.phoneNumberId || "—")}</span>
+      <span>${escapeText(meta.wabaId || "—")}</span>
+      <span>InterCon</span>
+      <span>${escapeText(messagingLimit)}</span>
+      <span><em class="${quality.cls}"${qualityTitle}>${escapeText(quality.label)}</em></span>
+      <span><em class="${health.cls}"${healthTitle}>${escapeText(health.label)}</em></span>
+      <span>${escapeText(meta.verifiedName || "—")}</span>
+      <span>${escapeText(configured)}</span>
+      <span><em class="${webhookOk ? "approved" : "pending"}">${webhookLabel}</em></span>
+      <span class="waba-row-actions">
+        <button class="waba-action" type="button" data-waba-refresh title="Refresh" aria-label="Refresh">&#x21bb;</button>
+        <button class="waba-action danger" type="button" data-waba-delete title="Delete connected WABA" aria-label="Delete connected WABA">&times;</button>
+      </span>
+    </div>`;
 }
 
 function renderOnboardingStatus(tenant) {
@@ -1007,7 +1211,14 @@ function renderOnboardingStatus(tenant) {
     setMetaConnectMessage("Meta signup was saved, but the WhatsApp phone number is not connected yet. Complete phone number selection or verification in Meta and connect again.", true);
   }
 
+  if (coexState) {
+    const coexConnected = isMetaConnected && meta.onboardingType === "coexistence";
+    coexState.textContent = coexConnected ? "Connected" : "Ready";
+    coexState.classList.toggle("approved", coexConnected);
+  }
+
   renderSetupProgress();
+  renderWabaTable();
 }
 
 async function loadOnboardingStatus() {
@@ -1020,6 +1231,31 @@ async function refreshPhoneStatus() {
   await requestJson("/api/meta/phone/status");
   await loadOnboardingStatus();
   setMetaConnectMessage("Phone status refreshed.");
+}
+
+async function deleteConnectedWaba() {
+  const confirmed = await showConfirmModal({
+    eyebrow: "Connected WABA",
+    title: "Remove this WABA from InterCon?",
+    message: "This only disconnects it from InterCon and deletes local synced templates, message history, and webhook logs. The WABA, phone number, and templates in Meta Business Manager will not be deleted.",
+    confirmText: "Remove WABA"
+  });
+  if (!confirmed) return;
+
+  setMetaConnectMessage("Deleting connected WABA data...");
+  const data = await requestJson("/api/meta/onboarding", {
+    method: "DELETE"
+  });
+  renderOnboardingStatus(data.tenant);
+  setupState.templates = [];
+  setupState.messages = [];
+  renderTemplateStatusRows([]);
+  renderSendHistory([]);
+  await Promise.all([
+    loadTemplates().catch(() => null),
+    loadApprovedTemplates().catch(() => null)
+  ]);
+  setMetaConnectMessage(data.message || "Connected WABA data deleted.");
 }
 
 async function registerPhoneNumber() {
@@ -1079,9 +1315,10 @@ function renderSendContactOptions(contacts) {
   sendContactSelect.innerHTML = [
     `<option value="">Select contact</option>`,
     ...optedInContacts.map((contact) => (
-      `<option value="${contact._id}">${contact.name} - ${contact.phone}</option>`
+      `<option value="${contact._id}" data-name="${escapeHtml(contact.name || "Customer")}" data-phone="${escapeHtml(contact.phone || "")}">${escapeHtml(contact.name)} - ${escapeHtml(contact.phone)}</option>`
     ))
   ].join("");
+  updateWhatsAppPreview();
 }
 
 async function loadContacts() {
@@ -1101,25 +1338,45 @@ function renderApprovedTemplateOptions(templates) {
     sendTemplateSelect.innerHTML = `<option value="">No approved templates available</option>`;
     sendTemplateSelect.disabled = true;
     if (sendVariableHint) sendVariableHint.textContent = "No approved templates available.";
+    updateWhatsAppPreview();
     return;
   }
 
   const options = [
     `<option value="">Select approved template</option>`,
     ...templates.map((template) => (
-      `<option value="${escapeHtml(template.name)}" data-category="${escapeHtml(template.category)}" data-language="${escapeHtml(template.language)}" data-parameter-count="${Number(template.parameterCount || 0)}">${escapeHtml(template.name)} - ${escapeHtml(template.category)} (${escapeHtml(template.language)})</option>`
+      `<option value="${escapeHtml(template.name)}" data-category="${escapeHtml(template.category)}" data-language="${escapeHtml(template.language)}" data-parameter-count="${Number(template.parameterCount || 0)}" data-body="${escapeHtml(template.body || "")}">${escapeHtml(template.name)} - ${escapeHtml(template.category)} (${escapeHtml(template.language)})</option>`
     ))
   ].join("");
 
   sendTemplateSelect.disabled = false;
   sendTemplateSelect.innerHTML = options;
   updateSendVariableHint();
+  updateWhatsAppPreview();
+}
+
+function disableApprovedTemplateSelect(message = "No approved templates available") {
+  if (!sendTemplateSelect) return;
+
+  sendTemplateSelect.innerHTML = `<option value="">${escapeHtml(message)}</option>`;
+  sendTemplateSelect.disabled = true;
+
+  if (sendVariableHint) {
+    sendVariableHint.textContent = message;
+  }
+
+  updateWhatsAppPreview();
 }
 
 async function loadApprovedTemplates() {
   if (!sendTemplateSelect) return;
-  const data = await requestJson("/api/templates/approved");
-  renderApprovedTemplateOptions(data.templates || []);
+
+  try {
+    const data = await requestJson("/api/templates/approved");
+    renderApprovedTemplateOptions(data.templates || []);
+  } catch (error) {
+    disableApprovedTemplateSelect("No approved templates available");
+  }
 }
 
 function updateSendVariableHint() {
@@ -1135,48 +1392,134 @@ function updateSendVariableHint() {
 
   if (!sendTemplateSelect.value) {
     sendVariableHint.textContent = "Select a template to see required variables.";
-    if (sendVariablesInput) sendVariablesInput.placeholder = "Aashish, ORD1234, confirmed";
+    if (sendVariablesInput) sendVariablesInput.placeholder = "Name, ORD1234, confirmed";
+    updateWhatsAppPreview();
     return;
   }
 
   if (!parameterCount) {
     sendVariableHint.textContent = "This template has no body variables. Leave Variables empty.";
     if (sendVariablesInput) sendVariablesInput.placeholder = "Leave empty";
+    updateWhatsAppPreview();
     return;
   }
 
   const examples = Array.from({ length: parameterCount }, (_, index) => `value ${index + 1}`);
   sendVariableHint.textContent = `This template requires ${parameterCount} body variable${parameterCount === 1 ? "" : "s"}. Enter exactly ${parameterCount} comma-separated value${parameterCount === 1 ? "" : "s"}.`;
   if (sendVariablesInput) sendVariablesInput.placeholder = examples.join(", ");
+  updateWhatsAppPreview();
 }
+
+function getPreviewVariables() {
+  return String(sendVariablesInput?.value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function fillTemplatePreview(body, variables) {
+  const fallbackBody = "Select a template to preview the WhatsApp message.";
+  const text = String(body || "").trim() || fallbackBody;
+
+  return text.replace(/\{\{\s*(\d+)\s*\}\}/g, (match, indexText) => {
+    const index = Number(indexText) - 1;
+    return variables[index] || `{{${indexText}}}`;
+  });
+}
+
+function updateWhatsAppPreview() {
+  if (!previewMessage) return;
+
+  const selectedTemplate = sendTemplateSelect?.selectedOptions?.[0];
+  const selectedContact = sendContactSelect?.selectedOptions?.[0];
+  const contactName = selectedContact?.dataset.name || "Customer";
+  const contactPhone = selectedContact?.dataset.phone || "";
+  const body = selectedTemplate?.dataset.body || "";
+  const templateName = selectedTemplate?.value || "Template preview";
+  const category = selectedTemplate?.dataset.category || "Approved message";
+  const variables = getPreviewVariables();
+
+  if (previewContact) {
+    previewContact.textContent = contactPhone ? `${contactName}` : "Customer";
+  }
+
+  previewMessage.textContent = fillTemplatePreview(body, variables);
+
+  if (previewTemplate) {
+    previewTemplate.textContent = templateName;
+  }
+
+  if (previewCategory) {
+    previewCategory.textContent = category;
+  }
+
+  if (previewTime) {
+    const currentTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    previewTime.textContent = currentTime;
+    if (previewBubbleTime) {
+      previewBubbleTime.textContent = currentTime;
+    }
+  }
+}
+
+const TEMPLATE_STATUS_META = {
+  approved:  { label: "Approved",         cls: "approved", bucket: "approved" },
+  rejected:  { label: "Rejected",         cls: "rejected", bucket: "rejected" },
+  disabled:  { label: "Disabled",         cls: "rejected", bucket: "rejected" },
+  in_review: { label: "Pending approval", cls: "pending",  bucket: "pending" },
+  paused:    { label: "Paused",           cls: "pending",  bucket: "pending" },
+  draft:     { label: "Draft",            cls: "draft",    bucket: "pending" }
+};
+
+function templateStatusMeta(status) {
+  return TEMPLATE_STATUS_META[status] || { label: status ? status.replace(/_/g, " ") : "Unknown", cls: "pending", bucket: "pending" };
+}
+
+let templateStatusFilter = "all";
 
 function renderTemplateStatusRows(templates) {
   if (!templateStatusList) return;
 
+  const all = Array.isArray(templates) ? templates : [];
+
+  const counts = { all: all.length, pending: 0, approved: 0, rejected: 0 };
+  all.forEach((template) => {
+    const bucket = templateStatusMeta(template.status).bucket;
+    counts[bucket] = (counts[bucket] || 0) + 1;
+  });
+  document.querySelectorAll("[data-tpl-count]").forEach((el) => {
+    el.textContent = String(counts[el.dataset.tplCount] ?? 0);
+  });
+
   const header = `
-    <div class="table-row table-head">
-      <span>Name</span><span>Category</span><span>Status</span><span>Reason</span>
+    <div class="table-row template-table-row table-head">
+      <span>Name</span><span>Category</span><span>Status</span><span>Reason</span><span>Actions</span>
     </div>
   `;
 
-  if (!templates.length) {
+  const visible = templateStatusFilter === "all"
+    ? all
+    : all.filter((template) => templateStatusMeta(template.status).bucket === templateStatusFilter);
+
+  if (!all.length) {
     templateStatusList.innerHTML = `${header}<div class="empty-row">No templates submitted yet.</div>`;
     return;
   }
 
-  templateStatusList.innerHTML = header + templates.map((template) => {
-    const statusClass = template.status === "approved"
-      ? "approved"
-      : ["rejected", "disabled"].includes(template.status)
-        ? "rejected"
-        : "pending";
+  if (!visible.length) {
+    templateStatusList.innerHTML = `${header}<div class="empty-row">No ${escapeText(templateStatusFilter)} templates.</div>`;
+    return;
+  }
 
+  templateStatusList.innerHTML = header + visible.map((template) => {
+    const meta = templateStatusMeta(template.status);
     return `
-      <div class="table-row">
-        <strong>${template.name}</strong>
-        <span>${template.category}</span>
-        <em class="${statusClass}">${template.status}</em>
-        <span>${template.rejectedReason || template.language || "-"}</span>
+      <div class="table-row template-table-row">
+        <strong>${escapeText(template.name)}</strong>
+        <span>${escapeText(template.category)}</span>
+        <em class="${meta.cls}">${escapeText(meta.label)}</em>
+        <span>${escapeText(template.rejectedReason || template.language || "-")}</span>
+        <button class="template-delete-action" type="button" data-delete-template="${escapeText(template._id || template.id)}">Delete</button>
       </div>
     `;
   }).join("");
@@ -1324,28 +1667,28 @@ const templatePresets = {
     category: "utility",
     language: "en_US",
     body: "Hi {{1}}, your order {{2}} has been shipped and will arrive by {{3}}.",
-    samples: "{{1}} = Aashish, {{2}} = ORD1234, {{3}} = 12 Jun"
+    samples: "{{1}} = Name, {{2}} = ORD1234, {{3}} = 12 Jun"
   },
   appointment_reminder: {
     name: "appointment_reminder",
     category: "utility",
     language: "en_US",
     body: "Hi {{1}}, this is a reminder for your appointment on {{2}} at {{3}}.",
-    samples: "{{1}} = Aashish, {{2}} = 12 Jun, {{3}} = 10:00 AM"
+    samples: "{{1}} = Name, {{2}} = 12 Jun, {{3}} = 10:00 AM"
   },
   payment_reminder: {
     name: "payment_reminder",
     category: "utility",
     language: "en_US",
     body: "Hi {{1}}, your payment of {{2}} is due on {{3}}.",
-    samples: "{{1}} = Aashish, {{2}} = Rs 100, {{3}} = 12 Jun"
+    samples: "{{1}} = Name, {{2}} = Rs 100, {{3}} = 12 Jun"
   },
   offer_update: {
     name: "offer_update",
     category: "marketing",
     language: "en_US",
     body: "Hi {{1}}, your exclusive offer is active until {{2}}. Reply STOP to opt out.",
-    samples: "{{1}} = Aashish, {{2}} = 12 Jun"
+    samples: "{{1}} = Name, {{2}} = 12 Jun"
   },
   otp_code: {
     name: "otp_code",
@@ -1368,6 +1711,130 @@ function applyTemplatePreset(presetId) {
   setTemplateMessage("");
 }
 
+// Curated catalogue modelled on Meta's WhatsApp Template Library. Meta does not
+// expose a public list API, so this is a maintained starter set. "Use template"
+// prefills the builder so the user reviews and submits it for Meta approval.
+const META_TEMPLATE_LIBRARY = [
+  {
+    id: "order_confirmation",
+    title: "Order Confirmation",
+    category: "utility",
+    language: "en_US",
+    body: "Hi {{1}}, thank you for your order {{2}}. Your total is {{3}} and it will be delivered by {{4}}.",
+    samples: "{{1}} = Name, {{2}} = ORD1234, {{3}} = Rs 1,499, {{4}} = 12 Jun"
+  },
+  {
+    id: "delivery_update",
+    title: "Delivery Update",
+    category: "utility",
+    language: "en_US",
+    body: "Hi {{1}}, your order {{2}} is out for delivery and will arrive today by {{3}}.",
+    samples: "{{1}} = Name, {{2}} = ORD1234, {{3}} = 6 PM"
+  },
+  {
+    id: "payment_reminder_lib",
+    title: "Payment Reminder",
+    category: "utility",
+    language: "en_US",
+    body: "Hi {{1}}, a payment of {{2}} for invoice {{3}} is due on {{4}}. Please pay on time to avoid late fees.",
+    samples: "{{1}} = Name, {{2}} = Rs 2,000, {{3}} = INV-88, {{4}} = 15 Jun"
+  },
+  {
+    id: "appointment_reminder_lib",
+    title: "Appointment Reminder",
+    category: "utility",
+    language: "en_US",
+    body: "Hi {{1}}, reminder: your appointment is on {{2}} at {{3}}. Reply RESCHEDULE to change it.",
+    samples: "{{1}} = Name, {{2}} = 12 Jun, {{3}} = 10:00 AM"
+  },
+  {
+    id: "account_update",
+    title: "Account Update",
+    category: "utility",
+    language: "en_US",
+    body: "Hi {{1}}, your account was updated on {{2}}. If you didn't make this change, contact our support team immediately.",
+    samples: "{{1}} = Name, {{2}} = 10 Jun 2026"
+  },
+  {
+    id: "feedback_request",
+    title: "Feedback Request",
+    category: "utility",
+    language: "en_US",
+    body: "Hi {{1}}, how was your experience with {{2}}? Reply with a number from 1 to 5 to rate us.",
+    samples: "{{1}} = Name, {{2}} = order ORD1234"
+  },
+  {
+    id: "otp_verification",
+    title: "OTP Verification",
+    category: "authentication",
+    language: "en_US",
+    body: "{{1}} is your verification code. For your security, do not share this code with anyone.",
+    samples: "{{1}} = 123456"
+  },
+  {
+    id: "welcome_message",
+    title: "Welcome Message",
+    category: "marketing",
+    language: "en_US",
+    body: "Hi {{1}}, welcome to {{2}}! Explore our latest products and enjoy {{3}} off your first order. Reply STOP to opt out.",
+    samples: "{{1}} = Name, {{2}} = InterCon Store, {{3}} = 10%"
+  },
+  {
+    id: "special_offer",
+    title: "Special Offer",
+    category: "marketing",
+    language: "en_US",
+    body: "Hi {{1}}, enjoy {{2}} off everything until {{3}}. Use code {{4}} at checkout. Reply STOP to opt out.",
+    samples: "{{1}} = Name, {{2}} = 25%, {{3}} = 20 Jun, {{4}} = SAVE25"
+  },
+  {
+    id: "abandoned_cart",
+    title: "Abandoned Cart",
+    category: "marketing",
+    language: "en_US",
+    body: "Hi {{1}}, you left {{2}} in your cart. Complete your purchase now and get {{3}} off. Reply STOP to opt out.",
+    samples: "{{1}} = Name, {{2}} = 2 items, {{3}} = 5%"
+  }
+];
+
+const LIB_CATEGORY_LABEL = { utility: "Utility", marketing: "Marketing", authentication: "Authentication" };
+
+function renderTemplateLibrary(filter = "all") {
+  const host = document.querySelector("[data-template-library]");
+  if (!host) return;
+
+  const items = META_TEMPLATE_LIBRARY.filter((tpl) => filter === "all" || tpl.category === filter);
+  if (!items.length) {
+    host.innerHTML = '<div class="empty-row">No templates in this category.</div>';
+    return;
+  }
+
+  host.innerHTML = items.map((tpl) => `
+    <article class="lib-card">
+      <div class="lib-card-head">
+        <span class="lib-badge cat-${tpl.category}">${LIB_CATEGORY_LABEL[tpl.category] || tpl.category}</span>
+        <span class="lib-lang">${escapeText(tpl.language)}</span>
+      </div>
+      <h3>${escapeText(tpl.title)}</h3>
+      <p class="lib-body">${escapeText(tpl.body)}</p>
+      <button class="btn btn-small" type="button" data-use-template="${tpl.id}">Use template</button>
+    </article>`).join("");
+}
+
+function useLibraryTemplate(id) {
+  const tpl = META_TEMPLATE_LIBRARY.find((item) => item.id === id);
+  if (!tpl) return;
+
+  if (templateNameInput) templateNameInput.value = tpl.id;
+  if (templateCategorySelect) templateCategorySelect.value = tpl.category;
+  if (templateLanguageSelect) templateLanguageSelect.value = tpl.language;
+  if (templateBodyInput) templateBodyInput.value = tpl.body;
+  if (templateSamplesInput) templateSamplesInput.value = tpl.samples;
+  window.location.hash = "#templates";
+  openTemplateModal();
+  setTemplateMessage(`Loaded "${tpl.title}" from the library. Review and submit it for Meta approval.`);
+}
+
 async function submitTemplateForReview() {
   if (!requirePaidPlanBeforeAction(setTemplateMessage)) return;
 
@@ -1378,6 +1845,34 @@ async function submitTemplateForReview() {
   });
   setTemplateMessage(data.message || "Template submitted to Meta for review.");
   await Promise.all([loadApprovedTemplates(), loadTemplates()]);
+}
+
+async function deleteTemplate(templateId, button) {
+  if (!templateId) return;
+  const confirmed = await showConfirmModal({
+    eyebrow: "Template",
+    title: "Delete this template from InterCon?",
+    message: "This removes the local template record from InterCon. If the template still exists in Meta, it can appear again after template sync.",
+    confirmText: "Delete template"
+  });
+  if (!confirmed) return;
+
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Deleting...";
+
+  try {
+    await requestJson(`/api/templates/${encodeURIComponent(templateId)}`, {
+      method: "DELETE"
+    });
+    setTemplateMessage("Template deleted.");
+    await Promise.all([loadTemplates(), loadApprovedTemplates()]);
+  } catch (error) {
+    setTemplateMessage(error.message, true);
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
 }
 
 portalMenu.addEventListener("click", () => {
@@ -1417,8 +1912,15 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && confirmModal && !confirmModal.hidden) {
+    closeConfirmModal(false);
+    return;
+  }
   if (event.key === "Escape" && document.body.classList.contains("portal-menu-open")) {
     closePortalMenu();
+  }
+  if (event.key === "Escape" && templateModal && !templateModal.hidden) {
+    closeTemplateModal();
   }
   if (event.key === "Escape") {
     closeProfileMenu();
@@ -1461,54 +1963,75 @@ document.addEventListener("click", async (event) => {
   }
 });
 
-connectWhatsAppButtons.forEach((button) => {
-  button.addEventListener("click", async () => {
-    button.disabled = true;
-    const originalText = button.textContent;
-    button.textContent = "Opening Meta...";
+async function runEmbeddedSignup({ button, featureType, onboardingType, setMessage }) {
+  button.disabled = true;
+  const originalText = button.textContent;
+  button.textContent = "Opening Meta...";
 
-    try {
-      const { FB, config } = await loadFacebookSdk();
-      if (!config.loginConfigId) {
-        throw new Error("Meta Embedded Signup configuration ID is missing");
-      }
-
-      embeddedSignupSessionInfo = null;
-      setMetaConnectMessage("Complete the Meta popup to connect your WhatsApp account.");
-      const loginResponse = await launchEmbeddedSignup(FB, config);
-      const code = loginResponse.authResponse?.code;
-
-      if (!code) {
-        throw new Error(getMetaLoginFailureMessage(loginResponse));
-      }
-
-      const sessionInfo = await waitForEmbeddedSignupSessionInfo();
-
-      const result = await requestJson("/api/meta/embedded-signup/complete", {
-        method: "POST",
-        body: JSON.stringify({
-          code,
-          sessionInfo
-        })
-      });
-
-      renderOnboardingStatus(result.tenant);
-      if (result.tenant?.onboardingStatus === "meta_connected" && result.tenant?.meta?.phoneNumberId) {
-        if (result.meta?.phoneRegistration?.success) {
-          setMetaConnectMessage("WhatsApp account connected and phone registered for Cloud API.");
-        } else if (result.meta?.phoneRegistration) {
-          setMetaConnectMessage(`WhatsApp account connected. Phone registration needs attention: ${result.meta.phoneRegistration.message}`, true);
-        } else {
-          setMetaConnectMessage("WhatsApp account connected.");
-        }
-      }
-    } catch (error) {
-      setMetaConnectMessage(error.message, true);
-    } finally {
-      button.disabled = false;
-      button.textContent = originalText;
+  try {
+    const { FB, config } = await loadFacebookSdk();
+    if (!config.loginConfigId) {
+      throw new Error("Meta Embedded Signup configuration ID is missing");
     }
-  });
+
+    embeddedSignupSessionInfo = null;
+    setMessage(onboardingType === "coexistence"
+      ? "Complete the Meta popup to connect the WhatsApp Business app number in coexistence mode."
+      : "Complete the Meta popup to connect your WhatsApp account.");
+
+    const loginResponse = await launchEmbeddedSignup(FB, config, featureType ? { featureType } : {});
+    const code = loginResponse.authResponse?.code;
+
+    if (!code) {
+      throw new Error(getMetaLoginFailureMessage(loginResponse));
+    }
+
+    const sessionInfo = await waitForEmbeddedSignupSessionInfo();
+
+    const result = await requestJson("/api/meta/embedded-signup/complete", {
+      method: "POST",
+      body: JSON.stringify({
+        code,
+        sessionInfo,
+        onboardingType
+      })
+    });
+
+    renderOnboardingStatus(result.tenant);
+    if (result.tenant?.onboardingStatus === "meta_connected" && result.tenant?.meta?.phoneNumberId) {
+      if (onboardingType === "coexistence") {
+        setMessage("WhatsApp Business app number connected in coexistence mode. The customer keeps using their app while you message from InterCon.");
+      } else if (result.meta?.phoneRegistration?.success) {
+        setMessage("WhatsApp account connected and phone registered for Cloud API.");
+      } else if (result.meta?.phoneRegistration) {
+        setMessage(`WhatsApp account connected. Phone registration needs attention: ${result.meta.phoneRegistration.message}`, true);
+      } else {
+        setMessage("WhatsApp account connected.");
+      }
+    }
+  } catch (error) {
+    setMessage(error.message, true);
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+}
+
+connectWhatsAppButtons.forEach((button) => {
+  button.addEventListener("click", () => runEmbeddedSignup({
+    button,
+    onboardingType: "cloud_api",
+    setMessage: setMetaConnectMessage
+  }));
+});
+
+coexistenceButtons.forEach((button) => {
+  button.addEventListener("click", () => runEmbeddedSignup({
+    button,
+    featureType: "whatsapp_business_app_onboarding",
+    onboardingType: "coexistence",
+    setMessage: setCoexMessage
+  }));
 });
 
 if (metaRefreshPhoneButton) {
@@ -1523,6 +2046,33 @@ if (metaRefreshPhoneButton) {
     }
   });
 }
+
+// Per-row "Actions" refresh in the WABA table.
+document.addEventListener("click", async (event) => {
+  const action = event.target.closest("[data-waba-refresh]");
+  if (!action) return;
+  action.disabled = true;
+  try {
+    await refreshPhoneStatus();
+  } catch (error) {
+    setMetaConnectMessage(error.message, true);
+  } finally {
+    action.disabled = false;
+  }
+});
+
+document.addEventListener("click", async (event) => {
+  const action = event.target.closest("[data-waba-delete]");
+  if (!action) return;
+  action.disabled = true;
+  try {
+    await deleteConnectedWaba();
+  } catch (error) {
+    setMetaConnectMessage(error.message, true);
+  } finally {
+    action.disabled = false;
+  }
+});
 
 if (metaRegisterPhoneButton) {
   metaRegisterPhoneButton.addEventListener("click", async () => {
@@ -1607,8 +2157,20 @@ if (sendTemplateSelect) {
   sendTemplateSelect.addEventListener("change", updateSendVariableHint);
 }
 
-if (refreshSendDataButton) {
-  refreshSendDataButton.addEventListener("click", async () => {
+if (sendContactSelect) {
+  sendContactSelect.addEventListener("change", updateWhatsAppPreview);
+}
+
+if (sendLanguageSelect) {
+  sendLanguageSelect.addEventListener("change", updateWhatsAppPreview);
+}
+
+if (sendVariablesInput) {
+  sendVariablesInput.addEventListener("input", updateWhatsAppPreview);
+}
+
+refreshSendDataButtons.forEach((button) => {
+  button.addEventListener("click", async () => {
     try {
       setSendMessage("Refreshing sender data...");
       await Promise.all([loadContacts(), loadApprovedTemplates(), loadSendHistory()]);
@@ -1617,7 +2179,7 @@ if (refreshSendDataButton) {
       setSendMessage(error.message, true);
     }
   });
-}
+});
 
 if (apiKeyForm) {
   apiKeyForm.addEventListener("submit", async (event) => {
@@ -1658,6 +2220,22 @@ if (copyApiKeyButton) {
   });
 }
 
+if (openTemplateModalButton) {
+  openTemplateModalButton.addEventListener("click", openTemplateModal);
+}
+
+closeTemplateModalButtons.forEach((button) => {
+  button.addEventListener("click", closeTemplateModal);
+});
+
+confirmCancelButtons.forEach((button) => {
+  button.addEventListener("click", () => closeConfirmModal(false));
+});
+
+if (confirmAcceptButton) {
+  confirmAcceptButton.addEventListener("click", () => closeConfirmModal(true));
+}
+
 document.addEventListener("click", async (event) => {
   const button = event.target.closest("[data-revoke-api-key]");
   if (!button || button.disabled) return;
@@ -1671,11 +2249,18 @@ document.addEventListener("click", async (event) => {
   }
 });
 
+document.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-delete-template]");
+  if (!button || button.disabled) return;
+  await deleteTemplate(button.dataset.deleteTemplate, button);
+});
+
 submitTemplateButtons.forEach((button) => {
   button.addEventListener("click", async () => {
     button.disabled = true;
     try {
       await submitTemplateForReview();
+      closeTemplateModal();
     } catch (error) {
       setTemplateMessage(error.message, true);
     } finally {
@@ -1689,6 +2274,51 @@ if (templatePresetSelect) {
     applyTemplatePreset(templatePresetSelect.value);
   });
   applyTemplatePreset(templatePresetSelect.value || "order_update");
+}
+
+// Template Library: render catalogue, filter by category, adopt a template.
+const libFilter = document.querySelector("[data-lib-filter]");
+if (libFilter) {
+  libFilter.addEventListener("change", () => renderTemplateLibrary(libFilter.value));
+}
+
+document.addEventListener("click", (event) => {
+  const useButton = event.target.closest("[data-use-template]");
+  if (!useButton) return;
+  useLibraryTemplate(useButton.dataset.useTemplate);
+});
+
+renderTemplateLibrary();
+
+// Manage Template: status filter chips (All / Pending / Approved / Rejected).
+const tplFilter = document.querySelector("[data-tpl-filter]");
+if (tplFilter) {
+  tplFilter.addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-tpl-status]");
+    if (!chip) return;
+    templateStatusFilter = chip.dataset.tplStatus;
+    tplFilter.querySelectorAll("[data-tpl-status]").forEach((item) => {
+      item.classList.toggle("is-active", item === chip);
+    });
+    renderTemplateStatusRows(setupState.templates);
+  });
+}
+
+const refreshTemplatesButton = document.querySelector("[data-refresh-templates]");
+if (refreshTemplatesButton) {
+  refreshTemplatesButton.addEventListener("click", async () => {
+    refreshTemplatesButton.disabled = true;
+    const original = refreshTemplatesButton.textContent;
+    refreshTemplatesButton.textContent = "Refreshing...";
+    try {
+      await loadTemplates();
+    } catch (error) {
+      setTemplateMessage(error.message, true);
+    } finally {
+      refreshTemplatesButton.disabled = false;
+      refreshTemplatesButton.textContent = original;
+    }
+  });
 }
 
 if (logoutButton) {
@@ -1711,6 +2341,36 @@ if (logoutButton) {
     }
   });
 }
+
+// Launcher flow: render every feature view in the Admin Console detail-view
+// chrome — a "Back to <page>" pill on top and a "Related" chip rail at the
+// bottom — while keeping each view's real content untouched. Top-level
+// launcher pages (Home, Setup, Send WhatsApp, Reports, Payments, API) are left as-is.
+portalViews.forEach((view) => {
+  if (PAGES.includes(view.id)) return;
+
+  const parent = VIEW_PARENT[view.id] || "home";
+  const parentTitle = PAGE_TITLES[parent] || "Home";
+
+  const back = document.createElement("a");
+  back.className = "console-back";
+  back.href = `#${parent}`;
+  back.setAttribute("aria-label", `Back to ${parentTitle}`);
+  back.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>${parentTitle}`;
+  view.prepend(back);
+
+  const meta = VIEW_META[view.id];
+  const related = (meta && meta.related ? meta.related : []).filter((id) => VIEW_META[id]);
+  if (related.length) {
+    const section = document.createElement("section");
+    section.className = "view-related";
+    const chips = related
+      .map((id) => `<a class="admin-chip" href="#${id}">${VIEW_META[id].title}</a>`)
+      .join("");
+    section.innerHTML = `<h2>Related</h2><div class="admin-chips">${chips}</div>`;
+    view.append(section);
+  }
+});
 
 showPortalView(getInitialViewId(), true);
 renderApiBaseUrl();

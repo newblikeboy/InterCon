@@ -1,6 +1,10 @@
 const env = require("../config/env");
 const Tenant = require("../models/Tenant");
+const Message = require("../models/Message");
+const Template = require("../models/Template");
+const WebhookEvent = require("../models/WebhookEvent");
 const HttpError = require("../utils/httpError");
+const { invalidateTemplateSync } = require("./template.service");
 
 const onboardingMetaCache = new Map();
 const ONBOARDING_META_TTL_MS = 20 * 1000;
@@ -85,6 +89,7 @@ function publicTenant(tenant) {
     status: tenant.status,
     meta: {
       businessId: tenant.meta?.businessId,
+      onboardingType: tenant.meta?.onboardingType || "cloud_api",
       wabaId: tenant.meta?.wabaId,
       phoneNumberId: tenant.meta?.phoneNumberId,
       displayPhoneNumber: tenant.meta?.displayPhoneNumber,
@@ -96,6 +101,8 @@ function publicTenant(tenant) {
       newNameStatus: tenant.meta?.newNameStatus,
       displayNameDecision: tenant.meta?.displayNameDecision,
       displayNameRejectionReason: tenant.meta?.displayNameRejectionReason,
+      qualityRating: tenant.meta?.qualityRating,
+      messagingLimitTier: tenant.meta?.messagingLimitTier,
       appId: tenant.meta?.appId,
       tokenType: tenant.meta?.tokenType,
       tokenExpiresAt: tenant.meta?.tokenExpiresAt,
@@ -381,7 +388,7 @@ function hasWhatsappPermissions(tokenDebug) {
 
 async function getWabaPhoneCandidate(wabaId, accessToken) {
   const data = await fetchMetaJson(
-    `${wabaId}/phone_numbers?fields=id,display_phone_number,status,account_mode,code_verification_status,verified_name,name_status,new_name_status`,
+    `${wabaId}/phone_numbers?fields=id,display_phone_number,status,account_mode,code_verification_status,verified_name,name_status,new_name_status,quality_rating,messaging_limit_tier`,
     accessToken
   );
   const phone = Array.isArray(data.data) ? data.data[0] : null;
@@ -463,7 +470,9 @@ function publicPhoneDetails(data = {}) {
     codeVerificationStatus: data.code_verification_status || data.codeVerificationStatus || "",
     verifiedName: data.verified_name || data.verifiedName || "",
     nameStatus: data.name_status || data.nameStatus || "",
-    newNameStatus: data.new_name_status || data.newNameStatus || ""
+    newNameStatus: data.new_name_status || data.newNameStatus || "",
+    qualityRating: data.quality_rating || data.qualityRating || "",
+    messagingLimitTier: data.messaging_limit_tier || data.messagingLimitTier || ""
   };
 }
 
@@ -476,6 +485,8 @@ async function savePhoneDetails(tenantId, details, error = "") {
     ...(details.verifiedName ? { "meta.verifiedName": details.verifiedName } : {}),
     ...(details.nameStatus ? { "meta.nameStatus": details.nameStatus } : {}),
     ...(details.newNameStatus ? { "meta.newNameStatus": details.newNameStatus } : {}),
+    ...(details.qualityRating ? { "meta.qualityRating": details.qualityRating } : {}),
+    ...(details.messagingLimitTier ? { "meta.messagingLimitTier": details.messagingLimitTier } : {}),
     "meta.lastPhoneSetupError": error
   };
 
@@ -492,7 +503,7 @@ async function refreshTenantPhoneDetails(tenant, accessToken) {
   if (!tenant?.meta?.phoneNumberId || !accessToken) return tenant;
 
   const data = await fetchMetaJson(
-    `${tenant.meta.phoneNumberId}?fields=status,account_mode,display_phone_number,code_verification_status,verified_name,name_status,new_name_status`,
+    `${tenant.meta.phoneNumberId}?fields=status,account_mode,display_phone_number,code_verification_status,verified_name,name_status,new_name_status,quality_rating,messaging_limit_tier`,
     accessToken
   );
   const details = publicPhoneDetails(data);
@@ -508,6 +519,8 @@ async function refreshTenantPhoneDetails(tenant, accessToken) {
         ...(details.verifiedName ? { "meta.verifiedName": details.verifiedName } : {}),
         ...(details.nameStatus ? { "meta.nameStatus": details.nameStatus } : {}),
         ...(details.newNameStatus ? { "meta.newNameStatus": details.newNameStatus } : {}),
+        ...(details.qualityRating ? { "meta.qualityRating": details.qualityRating } : {}),
+        ...(details.messagingLimitTier ? { "meta.messagingLimitTier": details.messagingLimitTier } : {}),
         "meta.lastPhoneSetupError": ""
       }
     },
@@ -518,7 +531,7 @@ async function refreshTenantPhoneDetails(tenant, accessToken) {
 async function getPhoneNumberStatus(tenantId) {
   const { tenant, accessToken } = await getTenantWithMetaToken(tenantId);
   const data = await fetchMetaJson(
-    `${tenant.meta.phoneNumberId}?fields=status,account_mode,display_phone_number,code_verification_status,verified_name,name_status,new_name_status`,
+    `${tenant.meta.phoneNumberId}?fields=status,account_mode,display_phone_number,code_verification_status,verified_name,name_status,new_name_status,quality_rating,messaging_limit_tier`,
     accessToken
   );
   const details = publicPhoneDetails(data);
@@ -666,6 +679,89 @@ async function deregisterPhoneNumber(tenantId) {
   };
 }
 
+async function deleteConnectedWaba(tenantId) {
+  const tenant = await Tenant.findById(tenantId).select("+meta.accessToken");
+  if (!tenant) {
+    throw new HttpError(404, "Tenant not found");
+  }
+
+  const wabaId = tenant.meta?.wabaId;
+  const phoneNumberId = tenant.meta?.phoneNumberId;
+
+  if (!wabaId && !phoneNumberId) {
+    throw new HttpError(404, "No connected WABA found");
+  }
+
+  invalidateOnboardingMetaCache(wabaId);
+  invalidateTemplateSync(tenantId);
+
+  const deleteFilters = {
+    templates: { tenantId },
+    messages: { tenantId },
+    webhookEvents: { tenantId }
+  };
+
+  if (wabaId) {
+    deleteFilters.messages.wabaId = wabaId;
+    deleteFilters.webhookEvents.wabaId = wabaId;
+  } else if (phoneNumberId) {
+    deleteFilters.messages.phoneNumberId = phoneNumberId;
+    deleteFilters.webhookEvents.phoneNumberId = phoneNumberId;
+  }
+
+  const [templateResult, messageResult, webhookResult, updatedTenant] = await Promise.all([
+    Template.deleteMany(deleteFilters.templates),
+    Message.deleteMany(deleteFilters.messages),
+    WebhookEvent.deleteMany(deleteFilters.webhookEvents),
+    Tenant.findByIdAndUpdate(
+      tenantId,
+      {
+        $set: {
+          onboardingStatus: "account_created",
+          "meta.onboardingType": "cloud_api"
+        },
+        $unset: {
+          "meta.businessId": "",
+          "meta.wabaId": "",
+          "meta.phoneNumberId": "",
+          "meta.displayPhoneNumber": "",
+          "meta.phoneStatus": "",
+          "meta.accountMode": "",
+          "meta.codeVerificationStatus": "",
+          "meta.verifiedName": "",
+          "meta.nameStatus": "",
+          "meta.newNameStatus": "",
+          "meta.displayNameDecision": "",
+          "meta.displayNameRejectionReason": "",
+          "meta.qualityRating": "",
+          "meta.messagingLimitTier": "",
+          "meta.appId": "",
+          "meta.tokenType": "",
+          "meta.tokenExpiresAt": "",
+          "meta.connectedAt": "",
+          "meta.signupSessionId": "",
+          "meta.lastSignupEvent": "",
+          "meta.lastSignupError": "",
+          "meta.lastPhoneSetupError": "",
+          "meta.accessToken": ""
+        }
+      },
+      { returnDocument: "after" }
+    )
+  ]);
+
+  return {
+    tenant: updatedTenant ? publicTenant(updatedTenant) : null,
+    deleted: {
+      wabaId,
+      phoneNumberId,
+      templates: templateResult.deletedCount || 0,
+      messages: messageResult.deletedCount || 0,
+      webhookEvents: webhookResult.deletedCount || 0
+    }
+  };
+}
+
 async function getOnboardingStatus(tenantId) {
   let tenant = await Tenant.findById(tenantId).select("+meta.accessToken");
   if (!tenant) {
@@ -749,6 +845,7 @@ async function completeEmbeddedSignup(tenantId, body) {
   const signupSessionId = body.sessionId || body.session_id || sessionInfo.sessionId;
   const lastSignupEvent = body.event || sessionInfo.event || "FINISH";
   const lastSignupError = body.errorMessage || body.error_message || sessionInfo.errorMessage || "";
+  const onboardingType = body.onboardingType === "coexistence" ? "coexistence" : "cloud_api";
 
   if (!body.code) {
     await recordSignupFailure(tenantId, "Embedded Signup authorization code was not received from Meta", lastSignupEvent);
@@ -805,6 +902,7 @@ async function completeEmbeddedSignup(tenantId, body) {
     {
       $set: {
         onboardingStatus: phoneNumberId ? "meta_connected" : "meta_pending",
+        "meta.onboardingType": onboardingType,
         "meta.businessId": businessId || "",
         "meta.wabaId": wabaId,
         "meta.phoneNumberId": phoneNumberId || "",
@@ -834,7 +932,9 @@ async function completeEmbeddedSignup(tenantId, body) {
   }
   invalidateOnboardingMetaCache(wabaId);
 
-  const autoRegistration = phoneNumberId
+  // Coexistence keeps the number live on the WhatsApp Business app, so we must
+  // NOT force a Cloud API registration (that would take the number off the app).
+  const autoRegistration = phoneNumberId && onboardingType !== "coexistence"
     ? await autoRegisterPhoneNumber(tenantId)
     : null;
   const refreshedTenant = await Tenant.findById(tenantId);
@@ -917,5 +1017,6 @@ module.exports = {
   requestPhoneVerificationCode,
   verifyPhoneCode,
   registerPhoneNumber,
-  deregisterPhoneNumber
+  deregisterPhoneNumber,
+  deleteConnectedWaba
 };

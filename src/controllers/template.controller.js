@@ -39,9 +39,19 @@ const submitTemplateForMetaReview = asyncHandler(async (req, res) => {
   });
 });
 
+const deleteTemplate = asyncHandler(async (req, res) => {
+  await templateService.deleteTemplate(req.tenantId, req.params.templateId);
+
+  res.json({
+    success: true,
+    message: "Template deleted"
+  });
+});
+
 module.exports = {
   listTemplates,
   listApprovedTemplates,
   createTemplateDraft,
-  submitTemplateForMetaReview
+  submitTemplateForMetaReview,
+  deleteTemplate
 };

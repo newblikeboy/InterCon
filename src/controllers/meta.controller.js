@@ -111,6 +111,16 @@ const deregisterPhoneNumber = asyncHandler(async (req, res) => {
   });
 });
 
+const deleteConnectedWaba = asyncHandler(async (req, res) => {
+  const result = await metaService.deleteConnectedWaba(req.tenantId);
+
+  res.json({
+    success: true,
+    message: "Connected WABA data deleted",
+    ...result
+  });
+});
+
 const handleOAuthCallback = asyncHandler(async (req, res) => {
   const result = await metaService.exchangeOAuthCode({
     code: req.query.code,
@@ -135,5 +145,6 @@ module.exports = {
   verifyPhoneCode,
   registerPhoneNumber,
   deregisterPhoneNumber,
+  deleteConnectedWaba,
   handleOAuthCallback
 };

@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Template = require("../models/Template");
 const Tenant = require("../models/Tenant");
 const env = require("../config/env");
@@ -74,7 +75,7 @@ function assertSequentialPlaceholders(placeholders) {
 function parseBodyExamples(variableSamples, expectedCount = 0) {
   if (!expectedCount) return undefined;
 
-  const fallbackValues = ["Aashish", "ORD1234", "12 Jun", "10:00 AM", "Rs 100"];
+  const fallbackValues = ["Name", "ORD1234", "12 Jun", "10:00 AM", "Rs 100"];
   if (!variableSamples) {
     return [fallbackValues.slice(0, expectedCount)];
   }
@@ -402,10 +403,31 @@ async function submitTemplateForMetaReview(tenantId, body) {
   };
 }
 
+async function deleteTemplate(tenantId, templateId) {
+  if (!mongoose.Types.ObjectId.isValid(templateId)) {
+    throw new HttpError(400, "Invalid template id");
+  }
+
+  const template = await Template.findOneAndDelete({
+    _id: templateId,
+    tenantId
+  });
+
+  if (!template) {
+    throw new HttpError(404, "Template not found");
+  }
+
+  invalidateTemplateSync(tenantId);
+
+  return template;
+}
+
 module.exports = {
   listTemplates,
   listApprovedTemplates,
   createTemplateDraft,
   submitTemplateForMetaReview,
+  deleteTemplate,
+  invalidateTemplateSync,
   isMetaSampleTemplate
 };

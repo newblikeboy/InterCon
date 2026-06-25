@@ -44,6 +44,12 @@ const tenantSchema = new mongoose.Schema(
         trim: true,
         maxlength: 80
       },
+      onboardingType: {
+        type: String,
+        trim: true,
+        enum: ["cloud_api", "coexistence"],
+        default: "cloud_api"
+      },
       wabaId: {
         type: String,
         trim: true,
@@ -98,6 +104,16 @@ const tenantSchema = new mongoose.Schema(
         type: String,
         trim: true,
         maxlength: 300
+      },
+      qualityRating: {
+        type: String,
+        trim: true,
+        maxlength: 40
+      },
+      messagingLimitTier: {
+        type: String,
+        trim: true,
+        maxlength: 80
       },
       appId: {
         type: String,

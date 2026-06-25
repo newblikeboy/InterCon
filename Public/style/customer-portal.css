@@ -99,6 +99,12 @@ select {
   font-weight: 800;
 }
 
+img.brand-mark {
+  object-fit: cover;
+  background: #fff;
+  box-shadow: 0 8px 18px rgba(17, 41, 29, 0.12);
+}
+
 .brand strong,
 .brand small {
   display: block;
@@ -2158,12 +2164,154 @@ address {
   padding: 0;
 }
 
+.template-status-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.template-status-actions .btn {
+  min-height: 42px;
+}
+
 .template-status-area .table-row {
   grid-template-columns:
     minmax(150px, 1.25fr)
     minmax(110px, 0.75fr)
     minmax(92px, 0.6fr)
-    minmax(150px, 1.15fr);
+    minmax(150px, 1.15fr)
+    minmax(92px, 0.55fr);
+}
+
+.template-status-area .template-table-row {
+  grid-template-columns:
+    minmax(150px, 1.15fr)
+    minmax(110px, 0.7fr)
+    minmax(96px, 0.6fr)
+    minmax(150px, 1.1fr)
+    minmax(92px, 0.55fr);
+}
+
+.template-delete-action {
+  width: fit-content;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(155, 44, 44, 0.22);
+  border-radius: 10px;
+  background: #fff;
+  color: #9b2c2c;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.template-delete-action:hover {
+  border-color: rgba(155, 44, 44, 0.42);
+  background: #fff3f3;
+}
+
+.template-delete-action:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.template-modal[hidden] {
+  display: none;
+}
+
+.template-modal,
+.confirm-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.confirm-modal[hidden] {
+  display: none;
+}
+
+.template-modal-card,
+.confirm-modal-card {
+  position: relative;
+  z-index: 1;
+  width: min(720px, 100%);
+  max-height: min(820px, calc(100vh - 36px));
+  overflow: auto;
+  padding: clamp(18px, 3vw, 24px);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 44px 110px rgba(0, 0, 0, 0.34), 0 1px 0 #fff inset;
+}
+
+.confirm-modal-card {
+  width: min(520px, 100%);
+  padding: clamp(22px, 3vw, 28px);
+}
+
+.confirm-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  background: #fff3f3;
+  color: #9b2c2c;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.confirm-modal-card h2 {
+  margin: 0 42px 10px 0;
+  font-size: clamp(22px, 2.8vw, 28px);
+  line-height: 1.15;
+}
+
+.confirm-modal-card > p:not(.eyebrow) {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.btn-danger {
+  border-color: #9b2c2c;
+  background: #9b2c2c;
+  color: #fff;
+}
+
+.btn-danger:hover {
+  border-color: #7f1d1d;
+  background: #7f1d1d;
+  box-shadow: 0 14px 26px rgba(155, 44, 44, 0.22);
+}
+
+.template-modal-card .portal-section-head {
+  margin: 0 44px 16px 0;
+}
+
+.template-modal-card .template-form-panel {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.template-modal-card .contact-message {
+  margin: 0;
 }
 
 .campaign-layout {
@@ -2312,12 +2460,33 @@ address {
   padding: 18px;
 }
 
+.send-whatsapp-layout {
+  display: grid;
+  grid-template-columns: minmax(460px, 0.95fr) minmax(320px, 380px);
+  gap: clamp(22px, 4vw, 48px);
+  align-items: start;
+  width: 100%;
+}
+
 .send-form label {
   display: grid;
   gap: 7px;
   color: var(--ink);
   font-size: 14px;
   font-weight: 800;
+}
+
+.send-form-topline {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 2px;
+}
+
+.send-form-topline strong {
+  font-size: 16px;
 }
 
 .send-form input,
@@ -2335,6 +2504,313 @@ address {
 .send-history-panel {
   margin-top: 18px;
   padding: 18px;
+}
+
+.whatsapp-phone-preview {
+  position: sticky;
+  top: 112px;
+  display: grid;
+  gap: 14px;
+  justify-items: center;
+  min-width: 0;
+}
+
+.preview-panel-head {
+  display: flex;
+  width: min(100%, 360px);
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.preview-panel-head span {
+  color: var(--brand-dark);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.preview-panel-head strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.phone-shell {
+  position: relative;
+  width: min(100%, 360px);
+  min-height: 664px;
+  padding: 10px;
+  border: 1px solid #0b1210;
+  border-radius: 42px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.12), transparent 24%),
+    linear-gradient(180deg, #27312d, #090f0d);
+  box-shadow:
+    0 30px 64px rgba(17, 33, 29, 0.22),
+    0 0 0 8px rgba(12, 20, 17, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.phone-screen {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  min-height: 644px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 34px;
+  background:
+    radial-gradient(circle at 20% 18%, rgba(255, 255, 255, 0.34) 0 1px, transparent 1.8px),
+    radial-gradient(circle at 76% 32%, rgba(255, 255, 255, 0.25) 0 1px, transparent 1.8px),
+    linear-gradient(135deg, rgba(20, 115, 99, 0.08) 0 1px, transparent 1px 30px),
+    linear-gradient(45deg, rgba(20, 115, 99, 0.07) 0 1px, transparent 1px 34px),
+    #efe6d8;
+}
+
+.phone-statusbar {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 18px 4px;
+  color: #fff;
+  background: #075e54;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.phone-statusbar div {
+  display: flex;
+  align-items: end;
+  gap: 4px;
+}
+
+.phone-statusbar i {
+  display: block;
+  width: 12px;
+  height: 7px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.phone-statusbar i:nth-child(1) {
+  width: 5px;
+  height: 5px;
+}
+
+.phone-statusbar i:nth-child(2) {
+  width: 8px;
+  height: 7px;
+}
+
+.wa-preview-topbar {
+  display: grid;
+  grid-template-columns: 18px 42px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 9px;
+  min-height: 62px;
+  padding: 6px 14px 11px;
+  color: #fff;
+  background: #075e54;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
+}
+
+.wa-back {
+  width: 11px;
+  height: 11px;
+  border-bottom: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.wa-avatar {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.24), transparent 45%),
+    linear-gradient(135deg, #18b87f, #08724d);
+  font-size: 12px;
+  font-weight: 900;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.wa-contact-copy {
+  min-width: 0;
+}
+
+.wa-contact-copy strong,
+.wa-contact-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wa-contact-copy strong {
+  font-size: 15px;
+}
+
+.wa-contact-copy small {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+}
+
+.wa-menu-dots {
+  justify-self: end;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 7px 0 currentColor, 0 14px 0 currentColor;
+}
+
+.wa-chat-area {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 16px 14px 18px;
+}
+
+.wa-encryption-note {
+  justify-self: center;
+  max-width: 88%;
+  padding: 7px 10px;
+  border-radius: 8px;
+  color: #7a5010;
+  background: #fff3cd;
+  font-size: 10.5px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.wa-date-chip {
+  justify-self: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  color: #54645d;
+  background: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.wa-template-meta {
+  justify-self: end;
+  max-width: 86%;
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border-left: 4px solid #0f9f6e;
+  color: #41524a;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 2px 6px rgba(17, 33, 29, 0.08);
+}
+
+.wa-template-meta span,
+.wa-template-meta strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wa-template-meta span {
+  color: #08724d;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.wa-template-meta strong {
+  font-size: 12px;
+}
+
+.wa-message-bubble {
+  position: relative;
+  justify-self: end;
+  max-width: 86%;
+  min-width: 150px;
+  padding: 11px 12px 20px;
+  border-radius: 10px 0 10px 10px;
+  background: #dcf8c6;
+  box-shadow: 0 3px 10px rgba(17, 33, 29, 0.12);
+}
+
+.wa-message-bubble::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: -8px;
+  border-top: 8px solid #dcf8c6;
+  border-right: 8px solid transparent;
+}
+
+.wa-message-bubble p {
+  margin: 0;
+  color: #17211d;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 14.5px;
+  line-height: 1.46;
+}
+
+.wa-message-bubble span {
+  position: absolute;
+  right: 24px;
+  bottom: 4px;
+  color: #6d7a74;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.wa-message-bubble em {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  width: 12px;
+  height: 7px;
+  border-right: 2px solid #53bdeb;
+  border-bottom: 2px solid #53bdeb;
+  transform: rotate(35deg);
+}
+
+.wa-composer {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 42px;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 9px 12px;
+  background: rgba(239, 231, 220, 0.94);
+}
+
+.wa-composer span,
+.wa-composer i {
+  display: block;
+}
+
+.wa-composer span {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.wa-composer strong {
+  min-width: 0;
+  padding: 11px 14px;
+  border-radius: 999px;
+  color: #8a9891;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.wa-composer i {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #128c7e;
 }
 
 .send-table-row {
@@ -3914,4 +4390,1092 @@ address {
     grid-template-columns: 1fr;
   }
 
+}
+
+/* ==========================================================================
+   Clean console shell — matches the Admin Console
+   Restyles only the shell (rail + topbar + theme). Functional panels,
+   forms, tables, and the profile menu keep their existing styles.
+   ========================================================================== */
+
+.console-body {
+  background: linear-gradient(180deg, #f6faf8 0%, #ffffff 60%);
+}
+
+.console-shell {
+  grid-template-columns: 112px minmax(0, 1fr);
+}
+
+/* --- Icon rail ----------------------------------------------------------- */
+.console-rail {
+  height: 100vh;
+  grid-template-rows: auto 1fr auto;
+  gap: 16px;
+  padding: 18px 10px;
+  color: var(--ink);
+  background: #ffffff;
+  border-right: 1px solid var(--line);
+  box-shadow: none;
+}
+
+.console-rail-brand {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+}
+
+.console-rail-nav {
+  align-content: start;
+  gap: 6px;
+}
+
+.console-rail .console-rail-nav a {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-height: 76px;
+  padding: 10px 8px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--muted);
+  font-weight: 700;
+  text-align: center;
+}
+
+.console-rail .console-rail-nav a svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.console-rail .console-rail-nav a small {
+  max-width: 76px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
+}
+
+.console-rail .console-rail-nav a:hover {
+  color: var(--brand-dark);
+  background: var(--soft);
+  border-color: transparent;
+  transform: none;
+}
+
+.console-rail .console-rail-nav a.active {
+  color: var(--brand-dark);
+  background: rgba(15, 159, 110, 0.1);
+  border-color: rgba(15, 159, 110, 0.22);
+}
+
+.console-rail-spacer {
+  display: block;
+}
+
+/* --- Top bar ------------------------------------------------------------- */
+.console-topbar {
+  position: relative;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 0 0 22px;
+  padding: 0 0 22px;
+  background: transparent;
+  border-bottom: 1px solid var(--line);
+}
+
+.console-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.console-title .eyebrow {
+  margin-bottom: 4px;
+}
+
+.console-topbar h1,
+.console-title h1 {
+  margin: 0;
+  font-size: clamp(22px, 3vw, 30px);
+  line-height: 1.1;
+}
+
+.console-topbar-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+/* --- Console responsive -------------------------------------------------- */
+@media (max-width: 980px) {
+  .console-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .console-rail {
+    width: min(280px, 84vw);
+    grid-template-rows: auto auto 1fr;
+  }
+
+  .console-rail .console-rail-nav a {
+    grid-template-columns: 24px 1fr;
+    justify-items: start;
+    align-items: center;
+    gap: 12px;
+    text-align: left;
+    padding: 10px 12px;
+  }
+
+  .console-rail .console-rail-nav a small {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 700px) {
+  .console-topbar {
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+}
+
+/* ==========================================================================
+   Clean console — content surfaces
+   Flatten card fills, round corners, soften shadows, calm the headings so
+   the whole page matches the Admin Console (not just the rail).
+   ========================================================================== */
+
+/* Primary card surfaces */
+.console-body .portal-section,
+.console-body .portal-stats article,
+.console-body .setup-status-card,
+.console-body .contact-panel,
+.console-body .template-form-panel,
+.console-body .template-status-area,
+.console-body .send-form,
+.console-body .send-history-panel,
+.console-body .api-panel,
+.console-body .api-docs-panel,
+.console-body .billing-status-card,
+.console-body .connect-progress-panel,
+.console-body .connection-card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(17, 41, 29, 0.05);
+}
+
+/* Nested / smaller cards */
+.console-body .setup-roadmap article,
+.console-body .check-row,
+.console-body .api-doc-grid article,
+.console-body .billing-plan-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(17, 41, 29, 0.04);
+}
+
+.console-body .table-panel {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+/* Calmer headings */
+.console-body .portal-section {
+  padding: clamp(20px, 2.6vw, 26px);
+}
+
+.console-body .portal-section-head {
+  margin-bottom: 16px;
+}
+
+.console-body .portal-section-head h2,
+.console-body .portal-section h2 {
+  margin-bottom: 6px;
+  font-size: clamp(19px, 2.4vw, 23px);
+  font-weight: 800;
+  letter-spacing: 0.1px;
+}
+
+.console-body .connection-panel-head h3 {
+  font-size: 16px;
+}
+
+/* Stats */
+.console-body .portal-stats article {
+  padding: 20px;
+}
+
+.console-body .portal-stats strong {
+  font-size: 28px;
+}
+
+/* Controls — round to match the cards */
+.console-body .btn {
+  border-radius: 12px;
+  box-shadow: 0 10px 20px rgba(15, 159, 110, 0.2);
+}
+
+.console-body .btn:hover {
+  box-shadow: 0 14px 26px rgba(15, 159, 110, 0.26);
+}
+
+.console-body .btn-outline {
+  box-shadow: 0 6px 16px rgba(17, 41, 29, 0.06);
+}
+
+.console-body input,
+.console-body select,
+.console-body textarea {
+  min-width: 0;
+  max-width: 100%;
+  border-radius: 12px;
+}
+
+.console-body .portal-main,
+.console-body .portal-view,
+.console-body .portal-section,
+.console-body .console-panel,
+.console-body .template-builder,
+.console-body .template-form-panel,
+.console-body .template-status-area,
+.console-body .send-form,
+.console-body .send-history-panel,
+.console-body .api-layout,
+.console-body .api-panel,
+.console-body .billing-plan-grid,
+.console-body .billing-status-card {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.console-body .portal-main {
+  overflow-x: hidden;
+}
+
+.console-body .portal-section-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 14px;
+}
+
+.console-body .portal-section-head > div {
+  min-width: 0;
+}
+
+.console-body .portal-section-head > .btn,
+.console-body .portal-section-head > .status-pill,
+.console-body .portal-section-head > .template-actions,
+.console-body .portal-section-head > select {
+  justify-self: end;
+  max-width: 100%;
+}
+
+.console-body .btn {
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+}
+
+.console-body .template-builder,
+.console-body .send-form {
+  width: min(100%, 980px);
+  max-width: none;
+}
+
+.console-body #templates > .portal-section-head,
+.console-body #send-whatsapp > .portal-section-head,
+.console-body #developer-api > .portal-section-head,
+.console-body #billing > .portal-section-head {
+  width: min(100%, 980px);
+}
+
+.console-body #send-whatsapp > .portal-section-head {
+  width: 100%;
+}
+
+.console-body .send-whatsapp-layout {
+  width: 100%;
+}
+
+.console-body .send-whatsapp-layout .send-form {
+  width: 100%;
+}
+
+.console-body .template-form-panel,
+.console-body .send-form,
+.console-body .api-panel,
+.console-body .api-docs-panel,
+.console-body .send-history-panel {
+  padding: clamp(18px, 2.4vw, 24px);
+}
+
+.console-body .template-form-panel .btn,
+.console-body .send-form .btn,
+.console-body .api-key-form .btn {
+  justify-self: start;
+}
+
+.console-body .template-actions {
+  align-items: center;
+  min-width: 0;
+}
+
+.console-body .template-actions .btn,
+.console-body .template-actions button,
+.console-body .template-actions a {
+  flex: 0 1 auto;
+}
+
+@media (max-width: 1180px) {
+  .console-body .api-layout,
+  .console-body .connect-layout,
+  .console-body .send-whatsapp-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .console-body .whatsapp-phone-preview {
+    position: static;
+    justify-items: start;
+  }
+
+  .console-body .phone-shell {
+    width: min(100%, 360px);
+  }
+
+  .console-body .preview-panel-head {
+    width: min(100%, 360px);
+  }
+
+  .console-body .api-key-form {
+    grid-template-columns: 1fr;
+  }
+
+  .console-body .api-key-form .btn {
+    justify-self: start;
+  }
+}
+
+@media (max-width: 760px) {
+  .console-body .portal-section-head {
+    grid-template-columns: 1fr;
+  }
+
+  .console-body .portal-section-head > .btn,
+  .console-body .portal-section-head > .status-pill,
+  .console-body .portal-section-head > .template-actions,
+  .console-body .portal-section-head > select {
+    justify-self: stretch;
+  }
+
+  .console-body .portal-section-head > .btn,
+  .console-body .portal-section-head .template-actions .btn,
+  .console-body .portal-section-head .template-actions button,
+  .console-body .portal-section-head .template-actions a {
+    width: 100%;
+  }
+
+  .console-body .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .console-body .phone-shell {
+    min-height: 540px;
+  }
+
+  .console-body .phone-screen {
+    min-height: 512px;
+  }
+
+  .console-body .preview-panel-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+}
+
+/* ==========================================================================
+   Launcher home — grouped feature cards (same pattern as the Admin Console)
+   Each card opens a real working view via the existing hash router.
+   ========================================================================== */
+
+.console-home {
+  display: grid;
+  gap: 34px;
+}
+
+.console-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.console-group-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(15, 159, 110, 0.1);
+  color: var(--brand-dark);
+}
+
+.console-group-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.console-group-head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+.launch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+  gap: 16px;
+}
+
+.launch-card {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 24px 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(17, 41, 29, 0.05);
+  transition: transform 170ms ease, box-shadow 170ms ease, border-color 170ms ease;
+}
+
+.launch-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(15, 159, 110, 0.32);
+  box-shadow: 0 22px 40px rgba(17, 41, 29, 0.12);
+}
+
+.launch-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+}
+
+.launch-icon svg {
+  width: 28px;
+  height: 28px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.launch-card strong {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.launch-card small {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+  max-width: 22ch;
+}
+
+.tint-blue   { background: rgba(45, 108, 223, 0.12);  color: #2d6cdf; }
+.tint-green  { background: rgba(15, 159, 110, 0.12);  color: #0f9f6e; }
+.tint-violet { background: rgba(124, 92, 224, 0.13);  color: #7c5ce0; }
+.tint-amber  { background: rgba(216, 154, 36, 0.16);  color: #c2851a; }
+.tint-rose   { background: rgba(225, 76, 102, 0.13);  color: #e14c66; }
+
+@media (max-width: 560px) {
+  .launch-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+}
+
+/* Back-to-home link injected into each working view */
+.console-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  margin-bottom: 16px;
+  padding: 8px 14px 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 13.5px;
+  transition: color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.console-back svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.console-back:hover {
+  color: var(--brand-dark);
+  border-color: rgba(15, 159, 110, 0.3);
+  transform: translateX(-2px);
+}
+
+/* ==========================================================================
+   Working views as Admin-style detail views
+   Strip the outer card so the header sits bare on the page; the inner
+   panels (which already look like admin panels) carry the surface. The
+   header is enlarged to match admin's detail header. Real content untouched.
+   ========================================================================== */
+.console-body .portal-view.portal-section {
+  margin-top: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.console-body .portal-view > .portal-section-head {
+  margin-bottom: 18px;
+}
+
+.console-body .portal-view > .portal-section-head h2 {
+  margin-bottom: 8px;
+  font-size: clamp(24px, 3.4vw, 34px);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.console-body .portal-view > .portal-section-head > div > p:last-child {
+  max-width: 60ch;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+/* Related chip rail (matches admin) */
+.view-related {
+  margin-top: 28px;
+}
+
+.view-related h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+.admin-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--brand-dark);
+  font-weight: 700;
+  font-size: 13px;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.admin-chip:hover {
+  background: #fff;
+  border-color: rgba(15, 159, 110, 0.32);
+  transform: translateY(-1px);
+}
+
+/* "Coming soon" launcher cards (non-interactive) */
+.launch-card.is-soon {
+  position: relative;
+  cursor: default;
+  opacity: 0.7;
+}
+
+.launch-card.is-soon:hover {
+  transform: none;
+  border-color: var(--line);
+  box-shadow: 0 8px 22px rgba(17, 41, 29, 0.05);
+}
+
+.soon-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #fff1d5;
+  color: #7a5010;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.launch-card .soon-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+/* Placeholder feature panels (future backend) */
+.console-panel {
+  padding: 22px 24px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(17, 41, 29, 0.05);
+}
+
+.console-panel.coming-soon .soon-badge {
+  margin-bottom: 14px;
+}
+
+.console-panel h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+.task-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+
+.task-list li {
+  position: relative;
+  padding-left: 26px;
+  color: var(--ink);
+  font-size: 14.5px;
+}
+
+.task-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(15, 159, 110, 0.14);
+  box-shadow: inset 0 0 0 2px var(--brand);
+}
+
+/* ==========================================================================
+   Connected WABA — channels table
+   ========================================================================== */
+.waba-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.console-body .table-row.waba-row {
+  grid-template-columns:
+    minmax(130px, 1fr)
+    minmax(140px, 1fr)
+    minmax(140px, 1fr)
+    minmax(80px, 0.6fr)
+    minmax(120px, 0.8fr)
+    minmax(120px, 0.8fr)
+    minmax(110px, 0.8fr)
+    minmax(130px, 1fr)
+    minmax(150px, 1fr)
+    minmax(100px, 0.7fr)
+    minmax(92px, 0.55fr);
+  min-width: 1280px;
+}
+
+.waba-action {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.waba-action:hover {
+  color: var(--brand-dark);
+  border-color: rgba(15, 159, 110, 0.3);
+}
+
+.waba-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.waba-action.danger {
+  color: #9b2c2c;
+  border-color: rgba(155, 44, 44, 0.2);
+}
+
+.waba-action.danger:hover {
+  color: #7f1d1d;
+  border-color: rgba(155, 44, 44, 0.42);
+  background: #fff3f3;
+}
+
+/* ==========================================================================
+   Template Library — Meta catalogue
+   ========================================================================== */
+.lib-filter {
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.lib-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(258px, 1fr));
+  gap: 16px;
+}
+
+.lib-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(17, 41, 29, 0.05);
+}
+
+.lib-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.lib-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.cat-utility { background: rgba(45, 108, 223, 0.12); color: #2d6cdf; }
+.cat-marketing { background: rgba(216, 154, 36, 0.16); color: #c2851a; }
+.cat-authentication { background: rgba(124, 92, 224, 0.13); color: #7c5ce0; }
+
+.lib-lang {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.lib-card h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.lib-body {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.lib-card .btn {
+  margin-top: auto;
+  align-self: flex-start;
+}
+
+@media (max-width: 560px) {
+  .lib-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
+   Manage Template — status filter chips + draft pill
+   ========================================================================== */
+.tpl-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.tpl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.tpl-chip span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.tpl-chip:hover {
+  color: var(--brand-dark);
+  border-color: rgba(15, 159, 110, 0.3);
+}
+
+.tpl-chip.is-active {
+  color: var(--brand-dark);
+  background: rgba(15, 159, 110, 0.1);
+  border-color: rgba(15, 159, 110, 0.28);
+}
+
+.tpl-chip.is-active span {
+  background: var(--brand);
+  color: #fff;
+}
+
+.table-row em.draft {
+  color: #5b6b63;
+  background: #eef2ef;
+}
+
+/* ==========================================================================
+   Send WhatsApp — fit form + preview in one viewport
+   ========================================================================== */
+.console-body #send-whatsapp {
+  min-height: calc(100vh - 132px);
+}
+
+.console-body #send-whatsapp > .console-back {
+  margin-bottom: 10px;
+}
+
+.console-body #send-whatsapp > .portal-section-head {
+  margin-bottom: 12px;
+}
+
+.console-body #send-whatsapp > .portal-section-head h2 {
+  font-size: clamp(28px, 3vw, 42px);
+}
+
+.console-body #send-whatsapp .send-whatsapp-layout {
+  grid-template-columns: minmax(520px, 1fr) minmax(280px, 330px);
+  gap: clamp(18px, 3vw, 36px);
+  align-items: start;
+}
+
+.console-body #send-whatsapp .send-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 18px 20px;
+}
+
+.console-body #send-whatsapp .send-form .form-note,
+.console-body #send-whatsapp .send-form .contact-message,
+.console-body #send-whatsapp .send-form .send-form-topline {
+  grid-column: 1 / -1;
+}
+
+.console-body #send-whatsapp .send-form .btn {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.console-body #send-whatsapp .send-form label {
+  gap: 6px;
+}
+
+.console-body #send-whatsapp .send-form input,
+.console-body #send-whatsapp .send-form select {
+  min-height: 42px;
+}
+
+.console-body #send-whatsapp .whatsapp-phone-preview {
+  top: 90px;
+  gap: 8px;
+}
+
+.console-body #send-whatsapp .preview-panel-head {
+  width: min(100%, 318px);
+}
+
+.console-body #send-whatsapp .phone-shell {
+  width: min(100%, 318px);
+  min-height: 486px;
+  padding: 8px;
+  border-radius: 34px;
+}
+
+.console-body #send-whatsapp .phone-screen {
+  min-height: 468px;
+  border-radius: 27px;
+}
+
+.console-body #send-whatsapp .phone-statusbar {
+  min-height: 26px;
+  padding: 7px 15px 3px;
+}
+
+.console-body #send-whatsapp .wa-preview-topbar {
+  min-height: 52px;
+  padding: 5px 12px 9px;
+}
+
+.console-body #send-whatsapp .wa-avatar {
+  width: 36px;
+  height: 36px;
+}
+
+.console-body #send-whatsapp .wa-chat-area {
+  gap: 8px;
+  padding: 12px;
+}
+
+.console-body #send-whatsapp .wa-encryption-note {
+  max-width: 94%;
+  padding: 6px 8px;
+  font-size: 10px;
+}
+
+.console-body #send-whatsapp .wa-template-meta {
+  padding: 7px 9px;
+}
+
+.console-body #send-whatsapp .wa-message-bubble {
+  max-width: 88%;
+  padding: 9px 10px 19px;
+}
+
+.console-body #send-whatsapp .wa-message-bubble p {
+  font-size: 13.5px;
+}
+
+.console-body #send-whatsapp .wa-composer {
+  padding: 8px;
+}
+
+.console-body #send-whatsapp .wa-composer span {
+  width: 30px;
+  height: 30px;
+}
+
+.console-body #send-whatsapp .wa-composer strong {
+  padding: 9px 12px;
+}
+
+.console-body #send-whatsapp .wa-composer i {
+  width: 38px;
+  height: 38px;
+}
+
+@media (max-width: 1180px) {
+  .console-body #send-whatsapp .send-whatsapp-layout,
+  .console-body #send-whatsapp .send-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-height: 820px) and (min-width: 1181px) {
+  .console-body #send-whatsapp .phone-shell {
+    width: min(100%, 292px);
+    min-height: 420px;
+  }
+
+  .console-body #send-whatsapp .phone-screen {
+    min-height: 402px;
+  }
+
+  .console-body #send-whatsapp .wa-encryption-note,
+  .console-body #send-whatsapp .wa-template-meta {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .table-row .template-delete-action {
+    padding: 0 12px;
+  }
+
+  .template-status-actions {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .template-status-actions .btn {
+    width: 100%;
+  }
+
+  .template-modal-card {
+    max-height: calc(100vh - 24px);
+    padding: 18px;
+  }
+
+  .confirm-actions {
+    flex-direction: column-reverse;
+  }
+
+  .confirm-actions .btn {
+    width: 100%;
+  }
 }

@@ -55,11 +55,63 @@ const listSegments = asyncHandler(async (req, res) => {
   });
 });
 
+const getSegmentMembers = asyncHandler(async (req, res) => {
+  const data = await contactService.getSegmentMembers(req.tenantId, req.params.segmentId);
+
+  res.json({
+    success: true,
+    ...data
+  });
+});
+
+const assignSegmentMember = asyncHandler(async (req, res) => {
+  const data = await contactService.setContactSegmentMembership(
+    req.tenantId,
+    req.params.segmentId,
+    req.body.contactId,
+    true
+  );
+
+  res.status(201).json({
+    success: true,
+    message: "Contact added to group",
+    ...data
+  });
+});
+
+const removeSegmentMember = asyncHandler(async (req, res) => {
+  const data = await contactService.setContactSegmentMembership(
+    req.tenantId,
+    req.params.segmentId,
+    req.params.contactId,
+    false
+  );
+
+  res.json({
+    success: true,
+    message: "Contact removed from group",
+    ...data
+  });
+});
+
+const deleteSegment = asyncHandler(async (req, res) => {
+  await contactService.deleteSegment(req.tenantId, req.params.segmentId);
+
+  res.json({
+    success: true,
+    message: "Group deleted"
+  });
+});
+
 module.exports = {
   listContacts,
   createContact,
   importContacts,
   listOptOuts,
   createSegment,
-  listSegments
+  listSegments,
+  getSegmentMembers,
+  assignSegmentMember,
+  removeSegmentMember,
+  deleteSegment
 };

@@ -3,6 +3,9 @@ const Message = require("../models/Message");
 const Template = require("../models/Template");
 const Tenant = require("../models/Tenant");
 const WebhookEvent = require("../models/WebhookEvent");
+const Contact = require("../models/Contact");
+const Conversation = require("../models/Conversation");
+const InboxMessage = require("../models/InboxMessage");
 const env = require("../config/env");
 const HttpError = require("../utils/httpError");
 
@@ -180,6 +183,148 @@ async function processMessageStatuses(tenantId, statuses = []) {
         }
       }
     );
+
+    // Keep delivery receipts for inbox replies in sync as well.
+    await InboxMessage.findOneAndUpdate(
+      { tenantId, metaMessageId, direction: "out" },
+      {
+        $set: {
+          status: mappedStatus,
+          ...(errorMessage ? { error: errorMessage } : {})
+        }
+      }
+    );
+  }
+}
+
+// Reduce a Cloud API inbound message object to a short, displayable summary.
+function describeIncomingMessage(message = {}) {
+  const type = message.type || "text";
+
+  if (type === "text") {
+    return { type, text: message.text?.body || "", caption: "" };
+  }
+
+  if (type === "button") {
+    return { type, text: message.button?.text || "", caption: "" };
+  }
+
+  if (type === "interactive") {
+    const interactive = message.interactive || {};
+    const reply = interactive.button_reply || interactive.list_reply || {};
+    return { type, text: reply.title || reply.description || "", caption: "" };
+  }
+
+  if (["image", "video", "document", "audio", "sticker"].includes(type)) {
+    const media = message[type] || {};
+    const caption = media.caption || media.filename || "";
+    return { type, text: caption, caption: `[${type}]` };
+  }
+
+  if (type === "location") {
+    const location = message.location || {};
+    return { type, text: location.name || location.address || "Shared location", caption: "[location]" };
+  }
+
+  if (type === "contacts") {
+    return { type, text: "Shared a contact card", caption: "[contact]" };
+  }
+
+  return { type, text: message.text?.body || "", caption: `[${type}]` };
+}
+
+function buildPreviewText(summary) {
+  if (summary.text) return summary.text.slice(0, 1000);
+  if (summary.caption) return summary.caption;
+  return "";
+}
+
+async function resolveInboundContact(tenantId, phone, profileName) {
+  const update = {
+    $setOnInsert: {
+      tenantId,
+      phone,
+      name: profileName || phone,
+      source: "whatsapp_inbound",
+      status: "active",
+      optIn: {
+        // A customer-initiated message constitutes opt-in within the session window.
+        status: true,
+        proof: "Customer initiated WhatsApp conversation",
+        capturedAt: new Date()
+      }
+    }
+  };
+
+  return Contact.findOneAndUpdate(
+    { tenantId, phone },
+    update,
+    { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
+  ).lean();
+}
+
+async function processInboundMessages(tenantId, value = {}, wabaId, phoneNumberId) {
+  const messages = Array.isArray(value.messages) ? value.messages : [];
+  if (!messages.length) return;
+
+  const profiles = Array.isArray(value.contacts) ? value.contacts : [];
+  const profileByWaId = new Map(
+    profiles.map((profile) => [String(profile.wa_id || ""), profile.profile?.name || ""])
+  );
+
+  for (const message of messages) {
+    const fromPhone = String(message.from || "").replace(/^\+/, "").trim();
+    const metaMessageId = message.id || "";
+    if (!fromPhone || !metaMessageId) continue;
+
+    // Skip duplicates Meta may redeliver.
+    const existing = await InboxMessage.findOne({ tenantId, metaMessageId }).select("_id").lean();
+    if (existing) continue;
+
+    const summary = describeIncomingMessage(message);
+    const previewText = buildPreviewText(summary);
+    const profileName = profileByWaId.get(fromPhone) || "";
+    const sentAt = message.timestamp
+      ? new Date(Number(message.timestamp) * 1000)
+      : new Date();
+
+    const contact = await resolveInboundContact(tenantId, fromPhone, profileName);
+
+    const conversation = await Conversation.findOneAndUpdate(
+      { tenantId, customerPhone: fromPhone },
+      {
+        $set: {
+          contactId: contact?._id,
+          ...(profileName ? { customerName: profileName } : {}),
+          ...(wabaId ? { wabaId } : {}),
+          ...(phoneNumberId ? { phoneNumberId } : {}),
+          lastMessageText: previewText,
+          lastMessageAt: sentAt,
+          lastInboundAt: sentAt,
+          lastDirection: "in"
+        },
+        $setOnInsert: {
+          tenantId,
+          customerPhone: fromPhone
+        },
+        $inc: { unreadCount: 1 }
+      },
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
+    );
+
+    await InboxMessage.create({
+      tenantId,
+      conversationId: conversation._id,
+      contactId: contact?._id,
+      customerPhone: fromPhone,
+      direction: "in",
+      type: summary.type,
+      text: summary.text,
+      mediaCaption: summary.caption,
+      metaMessageId,
+      status: "received",
+      sentAt
+    });
   }
 }
 
@@ -229,6 +374,10 @@ async function processChange(entry, change, payload) {
 
     if (tenant && change.value?.statuses?.length) {
       await processMessageStatuses(tenant._id, change.value.statuses);
+    }
+
+    if (tenant && change.value?.messages?.length) {
+      await processInboundMessages(tenant._id, change.value, wabaId, phoneNumberId);
     }
 
     event.status = "processed";

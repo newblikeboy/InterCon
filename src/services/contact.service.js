@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Contact = require("../models/Contact");
 const ContactSegment = require("../models/ContactSegment");
 const HttpError = require("../utils/httpError");
@@ -58,6 +59,10 @@ async function listContacts(tenantId, query = {}) {
       { name: new RegExp(search, "i") },
       { phone: new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") }
     ];
+  }
+
+  if (query.tag) {
+    filter.tags = String(query.tag).trim();
   }
 
   return Contact.find(filter).sort({ createdAt: -1 }).limit(100).lean();
@@ -150,7 +155,82 @@ async function createSegment(tenantId, body) {
 }
 
 async function listSegments(tenantId) {
-  return ContactSegment.find({ tenantId }).sort({ createdAt: -1 }).lean();
+  const segments = await ContactSegment.find({ tenantId }).sort({ createdAt: -1 }).lean();
+
+  // Group membership is defined by the contact carrying the segment's tag.
+  const counts = await Promise.all(
+    segments.map((segment) =>
+      Contact.countDocuments({ tenantId, tags: segment.tag, status: "active" })
+    )
+  );
+
+  return segments.map((segment, index) => ({
+    ...segment,
+    memberCount: counts[index]
+  }));
+}
+
+async function getSegmentMembers(tenantId, segmentId) {
+  if (!mongoose.Types.ObjectId.isValid(segmentId)) {
+    throw new HttpError(400, "Segment ID is invalid");
+  }
+
+  const segment = await ContactSegment.findOne({ _id: segmentId, tenantId }).lean();
+  if (!segment) {
+    throw new HttpError(404, "Group not found");
+  }
+
+  const members = await Contact.find({ tenantId, tags: segment.tag })
+    .sort({ createdAt: -1 })
+    .limit(500)
+    .lean();
+
+  return { segment, members };
+}
+
+async function setContactSegmentMembership(tenantId, segmentId, contactId, attach) {
+  if (!mongoose.Types.ObjectId.isValid(segmentId)) {
+    throw new HttpError(400, "Segment ID is invalid");
+  }
+  if (!mongoose.Types.ObjectId.isValid(contactId)) {
+    throw new HttpError(400, "Contact ID is invalid");
+  }
+
+  const segment = await ContactSegment.findOne({ _id: segmentId, tenantId }).lean();
+  if (!segment) {
+    throw new HttpError(404, "Group not found");
+  }
+
+  const update = attach
+    ? { $addToSet: { tags: segment.tag } }
+    : { $pull: { tags: segment.tag } };
+
+  const contact = await Contact.findOneAndUpdate(
+    { _id: contactId, tenantId },
+    update,
+    { returnDocument: "after" }
+  ).lean();
+
+  if (!contact) {
+    throw new HttpError(404, "Contact not found");
+  }
+
+  return { contact, segmentId, attached: attach };
+}
+
+async function deleteSegment(tenantId, segmentId) {
+  if (!mongoose.Types.ObjectId.isValid(segmentId)) {
+    throw new HttpError(400, "Segment ID is invalid");
+  }
+
+  const segment = await ContactSegment.findOneAndDelete({ _id: segmentId, tenantId });
+  if (!segment) {
+    throw new HttpError(404, "Group not found");
+  }
+
+  // Deleting a group only removes the segment definition; contacts and their
+  // tags are left untouched so no customer data is lost.
+  return { id: segmentId };
 }
 
 module.exports = {
@@ -159,5 +239,8 @@ module.exports = {
   importContacts,
   listOptOuts,
   createSegment,
-  listSegments
+  listSegments,
+  getSegmentMembers,
+  setContactSegmentMembership,
+  deleteSegment
 };

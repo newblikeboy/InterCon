@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>InterCon Customer Portal</title>
   <meta name="description" content="InterCon customer portal for connecting WhatsApp Business, managing contacts, creating templates, sending messages, and checking billing readiness.">
-  <link rel="stylesheet" href="style/customer-portal.css?v=waba-health-20260625">
+  <link rel="stylesheet" href="style/customer-portal.css?v=groups-20260701i">
 </head>
 <body class="portal-body console-body">
   <div class="portal-shell console-shell">
@@ -26,6 +26,11 @@
         <a href="#send-whatsapp" aria-label="Send WhatsApp">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14V9l13-5v16Z"/><path d="M4 14a3 3 0 0 0 5 2"/></svg>
           <small>Send WhatsApp</small>
+        </a>
+        <a href="#inbox" aria-label="Inbox">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H7l-3 3Z"/><path d="M8 10h8M8 13h5"/></svg>
+          <small>Inbox</small>
+          <span class="rail-badge" data-inbox-rail-badge hidden>0</span>
         </a>
         <a href="#reports" aria-label="Reports">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V4M20 20H4"/><path d="m7 15 4-4 3 2 4-5"/></svg>
@@ -312,8 +317,8 @@
             <input type="file" accept=".csv,text/csv" hidden data-contact-file>
           </div>
           <div class="table-panel">
-            <div class="table-row contact-table-row table-head">
-              <span>Name</span><span>Phone</span><span>Opt-in</span><span>Tags</span>
+            <div class="table-row contact-table-row contact-list-row table-head">
+              <span>Name</span><span>Phone</span><span>Opt-in</span><span>Tags</span><span>Groups</span>
             </div>
             <div data-contact-list></div>
           </div>
@@ -432,6 +437,67 @@
           </aside>
         </div>
       </section>
+
+      <!-- ============ INBOX : Two-way conversations ============ -->
+      <div class="portal-view" id="inbox" data-portal-view hidden>
+        <div class="inbox-app" data-inbox-app data-inbox-pane="list">
+          <!-- Conversation list (left pane / mobile list screen) -->
+          <aside class="inbox-list" data-inbox-list-pane>
+            <div class="inbox-list-head">
+              <strong>Chats</strong>
+              <button class="btn btn-outline btn-small" type="button" data-inbox-refresh>Refresh</button>
+            </div>
+            <div class="inbox-search">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <input type="search" placeholder="Search name or number" data-inbox-search aria-label="Search conversations">
+            </div>
+            <div class="inbox-threads" data-inbox-threads>
+              <div class="inbox-empty">Loading conversations...</div>
+            </div>
+          </aside>
+
+          <!-- Chat panel (right pane / mobile chat screen) -->
+          <section class="inbox-chat" data-inbox-chat-pane>
+            <div class="inbox-chat-empty" data-inbox-chat-empty>
+              <div class="inbox-chat-empty-art" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M4 6h16v12H7l-3 3Z"/><path d="M8 10h8M8 13h5"/></svg>
+              </div>
+              <strong>Select a conversation</strong>
+              <small>Replies from your customers show up here. Pick a chat to read and respond.</small>
+            </div>
+
+            <div class="inbox-chat-active" data-inbox-chat-active hidden>
+              <header class="inbox-chat-head">
+                <button class="inbox-back" type="button" aria-label="Back to chats" data-inbox-back>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>
+                </button>
+                <span class="inbox-avatar" data-inbox-active-avatar>?</span>
+                <div class="inbox-chat-who">
+                  <strong data-inbox-active-name>Customer</strong>
+                  <small data-inbox-active-phone></small>
+                </div>
+              </header>
+
+              <div class="inbox-messages" data-inbox-messages></div>
+
+              <div class="inbox-window-note" data-inbox-window-note hidden></div>
+
+              <form class="inbox-composer" data-inbox-composer>
+                <textarea
+                  rows="1"
+                  maxlength="4096"
+                  placeholder="Type a message"
+                  data-inbox-input
+                  aria-label="Type a reply"></textarea>
+                <button class="inbox-send" type="submit" aria-label="Send reply" data-inbox-send>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12 20 4l-6 16-3-7Z"/></svg>
+                </button>
+              </form>
+              <p class="contact-message" data-inbox-status></p>
+            </div>
+          </section>
+        </div>
+      </div>
 
       <section class="portal-section portal-view" id="developer-api" data-portal-view hidden>
         <div class="api-layout">
@@ -595,15 +661,42 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
         </div>
       </section>
 
-      <section class="portal-view" id="groups" data-portal-view hidden>
-        <div class="console-panel coming-soon">
-          <span class="soon-badge">Coming soon</span>
-          <h3>What you'll do here</h3>
-          <ul class="task-list">
-            <li>Create and edit contact groups and segments.</li>
-            <li>Review segment size before a campaign.</li>
-            <li>Keep groups free of opted-out numbers.</li>
-          </ul>
+      <section class="portal-section portal-view" id="groups" data-portal-view hidden>
+        <div class="groups-layout">
+          <div class="console-panel group-list-panel">
+            <div class="portal-section-head compact">
+              <div>
+                <p class="eyebrow">Segments</p>
+                <h2>Your groups</h2>
+              </div>
+              <div class="template-actions">
+                <button class="btn" type="button" data-toggle-group-form>Create Group</button>
+                <button class="btn btn-outline btn-small" type="button" data-refresh-groups>Refresh</button>
+              </div>
+            </div>
+
+            <div class="table-panel">
+              <div class="table-row group-table-row table-head">
+                <span>Name</span><span>Tag</span><span>Members</span><span>Description</span><span>Actions</span>
+              </div>
+              <div data-group-list>
+                <div class="empty-row">Loading groups...</div>
+              </div>
+            </div>
+
+            <div class="group-members" data-group-members hidden>
+              <div class="group-members-head">
+                <strong data-group-members-title>Members</strong>
+                <button class="btn btn-outline btn-small" type="button" data-group-members-close>Close</button>
+              </div>
+              <div class="table-panel">
+                <div class="table-row contact-table-row table-head">
+                  <span>Name</span><span>Phone</span><span>Opt-in</span><span>Status</span>
+                </div>
+                <div data-group-members-list></div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -686,6 +779,63 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
         </section>
       </div>
 
+      <div class="template-modal" role="dialog" aria-modal="true" aria-labelledby="group-modal-title" hidden data-group-modal>
+        <div class="modal-backdrop" data-close-group-modal></div>
+        <section class="template-modal-card group-modal-card">
+          <button class="modal-close" type="button" aria-label="Close group form" data-close-group-modal>&times;</button>
+          <div class="portal-section-head compact">
+            <div>
+              <p class="eyebrow">Groups</p>
+              <h2 id="group-modal-title">Create a group</h2>
+              <p>Organise contacts into a segment by a shared tag.</p>
+            </div>
+          </div>
+
+          <form class="group-form" data-group-form>
+            <label>
+              Group name
+              <input type="text" name="name" maxlength="100" placeholder="VIP customers" data-group-name required>
+            </label>
+            <label>
+              Tag
+              <input type="text" name="tag" maxlength="40" placeholder="vip" data-group-tag required>
+            </label>
+            <p class="form-note">Contacts that carry this tag are counted as members of the group.</p>
+            <label>
+              Description (optional)
+              <input type="text" name="description" maxlength="240" placeholder="High-value repeat buyers" data-group-description>
+            </label>
+            <div class="group-form-actions">
+              <button class="btn" type="submit">Save group</button>
+              <button class="btn btn-outline" type="button" data-close-group-modal>Cancel</button>
+            </div>
+            <p class="contact-message" data-group-message></p>
+          </form>
+        </section>
+      </div>
+
+      <div class="template-modal" role="dialog" aria-modal="true" aria-labelledby="assign-modal-title" hidden data-assign-modal>
+        <div class="modal-backdrop" data-close-assign-modal></div>
+        <section class="template-modal-card group-modal-card">
+          <button class="modal-close" type="button" aria-label="Close" data-close-assign-modal>&times;</button>
+          <div class="portal-section-head compact">
+            <div>
+              <p class="eyebrow">Groups</p>
+              <h2 id="assign-modal-title">Assign groups</h2>
+              <p data-assign-contact-name>Choose the groups this contact belongs to.</p>
+            </div>
+          </div>
+
+          <div class="assign-group-list" data-assign-group-list>
+            <div class="empty-row">Loading groups...</div>
+          </div>
+          <p class="contact-message" data-assign-message></p>
+          <div class="template-actions">
+            <button class="btn" type="button" data-close-assign-modal>Done</button>
+          </div>
+        </section>
+      </div>
+
       <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title" hidden data-confirm-modal>
         <div class="modal-backdrop" data-confirm-cancel></div>
         <section class="confirm-modal-card">
@@ -704,6 +854,6 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
     </main>
   </div>
 
-  <script src="js/customer-portal.js?v=waba-health-20260625"></script>
+  <script src="js/customer-portal.js?v=groups-20260701i"></script>
 </body>
 </html>

@@ -136,8 +136,8 @@ function viewExists(viewId) {
 }
 
 // Top-level launcher pages (rail items) and the feature views they own.
-const PAGES = ["home", "setup", "send-whatsapp", "reports", "payments", "api"];
-const PAGE_TITLES = { home: "Home", setup: "Setup", "send-whatsapp": "Send WhatsApp", reports: "Reports", payments: "Payments", api: "API" };
+const PAGES = ["home", "setup", "send-whatsapp", "inbox", "reports", "payments", "api"];
+const PAGE_TITLES = { home: "Home", setup: "Setup", "send-whatsapp": "Send WhatsApp", inbox: "Inbox", reports: "Reports", payments: "Payments", api: "API" };
 const VIEW_PARENT = {
   connect: "setup",
   coexistence: "setup",
@@ -199,6 +199,10 @@ function showPortalView(viewId, shouldPersist = true) {
   updateConsoleTitle(nextViewId);
   closePortalMenu();
   window.scrollTo({ top: 0, behavior: "auto" });
+
+  if (typeof onPortalViewShown === "function") {
+    onPortalViewShown(nextViewId);
+  }
 
   if (shouldPersist) {
     localStorage.setItem("intercon_customer_portal_view", nextViewId);
@@ -1168,7 +1172,10 @@ function renderOnboardingStatus(tenant) {
   const hasPartialMetaConnection = Boolean(meta.wabaId);
   const isPhoneRegistered = isPhoneRegisteredForCloudApi(meta);
   const webhookSubscribed = meta.webhookStatus === "subscribed";
-  const businessLimited = Boolean(meta.businessHealthError) || meta.businessHealthStatus === "blocked";
+  // A pending/unverified business still sends at Tier 1 — Meta only returns an
+  // advisory (businessHealthError) prompting verification to RAISE the limit.
+  // Treat it as a blocking error only when Meta has actually blocked the business.
+  const businessLimited = ["blocked", "restricted"].includes(meta.businessHealthStatus);
 
   if (metaWabaId) metaWabaId.textContent = meta.wabaId || "Not connected";
   if (metaPhoneNumberId) metaPhoneNumberId.textContent = meta.displayPhoneNumber || meta.phoneNumberId || "Not connected";
@@ -1203,8 +1210,10 @@ function renderOnboardingStatus(tenant) {
     setMetaConnectMessage("Phone number is connected but not registered for Cloud API. Click Register before sending messages.", true);
   } else if (businessLimited) {
     setMetaConnectMessage(meta.businessHealthError || "Meta reports a business-level block. Check WABA health and billing before sending.", true);
-  } else if (isMetaConnected && meta.connectedAt) {
-    setMetaConnectMessage(`Connected ${new Date(meta.connectedAt).toLocaleString()}. Tier 1: 250 conversations / 24h.`);
+  } else if (isMetaConnected) {
+    // Healthy, connected and registered — clear the area so it only ever
+    // carries genuine errors or important prompts, not a standing status line.
+    setMetaConnectMessage("");
   } else if (meta.lastSignupError) {
     setMetaConnectMessage(meta.lastSignupError, true);
   } else if (hasPartialMetaConnection) {
@@ -1292,11 +1301,14 @@ function renderContactRows(contacts) {
   }
 
   contactList.innerHTML = contacts.map((contact) => `
-    <div class="table-row contact-table-row">
-      <strong>${contact.name}</strong>
-      <span>${contact.phone}</span>
+    <div class="table-row contact-table-row contact-list-row">
+      <strong>${escapeHtml(contact.name || "")}</strong>
+      <span>${escapeHtml(contact.phone || "")}</span>
       <em class="${contact.optIn?.status ? "approved" : "pending"}">${contact.optIn?.status ? "Yes" : "Missing"}</em>
-      <span>${(contact.tags || []).join(", ") || "-"}</span>
+      <span>${escapeHtml((contact.tags || []).join(", ") || "-")}</span>
+      <span>
+        <button type="button" class="btn btn-outline btn-small" data-assign-groups="${escapeHtml(contact._id)}" data-contact-name="${escapeHtml(contact.name || contact.phone || "")}">Assign group</button>
+      </span>
     </div>
   `).join("");
 }
@@ -2343,9 +2355,9 @@ if (logoutButton) {
 }
 
 // Launcher flow: render every feature view in the Admin Console detail-view
-// chrome — a "Back to <page>" pill on top and a "Related" chip rail at the
-// bottom — while keeping each view's real content untouched. Top-level
-// launcher pages (Home, Setup, Send WhatsApp, Reports, Payments, API) are left as-is.
+// chrome — a "Back to <page>" pill on top — while keeping each view's real
+// content untouched. Top-level launcher pages (Home, Setup, Send WhatsApp,
+// Inbox, Reports, Payments, API) are left as-is.
 portalViews.forEach((view) => {
   if (PAGES.includes(view.id)) return;
 
@@ -2358,17 +2370,658 @@ portalViews.forEach((view) => {
   back.setAttribute("aria-label", `Back to ${parentTitle}`);
   back.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>${parentTitle}`;
   view.prepend(back);
+});
 
-  const meta = VIEW_META[view.id];
-  const related = (meta && meta.related ? meta.related : []).filter((id) => VIEW_META[id]);
-  if (related.length) {
-    const section = document.createElement("section");
-    section.className = "view-related";
-    const chips = related
-      .map((id) => `<a class="admin-chip" href="#${id}">${VIEW_META[id].title}</a>`)
-      .join("");
-    section.innerHTML = `<h2>Related</h2><div class="admin-chips">${chips}</div>`;
-    view.append(section);
+// ============================================================
+// Inbox: two-way WhatsApp conversations (WhatsApp-Web style on
+// desktop, single-pane chat on mobile). Inbound replies arrive via
+// the Meta webhook; the browser polls to surface them.
+// ============================================================
+const inboxApp = document.querySelector("[data-inbox-app]");
+const inboxThreads = document.querySelector("[data-inbox-threads]");
+const inboxSearchInput = document.querySelector("[data-inbox-search]");
+const inboxRefreshButton = document.querySelector("[data-inbox-refresh]");
+const inboxChatEmpty = document.querySelector("[data-inbox-chat-empty]");
+const inboxChatActive = document.querySelector("[data-inbox-chat-active]");
+const inboxMessagesEl = document.querySelector("[data-inbox-messages]");
+const inboxActiveName = document.querySelector("[data-inbox-active-name]");
+const inboxActivePhone = document.querySelector("[data-inbox-active-phone]");
+const inboxActiveAvatar = document.querySelector("[data-inbox-active-avatar]");
+const inboxComposer = document.querySelector("[data-inbox-composer]");
+const inboxInput = document.querySelector("[data-inbox-input]");
+const inboxSendButton = document.querySelector("[data-inbox-send]");
+const inboxStatus = document.querySelector("[data-inbox-status]");
+const inboxWindowNote = document.querySelector("[data-inbox-window-note]");
+const inboxBackButton = document.querySelector("[data-inbox-back]");
+const inboxRailBadge = document.querySelector("[data-inbox-rail-badge]");
+
+const INBOX_POLL_MS = 7000;
+const INBOX_UNREAD_POLL_MS = 20000;
+
+const inboxState = {
+  conversations: [],
+  activeId: null,
+  activeWindowOpen: false,
+  search: "",
+  pollTimer: null,
+  unreadTimer: null,
+  loadingActive: false
+};
+
+function getInitials(value) {
+  const parts = String(value || "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function formatClockTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatThreadTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  if (sameDay) return formatClockTime(date);
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return date.toLocaleDateString([], { day: "2-digit", month: "short" });
+}
+
+function setInboxStatus(message, isError = false) {
+  if (!inboxStatus) return;
+  inboxStatus.textContent = message || "";
+  inboxStatus.classList.toggle("error", Boolean(isError));
+}
+
+function updateInboxRailBadge(totalUnread) {
+  if (!inboxRailBadge) return;
+  const count = Number(totalUnread) || 0;
+  if (count > 0) {
+    inboxRailBadge.textContent = count > 99 ? "99+" : String(count);
+    inboxRailBadge.hidden = false;
+  } else {
+    inboxRailBadge.hidden = true;
+  }
+}
+
+function setInboxPane(pane) {
+  if (inboxApp) inboxApp.setAttribute("data-inbox-pane", pane);
+}
+
+function renderInboxConversations() {
+  if (!inboxThreads) return;
+
+  const term = inboxState.search.trim().toLowerCase();
+  const list = term
+    ? inboxState.conversations.filter((conversation) => {
+      return `${conversation.customerName} ${conversation.customerPhone}`.toLowerCase().includes(term);
+    })
+    : inboxState.conversations;
+
+  if (!list.length) {
+    inboxThreads.innerHTML = `<div class="inbox-empty">${term ? "No matching conversations." : "No conversations yet. Customer replies will appear here."}</div>`;
+    return;
+  }
+
+  inboxThreads.innerHTML = list.map((conversation) => {
+    const isActive = conversation.id === inboxState.activeId;
+    const unread = conversation.unreadCount > 0;
+    const prefix = conversation.lastDirection === "out" ? "You: " : "";
+    return `
+      <button type="button" class="inbox-thread${isActive ? " is-active" : ""}" data-inbox-thread="${escapeHtml(conversation.id)}">
+        <span class="inbox-avatar">${escapeHtml(getInitials(conversation.customerName))}</span>
+        <span class="inbox-thread-body">
+          <span class="inbox-thread-top">
+            <strong>${escapeHtml(conversation.customerName)}</strong>
+            <em>${escapeHtml(formatThreadTime(conversation.lastMessageAt))}</em>
+          </span>
+          <span class="inbox-thread-bottom">
+            <span class="inbox-thread-preview">${escapeHtml(prefix + (conversation.lastMessageText || ""))}</span>
+            ${unread ? `<span class="inbox-thread-badge">${conversation.unreadCount > 99 ? "99+" : conversation.unreadCount}</span>` : ""}
+          </span>
+        </span>
+      </button>
+    `;
+  }).join("");
+}
+
+function renderInboxMessages(messages) {
+  if (!inboxMessagesEl) return;
+
+  if (!messages.length) {
+    inboxMessagesEl.innerHTML = `<div class="inbox-day-chip">No messages yet</div>`;
+    return;
+  }
+
+  inboxMessagesEl.innerHTML = messages.map((message) => {
+    const outbound = message.direction === "out";
+    const caption = message.caption || message.mediaCaption || "";
+    const body = message.text || caption || "";
+    const ticks = outbound
+      ? `<i class="inbox-ticks ${message.status === "read" ? "is-read" : ""}" aria-hidden="true">${["delivered", "read"].includes(message.status) ? "✓✓" : "✓"}</i>`
+      : "";
+    return `
+      <div class="inbox-bubble ${outbound ? "is-out" : "is-in"}">
+        ${caption && body !== caption ? `<span class="inbox-bubble-tag">${escapeHtml(caption)}</span>` : ""}
+        <p>${escapeHtml(body)}</p>
+        <span class="inbox-bubble-meta">${escapeHtml(formatClockTime(message.sentAt))}${ticks}</span>
+      </div>
+    `;
+  }).join("");
+
+  inboxMessagesEl.scrollTop = inboxMessagesEl.scrollHeight;
+}
+
+function applyInboxWindowState(conversation) {
+  inboxState.activeWindowOpen = Boolean(conversation?.windowOpen);
+  const disabled = !inboxState.activeWindowOpen;
+
+  if (inboxInput) {
+    inboxInput.disabled = disabled;
+    inboxInput.placeholder = disabled
+      ? "24-hour reply window closed"
+      : "Type a message";
+  }
+  if (inboxSendButton) inboxSendButton.disabled = disabled;
+
+  if (inboxWindowNote) {
+    if (disabled) {
+      inboxWindowNote.hidden = false;
+      inboxWindowNote.textContent = "The 24-hour reply window has closed. Send an approved template from Send WhatsApp to re-open this conversation.";
+    } else {
+      inboxWindowNote.hidden = true;
+    }
+  }
+}
+
+async function loadInboxConversations(silent = false) {
+  if (!inboxThreads) return;
+  try {
+    const data = await requestJson("/api/inbox/conversations");
+    inboxState.conversations = data.conversations || [];
+    updateInboxRailBadge(data.totalUnread || 0);
+    renderInboxConversations();
+  } catch (error) {
+    if (!silent) {
+      inboxThreads.innerHTML = `<div class="inbox-empty">${escapeHtml(error.message)}</div>`;
+    }
+  }
+}
+
+async function openInboxConversation(conversationId) {
+  if (!conversationId) return;
+  inboxState.activeId = conversationId;
+  setInboxStatus("");
+  setInboxPane("chat");
+
+  if (inboxChatEmpty) inboxChatEmpty.hidden = true;
+  if (inboxChatActive) inboxChatActive.hidden = false;
+
+  const conversation = inboxState.conversations.find((item) => item.id === conversationId);
+  if (conversation) {
+    if (inboxActiveName) inboxActiveName.textContent = conversation.customerName;
+    if (inboxActivePhone) inboxActivePhone.textContent = `+${conversation.customerPhone}`;
+    if (inboxActiveAvatar) inboxActiveAvatar.textContent = getInitials(conversation.customerName);
+  }
+
+  renderInboxConversations();
+
+  try {
+    inboxState.loadingActive = true;
+    const data = await requestJson(`/api/inbox/conversations/${conversationId}/messages`);
+    if (inboxState.activeId !== conversationId) return;
+    renderInboxMessages(data.messages || []);
+    applyInboxWindowState(data.conversation);
+    if (inboxInput && !inboxInput.disabled) inboxInput.focus();
+    // Unread was cleared server-side; refresh the list badges.
+    loadInboxConversations(true);
+  } catch (error) {
+    setInboxStatus(error.message, true);
+  } finally {
+    inboxState.loadingActive = false;
+  }
+}
+
+async function refreshActiveConversation() {
+  if (!inboxState.activeId || inboxState.loadingActive) return;
+  try {
+    const data = await requestJson(`/api/inbox/conversations/${inboxState.activeId}/messages`);
+    if (!data.conversation) return;
+    renderInboxMessages(data.messages || []);
+    applyInboxWindowState(data.conversation);
+  } catch (error) {
+    // Silent during polling.
+  }
+}
+
+async function sendInboxReply() {
+  const conversationId = inboxState.activeId;
+  if (!conversationId || !inboxInput) return;
+
+  const text = inboxInput.value.trim();
+  if (!text) return;
+
+  if (inboxSendButton) inboxSendButton.disabled = true;
+  setInboxStatus("");
+
+  try {
+    const data = await requestJson(`/api/inbox/conversations/${conversationId}/reply`, {
+      method: "POST",
+      body: JSON.stringify({ text })
+    });
+    inboxInput.value = "";
+    autoGrowInboxInput();
+    if (data.conversation) applyInboxWindowState(data.conversation);
+    await refreshActiveConversation();
+    await loadInboxConversations(true);
+  } catch (error) {
+    setInboxStatus(error.message, true);
+  } finally {
+    if (inboxSendButton) inboxSendButton.disabled = !inboxState.activeWindowOpen;
+  }
+}
+
+function autoGrowInboxInput() {
+  if (!inboxInput) return;
+  inboxInput.style.height = "auto";
+  inboxInput.style.height = `${Math.min(inboxInput.scrollHeight, 120)}px`;
+}
+
+async function pollInboxUnread() {
+  try {
+    const data = await requestJson("/api/inbox/unread");
+    updateInboxRailBadge(data.totalUnread || 0);
+  } catch (error) {
+    // Ignore polling errors.
+  }
+}
+
+function startInboxView() {
+  loadInboxConversations();
+  if (inboxState.activeId) refreshActiveConversation();
+
+  if (inboxState.pollTimer) clearInterval(inboxState.pollTimer);
+  inboxState.pollTimer = setInterval(() => {
+    loadInboxConversations(true);
+    refreshActiveConversation();
+  }, INBOX_POLL_MS);
+}
+
+function stopInboxPolling() {
+  if (inboxState.pollTimer) {
+    clearInterval(inboxState.pollTimer);
+    inboxState.pollTimer = null;
+  }
+}
+
+function onPortalViewShown(viewId) {
+  if (viewId === "inbox") {
+    startInboxView();
+  } else {
+    stopInboxPolling();
+  }
+}
+
+if (inboxThreads) {
+  inboxThreads.addEventListener("click", (event) => {
+    const thread = event.target.closest("[data-inbox-thread]");
+    if (!thread) return;
+    openInboxConversation(thread.getAttribute("data-inbox-thread"));
+  });
+}
+
+if (inboxSearchInput) {
+  inboxSearchInput.addEventListener("input", () => {
+    inboxState.search = inboxSearchInput.value;
+    renderInboxConversations();
+  });
+}
+
+if (inboxRefreshButton) {
+  inboxRefreshButton.addEventListener("click", () => loadInboxConversations());
+}
+
+if (inboxBackButton) {
+  inboxBackButton.addEventListener("click", () => setInboxPane("list"));
+}
+
+if (inboxComposer) {
+  inboxComposer.addEventListener("submit", (event) => {
+    event.preventDefault();
+    sendInboxReply();
+  });
+}
+
+if (inboxInput) {
+  inboxInput.addEventListener("input", autoGrowInboxInput);
+  inboxInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      sendInboxReply();
+    }
+  });
+}
+
+// ============================================================
+// Manage Groups: contact segments defined by a shared tag.
+// ============================================================
+const groupForm = document.querySelector("[data-group-form]");
+const groupNameInput = document.querySelector("[data-group-name]");
+const groupTagInput = document.querySelector("[data-group-tag]");
+const groupDescriptionInput = document.querySelector("[data-group-description]");
+const groupMessage = document.querySelector("[data-group-message]");
+const groupList = document.querySelector("[data-group-list]");
+const refreshGroupsButton = document.querySelector("[data-refresh-groups]");
+const toggleGroupFormButton = document.querySelector("[data-toggle-group-form]");
+const groupModal = document.querySelector("[data-group-modal]");
+const closeGroupModalButtons = document.querySelectorAll("[data-close-group-modal]");
+const groupMembers = document.querySelector("[data-group-members]");
+const groupMembersTitle = document.querySelector("[data-group-members-title]");
+const groupMembersList = document.querySelector("[data-group-members-list]");
+const groupMembersClose = document.querySelector("[data-group-members-close]");
+const assignModal = document.querySelector("[data-assign-modal]");
+const assignGroupListEl = document.querySelector("[data-assign-group-list]");
+const assignMessage = document.querySelector("[data-assign-message]");
+const assignContactName = document.querySelector("[data-assign-contact-name]");
+const closeAssignModalButtons = document.querySelectorAll("[data-close-assign-modal]");
+const assignState = { contactId: null };
+
+function setGroupMessage(message, isError = false) {
+  if (!groupMessage) return;
+  groupMessage.textContent = message || "";
+  groupMessage.classList.toggle("error", Boolean(isError));
+}
+
+function openGroupModal() {
+  if (!groupModal) return;
+  setGroupMessage("");
+  groupModal.hidden = false;
+  document.body.classList.add("modal-open");
+  setTimeout(() => groupNameInput?.focus(), 50);
+}
+
+function closeGroupModal() {
+  if (!groupModal) return;
+  groupModal.hidden = true;
+  document.body.classList.remove("modal-open");
+  if (groupNameInput) groupNameInput.value = "";
+  if (groupTagInput) groupTagInput.value = "";
+  if (groupDescriptionInput) groupDescriptionInput.value = "";
+  setGroupMessage("");
+}
+
+function renderGroups(segments) {
+  if (!groupList) return;
+
+  if (!segments.length) {
+    groupList.innerHTML = `<div class="empty-row">No groups yet. Create one to organise contacts by tag.</div>`;
+    return;
+  }
+
+  groupList.innerHTML = segments.map((segment) => `
+    <div class="table-row group-table-row">
+      <strong>${escapeHtml(segment.name)}</strong>
+      <span><code class="group-tag-pill">${escapeHtml(segment.tag)}</code></span>
+      <span>${Number(segment.memberCount || 0)}</span>
+      <span>${escapeHtml(segment.description || "-")}</span>
+      <span class="group-row-actions">
+        <button type="button" class="btn btn-outline btn-small" data-view-group="${escapeHtml(segment._id)}" data-group-label="${escapeHtml(segment.name)}">View</button>
+        <button type="button" class="group-action danger" data-delete-group="${escapeHtml(segment._id)}" data-group-label="${escapeHtml(segment.name)}" aria-label="Delete group" title="Delete group">&times;</button>
+      </span>
+    </div>
+  `).join("");
+}
+
+async function loadGroups() {
+  if (!groupList) return;
+  try {
+    const data = await requestJson("/api/contacts/segments");
+    renderGroups(data.segments || []);
+  } catch (error) {
+    groupList.innerHTML = `<div class="empty-row">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function createGroup() {
+  const name = (groupNameInput?.value || "").trim();
+  const tag = (groupTagInput?.value || "").trim();
+  const description = (groupDescriptionInput?.value || "").trim();
+
+  if (!name || !tag) {
+    setGroupMessage("Group name and tag are required.", true);
+    return;
+  }
+
+  setGroupMessage("Creating group...");
+  await requestJson("/api/contacts/segments", {
+    method: "POST",
+    body: JSON.stringify({ name, tag, description })
+  });
+
+  closeGroupModal();
+  await loadGroups();
+}
+
+function renderGroupMembers(members) {
+  if (!groupMembersList) return;
+
+  if (!members.length) {
+    groupMembersList.innerHTML = `<div class="empty-row">No contacts carry this tag yet.</div>`;
+    return;
+  }
+
+  groupMembersList.innerHTML = members.map((contact) => `
+    <div class="table-row contact-table-row">
+      <strong>${escapeHtml(contact.name || "")}</strong>
+      <span>${escapeHtml(contact.phone || "")}</span>
+      <em class="${contact.optIn?.status ? "approved" : "pending"}">${contact.optIn?.status ? "Yes" : "Missing"}</em>
+      <span>${escapeHtml(contact.status || "active")}</span>
+    </div>
+  `).join("");
+}
+
+async function viewGroupMembers(segmentId, label) {
+  if (!groupMembers) return;
+  groupMembers.hidden = false;
+  if (groupMembersTitle) groupMembersTitle.textContent = `Members of ${label || "group"}`;
+  if (groupMembersList) groupMembersList.innerHTML = `<div class="empty-row">Loading members...</div>`;
+  groupMembers.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+  try {
+    const data = await requestJson(`/api/contacts/segments/${segmentId}/members`);
+    renderGroupMembers(data.members || []);
+  } catch (error) {
+    if (groupMembersList) groupMembersList.innerHTML = `<div class="empty-row">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function deleteGroup(segmentId, label) {
+  const confirmed = await showConfirmModal({
+    eyebrow: "Group",
+    title: `Delete the group "${label || ""}"?`,
+    message: "This removes the group only. Contacts and their tags are kept.",
+    confirmText: "Delete group"
+  });
+  if (!confirmed) return;
+
+  setGroupMessage("Deleting group...");
+  await requestJson(`/api/contacts/segments/${segmentId}`, { method: "DELETE" });
+  if (groupMembers) groupMembers.hidden = true;
+  setGroupMessage("Group deleted.");
+  await loadGroups();
+}
+
+if (groupForm) {
+  groupForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submitButton = groupForm.querySelector("button[type='submit']");
+    if (submitButton) submitButton.disabled = true;
+    try {
+      await createGroup();
+    } catch (error) {
+      setGroupMessage(error.message, true);
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+    }
+  });
+}
+
+if (toggleGroupFormButton) {
+  toggleGroupFormButton.addEventListener("click", () => openGroupModal());
+}
+
+closeGroupModalButtons.forEach((button) => {
+  button.addEventListener("click", () => closeGroupModal());
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && groupModal && !groupModal.hidden) {
+    closeGroupModal();
+  }
+});
+
+if (refreshGroupsButton) {
+  refreshGroupsButton.addEventListener("click", () => loadGroups());
+}
+
+if (groupList) {
+  groupList.addEventListener("click", (event) => {
+    const viewButton = event.target.closest("[data-view-group]");
+    if (viewButton) {
+      viewGroupMembers(viewButton.getAttribute("data-view-group"), viewButton.getAttribute("data-group-label"));
+      return;
+    }
+    const deleteButton = event.target.closest("[data-delete-group]");
+    if (deleteButton) {
+      deleteGroup(deleteButton.getAttribute("data-delete-group"), deleteButton.getAttribute("data-group-label"))
+        .catch((error) => setGroupMessage(error.message, true));
+    }
+  });
+}
+
+if (groupMembersClose) {
+  groupMembersClose.addEventListener("click", () => {
+    if (groupMembers) groupMembers.hidden = true;
+  });
+}
+
+// --- Assign a contact to groups (toggles the group's tag on the contact) ---
+function setAssignMessage(message, isError = false) {
+  if (!assignMessage) return;
+  assignMessage.textContent = message || "";
+  assignMessage.classList.toggle("error", Boolean(isError));
+}
+
+function getContactById(contactId) {
+  return (setupState.contacts || []).find((contact) => contact._id === contactId) || null;
+}
+
+async function renderAssignGroups() {
+  if (!assignGroupListEl) return;
+  assignGroupListEl.innerHTML = `<div class="empty-row">Loading groups...</div>`;
+
+  try {
+    const data = await requestJson("/api/contacts/segments");
+    const segments = data.segments || [];
+    if (!segments.length) {
+      assignGroupListEl.innerHTML = `<div class="empty-row">No groups yet. Create one from Manage Groups first.</div>`;
+      return;
+    }
+
+    const contact = getContactById(assignState.contactId) || { tags: [] };
+    const tags = contact.tags || [];
+    assignGroupListEl.innerHTML = segments.map((segment) => {
+      const checked = tags.includes(segment.tag);
+      return `
+        <label class="assign-group-item">
+          <input type="checkbox" data-assign-toggle data-segment-id="${escapeHtml(segment._id)}" ${checked ? "checked" : ""}>
+          <span class="assign-group-copy">
+            <strong>${escapeHtml(segment.name)}</strong>
+            <code class="group-tag-pill">${escapeHtml(segment.tag)}</code>
+          </span>
+        </label>
+      `;
+    }).join("");
+  } catch (error) {
+    assignGroupListEl.innerHTML = `<div class="empty-row">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function openAssignModal(contactId, name) {
+  if (!assignModal) return;
+  assignState.contactId = contactId;
+  setAssignMessage("");
+  if (assignContactName) assignContactName.textContent = `Groups for ${name || "this contact"}`;
+  assignModal.hidden = false;
+  document.body.classList.add("modal-open");
+  renderAssignGroups();
+}
+
+function closeAssignModal() {
+  if (!assignModal) return;
+  assignModal.hidden = true;
+  document.body.classList.remove("modal-open");
+  assignState.contactId = null;
+}
+
+async function toggleContactGroup(segmentId, attach, checkbox) {
+  checkbox.disabled = true;
+  try {
+    const data = attach
+      ? await requestJson(`/api/contacts/segments/${segmentId}/members`, {
+        method: "POST",
+        body: JSON.stringify({ contactId: assignState.contactId })
+      })
+      : await requestJson(`/api/contacts/segments/${segmentId}/members/${assignState.contactId}`, {
+        method: "DELETE"
+      });
+
+    if (data.contact) {
+      const contact = getContactById(assignState.contactId);
+      if (contact) contact.tags = data.contact.tags || [];
+      renderContactRows(setupState.contacts);
+    }
+    setAssignMessage(attach ? "Added to group." : "Removed from group.");
+    loadGroups().catch(() => null);
+  } catch (error) {
+    checkbox.checked = !attach;
+    setAssignMessage(error.message, true);
+  } finally {
+    checkbox.disabled = false;
+  }
+}
+
+if (contactList) {
+  contactList.addEventListener("click", (event) => {
+    const assignButton = event.target.closest("[data-assign-groups]");
+    if (!assignButton) return;
+    openAssignModal(assignButton.getAttribute("data-assign-groups"), assignButton.getAttribute("data-contact-name"));
+  });
+}
+
+if (assignGroupListEl) {
+  assignGroupListEl.addEventListener("change", (event) => {
+    const checkbox = event.target.closest("[data-assign-toggle]");
+    if (!checkbox) return;
+    toggleContactGroup(checkbox.getAttribute("data-segment-id"), checkbox.checked, checkbox);
+  });
+}
+
+closeAssignModalButtons.forEach((button) => {
+  button.addEventListener("click", () => closeAssignModal());
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && assignModal && !assignModal.hidden) {
+    closeAssignModal();
   }
 });
 
@@ -2383,7 +3036,14 @@ loadBilling().catch((error) => {
   }
 });
 loadContacts().catch((error) => setContactMessage(error.message, true));
+loadGroups().catch((error) => setGroupMessage(error.message, true));
 loadApprovedTemplates().catch((error) => setSendMessage(error.message, true));
 loadTemplates().catch((error) => setTemplateMessage(error.message, true));
 loadSendHistory().catch((error) => setSendMessage(error.message, true));
 loadApiKeys().catch((error) => setApiMessage(error.message, true));
+
+// Keep the Inbox rail badge live regardless of the current view.
+pollInboxUnread();
+if (inboxRailBadge) {
+  inboxState.unreadTimer = setInterval(pollInboxUnread, INBOX_UNREAD_POLL_MS);
+}

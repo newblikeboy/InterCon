@@ -12,5 +12,9 @@ router.post("/import", contactController.importContacts);
 router.get("/opt-outs", contactController.listOptOuts);
 router.get("/segments", contactController.listSegments);
 router.post("/segments", contactController.createSegment);
+router.get("/segments/:segmentId/members", contactController.getSegmentMembers);
+router.post("/segments/:segmentId/members", contactController.assignSegmentMember);
+router.delete("/segments/:segmentId/members/:contactId", contactController.removeSegmentMember);
+router.delete("/segments/:segmentId", contactController.deleteSegment);
 
 module.exports = router;

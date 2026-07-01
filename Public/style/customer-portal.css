@@ -6192,6 +6192,54 @@ address {
 }
 
 /* ==========================================================================
+   Coexistence Onboarding — eligibility, steps, and limitations
+   ========================================================================== */
+.coex-panel .form-note {
+  margin: 4px 0 18px;
+  max-width: 70ch;
+}
+
+.coex-panel .form-note code {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--soft);
+  font-size: 12.5px;
+}
+
+.coex-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+  margin: 4px 0 20px;
+}
+
+.coex-block {
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(17, 41, 29, 0.04);
+}
+
+.coex-limits {
+  padding: 18px 20px;
+  border: 1px solid #f0d9a8;
+  border-radius: 14px;
+  background: #fff9ee;
+  margin-bottom: 18px;
+}
+
+.coex-limits h3 {
+  color: #8a5a00;
+}
+
+/* Limitations use an amber warning marker instead of the green check bullet. */
+.coex-limit-list li::before {
+  background: rgba(216, 154, 36, 0.18);
+  box-shadow: inset 0 0 0 2px #d89a24;
+}
+
+/* ==========================================================================
    Connected WABA — channels table
    ========================================================================== */
 .waba-toolbar {
@@ -7513,6 +7561,16 @@ address {
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.4;
+}
+
+.inbox-bubble.is-revoked p {
+  color: var(--muted);
+}
+
+.inbox-edited {
+  margin-right: 6px;
+  font-style: italic;
+  opacity: 0.75;
 }
 
 .inbox-bubble-tag {

@@ -131,6 +131,9 @@ const mediaUploadSubmit = document.querySelector("[data-media-upload-submit]");
 const refreshMediaButton = document.querySelector("[data-refresh-media]");
 const defaultPortalView = "home";
 let facebookSdkPromise;
+// Once resolved, holds { FB, config } synchronously so the Meta popup can be
+// opened directly inside a click gesture (required by Safari's popup blocker).
+let facebookSdk = null;
 let razorpayCheckoutPromise;
 let embeddedSignupSessionInfo = null;
 let embeddedSignupSessionResolvers = [];
@@ -1013,8 +1016,8 @@ window.addEventListener("message", (event) => {
 });
 
 async function loadFacebookSdk() {
-  if (window.FB) {
-    return window.FB;
+  if (facebookSdk) {
+    return facebookSdk;
   }
 
   if (facebookSdkPromise) {
@@ -1032,15 +1035,16 @@ async function loadFacebookSdk() {
           xfbml: true,
           version: config.version || "v25.0"
         });
-        resolve({
-          FB: window.FB,
-          config
-        });
+        facebookSdk = { FB: window.FB, config };
+        resolve(facebookSdk);
       };
 
       const existingScript = document.getElementById("facebook-jssdk");
       if (existingScript) {
-        existingScript.addEventListener("load", () => resolve({ FB: window.FB, config }));
+        existingScript.addEventListener("load", () => {
+          facebookSdk = { FB: window.FB, config };
+          resolve(facebookSdk);
+        });
         existingScript.addEventListener("error", () => reject(new Error("Unable to load Facebook SDK")));
         return;
       }
@@ -1099,7 +1103,7 @@ function getEmbeddedSignupExtras(config, overrides = {}) {
     sessionInfoVersion: "3"
   };
 
-  // Coexistence onboarding asks Meta for the WhatsApp Business app flow.
+  // Optional Meta feature flow override (empty = standard Cloud API onboarding).
   if (overrides.featureType) {
     extras.featureType = overrides.featureType;
   } else if (!Object.prototype.hasOwnProperty.call(extras, "featureType")) {
@@ -2612,58 +2616,84 @@ document.addEventListener("click", async (event) => {
   }
 });
 
-async function runEmbeddedSignup({ button, featureType, onboardingType, setMessage }) {
+function runEmbeddedSignup({ button, featureType, onboardingType, setMessage }) {
+  if (button.disabled) return;
+
+  // Safari (and iOS) only allow a popup that is opened synchronously inside the
+  // click gesture. FB.login opens a popup, so the SDK must already be loaded —
+  // we cannot `await` the SDK first or Safari will block the popup. If the SDK
+  // is not ready yet, kick off loading and ask the user to click once more.
+  if (!facebookSdk) {
+    setMessage("Preparing Meta login, one moment...");
+    loadFacebookSdk()
+      .then(() => setMessage("Ready — click connect again to open Meta."))
+      .catch((error) => setMessage(error.message, true));
+    return;
+  }
+
+  const { FB, config } = facebookSdk;
+  if (!config.loginConfigId) {
+    setMessage("Meta Embedded Signup configuration ID is missing", true);
+    return;
+  }
+
   button.disabled = true;
   const originalText = button.textContent;
   button.textContent = "Opening Meta...";
+  embeddedSignupSessionInfo = null;
+  setMessage(onboardingType === "coexistence"
+    ? "Complete the Meta popup and scan the QR code with the WhatsApp Business app to connect in coexistence mode."
+    : "Complete the Meta popup to connect your WhatsApp account.");
 
+  // launchEmbeddedSignup calls FB.login synchronously (opens the popup); the
+  // returned promise resolves once the user finishes the Meta flow. It may throw
+  // synchronously (e.g. non-HTTPS), so guard before chaining.
+  let loginPromise;
   try {
-    const { FB, config } = await loadFacebookSdk();
-    if (!config.loginConfigId) {
-      throw new Error("Meta Embedded Signup configuration ID is missing");
-    }
-
-    embeddedSignupSessionInfo = null;
-    setMessage(onboardingType === "coexistence"
-      ? "Complete the Meta popup to connect the WhatsApp Business app number in coexistence mode."
-      : "Complete the Meta popup to connect your WhatsApp account.");
-
-    const loginResponse = await launchEmbeddedSignup(FB, config, featureType ? { featureType } : {});
-    const code = loginResponse.authResponse?.code;
-
-    if (!code) {
-      throw new Error(getMetaLoginFailureMessage(loginResponse));
-    }
-
-    const sessionInfo = await waitForEmbeddedSignupSessionInfo();
-
-    const result = await requestJson("/api/meta/embedded-signup/complete", {
-      method: "POST",
-      body: JSON.stringify({
-        code,
-        sessionInfo,
-        onboardingType
-      })
-    });
-
-    renderOnboardingStatus(result.tenant);
-    if (result.tenant?.onboardingStatus === "meta_connected" && result.tenant?.meta?.phoneNumberId) {
-      if (onboardingType === "coexistence") {
-        setMessage("WhatsApp Business app number connected in coexistence mode. The customer keeps using their app while you message from InterCon.");
-      } else if (result.meta?.phoneRegistration?.success) {
-        setMessage("WhatsApp account connected and phone registered for Cloud API.");
-      } else if (result.meta?.phoneRegistration) {
-        setMessage(`WhatsApp account connected. Phone registration needs attention: ${result.meta.phoneRegistration.message}`, true);
-      } else {
-        setMessage("WhatsApp account connected.");
-      }
-    }
+    loginPromise = launchEmbeddedSignup(FB, config, featureType ? { featureType } : {});
   } catch (error) {
     setMessage(error.message, true);
-  } finally {
     button.disabled = false;
     button.textContent = originalText;
+    return;
   }
+
+  loginPromise
+    .then(async (loginResponse) => {
+      const code = loginResponse.authResponse?.code;
+      if (!code) {
+        throw new Error(getMetaLoginFailureMessage(loginResponse));
+      }
+
+      const sessionInfo = await waitForEmbeddedSignupSessionInfo();
+
+      const result = await requestJson("/api/meta/embedded-signup/complete", {
+        method: "POST",
+        body: JSON.stringify({
+          code,
+          sessionInfo,
+          onboardingType
+        })
+      });
+
+      renderOnboardingStatus(result.tenant);
+      if (result.tenant?.onboardingStatus === "meta_connected" && result.tenant?.meta?.phoneNumberId) {
+        if (onboardingType === "coexistence") {
+          setMessage("Number connected in coexistence mode. The customer keeps using the WhatsApp Business app while you message from InterCon.");
+        } else if (result.meta?.phoneRegistration?.success) {
+          setMessage("WhatsApp account connected and phone registered for Cloud API.");
+        } else if (result.meta?.phoneRegistration) {
+          setMessage(`WhatsApp account connected. Phone registration needs attention: ${result.meta.phoneRegistration.message}`, true);
+        } else {
+          setMessage("WhatsApp account connected.");
+        }
+      }
+    })
+    .catch((error) => setMessage(error.message, true))
+    .finally(() => {
+      button.disabled = false;
+      button.textContent = originalText;
+    });
 }
 
 connectWhatsAppButtons.forEach((button) => {
@@ -3578,15 +3608,26 @@ function renderInboxMessages(messages) {
   inboxMessagesEl.innerHTML = messages.map((message) => {
     const outbound = message.direction === "out";
     const caption = message.caption || message.mediaCaption || "";
-    const body = message.text || caption || "";
     const ticks = outbound
       ? `<i class="inbox-ticks ${message.status === "read" ? "is-read" : ""}" aria-hidden="true">${["delivered", "read"].includes(message.status) ? "✓✓" : "✓"}</i>`
       : "";
+
+    if (message.revoked) {
+      return `
+        <div class="inbox-bubble ${outbound ? "is-out" : "is-in"} is-revoked">
+          <p><em>🚫 This message was deleted</em></p>
+          <span class="inbox-bubble-meta">${escapeHtml(formatClockTime(message.sentAt))}${ticks}</span>
+        </div>
+      `;
+    }
+
+    const body = message.text || caption || "";
+    const editedTag = message.edited ? `<span class="inbox-edited">edited</span>` : "";
     return `
       <div class="inbox-bubble ${outbound ? "is-out" : "is-in"}">
         ${caption && body !== caption ? `<span class="inbox-bubble-tag">${escapeHtml(caption)}</span>` : ""}
         <p>${escapeHtml(body)}</p>
-        <span class="inbox-bubble-meta">${escapeHtml(formatClockTime(message.sentAt))}${ticks}</span>
+        <span class="inbox-bubble-meta">${editedTag}${escapeHtml(formatClockTime(message.sentAt))}${ticks}</span>
       </div>
     `;
   }).join("");
@@ -3900,6 +3941,9 @@ function onPortalViewShown(viewId) {
   }
   if (viewId === "connect" || viewId === "coexistence") {
     loadOnboardingStatus().catch((error) => setMetaConnectMessage(error.message, true));
+    // Warm up the Facebook SDK so the Meta popup can be opened synchronously on
+    // click (Safari blocks popups opened after an async wait).
+    loadFacebookSdk().catch(() => {});
   }
   if (viewId === "billing" || viewId === "payments") {
     loadBilling().catch((error) => {
@@ -4373,6 +4417,10 @@ document.addEventListener("keydown", (event) => {
 showPortalView(getInitialViewId(), true);
 renderApiBaseUrl();
 loadAuthenticatedProfile().catch(() => renderAuthenticatedProfile());
+
+// Preload the Facebook SDK at startup so the Meta onboarding popup can open
+// synchronously inside the click gesture (required by Safari's popup blocker).
+loadFacebookSdk().catch(() => {});
 
 // Keep the Inbox rail badge live regardless of the current view.
 pollInboxUnread();

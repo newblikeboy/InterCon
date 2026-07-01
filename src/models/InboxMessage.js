@@ -60,6 +60,16 @@ const inboxMessageSchema = new mongoose.Schema(
       enum: ["received", "queued", "sent", "delivered", "read", "failed"],
       default: "received"
     },
+    // Coexistence: the business edited this message from the WhatsApp Business app.
+    edited: {
+      type: Boolean,
+      default: false
+    },
+    // Coexistence: the business deleted/revoked this message from the app.
+    revoked: {
+      type: Boolean,
+      default: false
+    },
     error: {
       type: String,
       maxlength: 1000,

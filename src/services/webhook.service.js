@@ -29,7 +29,9 @@ function getMetaWebhookSetup(req) {
     appSecretConfigured: Boolean(getWebhookAppSecret()),
     requiredSubscriptionFields: [
       "messages",
-      "message_template_status_update"
+      "message_template_status_update",
+      // Coexistence: mirror messages the business sends from the WhatsApp Business app.
+      "smb_message_echoes"
     ]
   };
 }
@@ -343,6 +345,112 @@ async function processInboundMessages(tenantId, value = {}, wabaId, phoneNumberI
   }
 }
 
+// Upsert a contact touched by a business-app echo. Unlike an inbound reply,
+// a business-initiated message is NOT proof of opt-in, so we don't claim it.
+async function resolveEchoContact(tenantId, phone, name) {
+  return Contact.findOneAndUpdate(
+    { tenantId, phone },
+    {
+      $setOnInsert: {
+        tenantId,
+        phone,
+        name: name || phone,
+        source: "whatsapp_coexistence",
+        status: "active"
+      }
+    },
+    { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
+  ).lean();
+}
+
+// Coexistence: messages the business sends from the WhatsApp Business app are
+// mirrored to the webhook as `smb_message_echoes`. Store them as outbound
+// inbox messages so the InterCon inbox reflects the full conversation.
+async function processMessageEchoes(tenantId, value = {}, wabaId, phoneNumberId) {
+  const echoes = Array.isArray(value.message_echoes) ? value.message_echoes : [];
+  if (!echoes.length) return;
+
+  for (const echo of echoes) {
+    // In an echo, `from` is the business number and `to` is the customer.
+    const customerPhone = String(echo.to || "").replace(/^\+/, "").trim();
+    if (!customerPhone) continue;
+    const type = echo.type || "text";
+
+    // The business deleted a message from the app.
+    if (type === "revoke") {
+      const originalId = echo.revoke?.original_message_id;
+      if (originalId) {
+        await InboxMessage.findOneAndUpdate(
+          { tenantId, metaMessageId: originalId },
+          { $set: { revoked: true, text: "", mediaCaption: "", type: "revoke" } }
+        );
+      }
+      continue;
+    }
+
+    // The business edited a message from the app.
+    if (type === "edit") {
+      const originalId = echo.edit?.original_message_id;
+      if (originalId) {
+        const edited = describeIncomingMessage(echo.edit?.message || {});
+        await InboxMessage.findOneAndUpdate(
+          { tenantId, metaMessageId: originalId },
+          { $set: { edited: true, type: edited.type, text: edited.text, mediaCaption: edited.caption } }
+        );
+      }
+      continue;
+    }
+
+    const metaMessageId = echo.id || "";
+    if (!metaMessageId) continue;
+
+    // Skip duplicates Meta may redeliver.
+    const existing = await InboxMessage.findOne({ tenantId, metaMessageId }).select("_id").lean();
+    if (existing) continue;
+
+    const summary = describeIncomingMessage(echo);
+    const previewText = buildPreviewText(summary);
+    const sentAt = echo.timestamp
+      ? new Date(Number(echo.timestamp) * 1000)
+      : new Date();
+
+    const contact = await resolveEchoContact(tenantId, customerPhone, "");
+
+    const conversation = await Conversation.findOneAndUpdate(
+      { tenantId, customerPhone },
+      {
+        $set: {
+          contactId: contact?._id,
+          ...(wabaId ? { wabaId } : {}),
+          ...(phoneNumberId ? { phoneNumberId } : {}),
+          lastMessageText: previewText,
+          lastMessageAt: sentAt,
+          lastDirection: "out"
+        },
+        $setOnInsert: {
+          tenantId,
+          customerPhone
+        }
+      },
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
+    );
+
+    await InboxMessage.create({
+      tenantId,
+      conversationId: conversation._id,
+      contactId: contact?._id,
+      customerPhone,
+      direction: "out",
+      type: summary.type,
+      text: summary.text,
+      mediaCaption: summary.caption,
+      metaMessageId,
+      status: "sent",
+      sentAt
+    });
+  }
+}
+
 async function processPhoneNameUpdate(tenantId, value = {}) {
   const displayPhoneNumber = String(value.display_phone_number || "").replace(/^\+/, "");
   const requestedName = value.requested_verified_name || value.verified_name || "";
@@ -393,6 +501,10 @@ async function processChange(entry, change, payload) {
 
     if (tenant && change.value?.messages?.length) {
       await processInboundMessages(tenant._id, change.value, wabaId, phoneNumberId);
+    }
+
+    if (tenant && change.value?.message_echoes?.length) {
+      await processMessageEchoes(tenant._id, change.value, wabaId, phoneNumberId);
     }
 
     event.status = "processed";

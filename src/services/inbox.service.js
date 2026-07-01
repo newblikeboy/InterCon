@@ -72,6 +72,8 @@ function publicMessage(message) {
     text: message.text || "",
     mediaCaption: message.mediaCaption || "",
     status: message.status || (message.direction === "in" ? "received" : "sent"),
+    edited: Boolean(message.edited),
+    revoked: Boolean(message.revoked),
     error: message.error || "",
     sentAt: message.sentAt || message.createdAt
   };

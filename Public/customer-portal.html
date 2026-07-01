@@ -133,7 +133,7 @@
                 <svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4Z"/><path d="m8 10 3 3 5-5"/></svg>
               </span>
               <strong>Coexistence Onboarding</strong>
-              <small>Onboard WhatsApp Business app users.</small>
+              <small>Keep the WhatsApp Business app and add the API on the same number.</small>
             </a>
             <a class="launch-card" href="#templates">
               <span class="launch-icon tint-violet" aria-hidden="true">
@@ -649,20 +649,55 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
         </div>
       </section>
 
-      <!-- ============ Placeholder feature views (future backend) ============ -->
+      <!-- ============ Coexistence Onboarding (WhatsApp Business app users) ============ -->
       <section class="portal-view" id="coexistence" data-portal-view hidden>
-        <div class="console-panel">
+        <div class="console-panel coex-panel">
           <div class="template-actions">
             <span class="status-pill" data-coex-state>Ready</span>
             <button class="btn" type="button" data-coexistence-onboard>Start Coexistence Onboarding</button>
           </div>
-          <h3>How coexistence works</h3>
-          <ul class="task-list">
-            <li>The customer keeps the WhatsApp Business app running on their phone.</li>
-            <li>InterCon connects the same number to the Cloud API in coexistence mode &mdash; no Cloud&nbsp;API re-registration, so the app stays live.</li>
-            <li>Recent chats and contacts sync so your team can reply from InterCon too.</li>
-          </ul>
-          <p class="form-note">Requires the WhatsApp Business app on the customer's phone and a Meta app approved for WhatsApp Business app onboarding.</p>
+
+          <p class="form-note">
+            Coexistence lets a business keep using the <strong>WhatsApp Business app</strong>
+            while InterCon adds the Cloud API on the <strong>same number</strong> &mdash; no
+            re-registration, so the app stays live and chat history is preserved.
+          </p>
+
+          <div class="coex-grid">
+            <div class="coex-block">
+              <h3>Before you onboard &mdash; eligibility</h3>
+              <ul class="task-list">
+                <li>The customer already uses the <strong>WhatsApp Business app</strong> (version <strong>2.24.17 or newer</strong>) on the number.</li>
+                <li>The account is <strong>active</strong> &mdash; brand-new app accounts aren't eligible, and the app must be opened at least once every ~13 days.</li>
+                <li>The number is <strong>not</strong> already registered on the Cloud API (coexistence keeps it on the app).</li>
+                <li>The number is <strong>not</strong> a Nigeria or South Africa number &mdash; those regions aren't supported by Meta.</li>
+              </ul>
+            </div>
+
+            <div class="coex-block">
+              <h3>How it works</h3>
+              <ul class="task-list">
+                <li>Start onboarding &mdash; Meta opens a popup for the WhatsApp Business app flow.</li>
+                <li>The customer <strong>scans the QR code</strong> shown in the popup with their WhatsApp Business app.</li>
+                <li>They can choose to <strong>import up to 6 months of chat history</strong> and contacts.</li>
+                <li>The number connects to the API in coexistence mode &mdash; the app keeps working.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="coex-limits">
+            <h3>What to expect in coexistence mode</h3>
+            <ul class="task-list coex-limit-list">
+              <li>Throughput is fixed at <strong>5 messages/second</strong> to keep the app and API in sync.</li>
+              <li><strong>Templates can only be sent from the API/InterCon</strong>, not from the WhatsApp Business app.</li>
+              <li>Standard marketing messaging limits apply; the <strong>Marketing Messages Lite API is not supported</strong>.</li>
+              <li>The <strong>Official Business Account (green badge)</strong> and the <strong>Calling API</strong> are not supported; apply for Meta Verified instead.</li>
+              <li>Profile-picture updates aren't available after onboarding.</li>
+              <li><strong>Do not uninstall the WhatsApp Business app</strong> &mdash; it disconnects the account.</li>
+            </ul>
+          </div>
+
+          <p class="form-note">Requires a Meta app approved for WhatsApp Business app onboarding (feature <code>whatsapp_business_app_onboarding</code>).</p>
           <p class="contact-message" data-coex-message></p>
         </div>
       </section>

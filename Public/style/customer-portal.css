@@ -4498,40 +4498,174 @@ address {
     max-width: 88%;
   }
 
+  /* --- Responsive data tables → stacked label/value cards --------------
+     On phones the multi-column grid tables can't fit, so each data row
+     becomes its own card and every cell shows its column name via the
+     data-label attribute. The header row is hidden (its labels move into
+     the cards). Works for every table: WABA, contacts, templates, send
+     history, API keys, groups. */
+  .console-body .table-panel,
   .table-panel {
-    overflow: hidden;
-  }
-
-  .table-row {
-    grid-template-columns: 1fr !important;
-    gap: 6px;
-    min-width: 0;
-    min-height: 0;
-    padding: 13px;
-    align-items: start;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
   }
 
   .table-head {
     display: none;
   }
 
-  .table-row strong {
-    font-size: 15px;
+  .table-row:not(.table-head) {
+    grid-template-columns: 1fr !important;
+    gap: 9px;
+    min-width: 0 !important;
+    min-height: 0;
+    margin-bottom: 12px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 6px 16px rgba(17, 41, 29, 0.05);
+    align-items: stretch;
   }
 
-  .table-row span {
+  .table-row:not(.table-head):last-child {
+    margin-bottom: 0;
+  }
+
+  /* Each cell: column label on the left, value on the right */
+  .table-row:not(.table-head) > * {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    min-width: 0;
+    font-size: 13.5px;
+  }
+
+  .table-row:not(.table-head) > [data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
     color: var(--muted);
-    font-size: 13px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    white-space: nowrap;
   }
 
-  .table-row em {
-    justify-self: start;
+  /* First cell = card title (full width, no label) */
+  .table-row:not(.table-head) > strong:first-child {
+    display: block;
+    padding-bottom: 10px;
+    margin-bottom: 2px;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink);
+    font-size: 15.5px;
+    font-weight: 800;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+
+  .table-row:not(.table-head) > span {
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+
+  /* Value text hugs the right edge */
+  .table-row:not(.table-head) > span > :last-child,
+  .table-row:not(.table-head) > span {
+    text-align: right;
+  }
+
+  /* Status pills sit on the right without stretching */
+  .table-row:not(.table-head) em {
+    justify-self: end;
+    margin-left: auto;
+  }
+
+  /* Standalone action buttons span the card width */
+  .table-row:not(.table-head) > button {
+    justify-content: center;
+    width: 100%;
     margin-top: 2px;
+    padding: 11px 14px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    font-weight: 700;
   }
 
-  .table-row button {
-    justify-self: start;
-    padding: 0;
+  /* Grouped action cells (multiple buttons in one span) align right */
+  .table-row:not(.table-head) > .group-row-actions {
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  /* WABA row actions → a pair of full-width, labelled buttons that fill the
+     card, instead of two tiny icon squares floating on the right. */
+  .table-row:not(.table-head) > .waba-row-actions {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .table-row:not(.table-head) > .waba-row-actions::before {
+    display: none;
+  }
+
+  .table-row:not(.table-head) .waba-action {
+    display: inline-flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: auto;
+    height: 46px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .table-row:not(.table-head) .waba-action-icon {
+    font-size: 18px;
+  }
+
+  .table-row:not(.table-head) .waba-action-label {
+    display: inline;
+  }
+
+  /* WABA toolbar → full-width stacked controls (no ragged wrapping) */
+  .waba-toolbar {
+    gap: 8px;
+  }
+
+  .waba-toolbar .status-pill,
+  .waba-toolbar .btn {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+  }
+
+  /* WABA wide table: release desktop min-width + nowrap so it fits a card */
+  .console-body .table-panel .table-row.waba-row {
+    min-width: 0 !important;
+    font-size: 13.5px;
+  }
+
+  .console-body .table-panel .table-row.waba-row strong,
+  .console-body .table-panel .table-row.waba-row span {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  /* Empty / loading placeholder gets the same card treatment */
+  .table-panel .empty-row {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    text-align: center;
   }
 }
 
@@ -5330,6 +5464,12 @@ address {
   border-color: rgba(15, 159, 110, 0.3);
 }
 
+/* Desktop keeps the compact icon-only button; the text label only shows on
+   mobile where the row collapses into a card. */
+.waba-action-label {
+  display: none;
+}
+
 .waba-row-actions {
   display: inline-flex;
   align-items: center;
@@ -5713,7 +5853,10 @@ address {
 .inbox-list {
   display: grid;
   grid-template-rows: auto auto 1fr;
+  width: 100%;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
   border-right: 1px solid var(--line);
   background: #fff;
 }
@@ -6105,8 +6248,19 @@ address {
   margin: 0;
 }
 
-/* ---- Mobile: single pane (WhatsApp app style) --------------------------- */
-@media (max-width: 820px) {
+/* ---- Tablet / narrow desktop: keep BOTH panes (WhatsApp Web style) -------
+   The conversation list stays visible continuously; only the list column is
+   slimmed so the chat keeps enough room. Single-pane is reserved for real
+   phones below, so laptops (incl. Windows display scaling that shrinks the
+   effective width) never lose the list when a chat is opened. */
+@media (max-width: 820px) and (min-width: 561px) {
+  .inbox-app {
+    grid-template-columns: minmax(0, 38%) minmax(0, 1fr);
+  }
+}
+
+/* ---- Phones: single pane that swaps between list and chat ---------------- */
+@media (max-width: 560px) {
   .inbox-app {
     grid-template-columns: 1fr;
     height: calc(100vh - 170px);
@@ -6128,9 +6282,40 @@ address {
 
   .inbox-back {
     display: grid;
+    background: var(--soft);
+  }
+
+  .inbox-back:active {
+    background: rgba(15, 159, 110, 0.14);
   }
 
   .inbox-bubble {
     max-width: 84%;
+  }
+}
+
+/* ---- Desktop / tablet guard: the conversation list ALWAYS stays visible ---
+   Above phone width the layout is a fixed two-pane grid, so opening a chat
+   must never hide the list (WhatsApp Web behaviour). This overrides the
+   single-pane show/hide even if data-inbox-pane is set to "chat". */
+@media (min-width: 561px) {
+  .inbox-app {
+    grid-template-areas: "conversation-list conversation-chat";
+  }
+
+  .inbox-app[data-inbox-pane] .inbox-list {
+    display: grid !important;
+    grid-area: conversation-list;
+    visibility: visible;
+    opacity: 1;
+  }
+
+  .inbox-app[data-inbox-pane] .inbox-chat {
+    display: block !important;
+    grid-area: conversation-chat;
+  }
+
+  .inbox-back {
+    display: none;
   }
 }

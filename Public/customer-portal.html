@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>InterCon Customer Portal</title>
   <meta name="description" content="InterCon customer portal for connecting WhatsApp Business, managing contacts, creating templates, sending messages, and checking billing readiness.">
-  <link rel="stylesheet" href="style/customer-portal.css?v=groups-20260701i">
+  <link rel="stylesheet" href="style/customer-portal.css?v=inbox-20260701m">
 </head>
 <body class="portal-body console-body">
   <div class="portal-shell console-shell">
@@ -272,7 +272,6 @@
         <div class="waba-toolbar">
           <span class="status-pill" data-meta-connect-state>Checking</span>
           <button class="btn" type="button" data-connect-whatsapp>Register New WhatsApp</button>
-          <button class="btn btn-outline btn-small" type="button" data-meta-refresh-phone>Refresh</button>
           <button class="btn btn-outline btn-small" type="button" data-meta-register-phone hidden>Register phone</button>
           <a class="btn btn-outline btn-small" href="https://business.facebook.com/settings/payments" target="_blank" rel="noreferrer" data-meta-payment-action hidden>Resolve billing</a>
           <a class="btn btn-outline btn-small" href="https://business.facebook.com/settings" target="_blank" rel="noreferrer">Business Settings</a>
@@ -442,7 +441,7 @@
       <div class="portal-view" id="inbox" data-portal-view hidden>
         <div class="inbox-app" data-inbox-app data-inbox-pane="list">
           <!-- Conversation list (left pane / mobile list screen) -->
-          <aside class="inbox-list" data-inbox-list-pane>
+          <aside class="inbox-list" data-inbox-list-pane aria-label="Conversations">
             <div class="inbox-list-head">
               <strong>Chats</strong>
               <button class="btn btn-outline btn-small" type="button" data-inbox-refresh>Refresh</button>
@@ -457,7 +456,7 @@
           </aside>
 
           <!-- Chat panel (right pane / mobile chat screen) -->
-          <section class="inbox-chat" data-inbox-chat-pane>
+          <section class="inbox-chat" data-inbox-chat-pane aria-label="Selected conversation">
             <div class="inbox-chat-empty" data-inbox-chat-empty>
               <div class="inbox-chat-empty-art" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><path d="M4 6h16v12H7l-3 3Z"/><path d="M8 10h8M8 13h5"/></svg>
@@ -854,6 +853,6 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
     </main>
   </div>
 
-  <script src="js/customer-portal.js?v=groups-20260701i"></script>
+  <script src="js/customer-portal.js?v=inbox-20260701m"></script>
 </body>
 </html>

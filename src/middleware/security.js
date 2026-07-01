@@ -20,6 +20,10 @@ function getAllowedOrigins() {
 
 function securityMiddleware(app) {
   const allowedOrigins = getAllowedOrigins();
+  const limiterResponse = {
+    success: false,
+    message: "Too many requests, please try again later."
+  };
 
   app.use(helmet({
     contentSecurityPolicy: false,
@@ -40,11 +44,30 @@ function securityMiddleware(app) {
     credentials: true
   }));
 
-  app.use(rateLimit({
+  // Inbox GETs poll while the operator is viewing a chat. Give those
+  // read-only, authenticated routes their own budget so they cannot exhaust
+  // the general API allowance used by replies and other mutations.
+  app.use("/api/inbox", rateLimit({
+    windowMs: env.rateLimitWindowMs,
+    max: env.inboxReadRateLimitMax,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: limiterResponse,
+    skip: (req) => req.method !== "GET"
+  }));
+
+  // Limit API traffic only. Static assets and page navigation must not consume
+  // API capacity. Inbox reads are handled by the dedicated limiter above.
+  app.use("/api", rateLimit({
     windowMs: env.rateLimitWindowMs,
     max: env.rateLimitMax,
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    message: limiterResponse,
+    skip: (req) => (
+      req.method === "GET"
+      && /^\/api\/inbox(?:\/|$)/.test(req.originalUrl.split("?")[0])
+    )
   }));
 }
 

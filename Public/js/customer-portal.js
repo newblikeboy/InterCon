@@ -34,7 +34,6 @@ const metaPaymentStatus = document.querySelector("[data-meta-payment-status]");
 const metaPaymentAction = document.querySelector("[data-meta-payment-action]");
 const connectStepCards = document.querySelectorAll("[data-connect-step]");
 const metaConnectMessage = document.querySelector("[data-meta-connect-message]");
-const metaRefreshPhoneButton = document.querySelector("[data-meta-refresh-phone]");
 const metaRegisterPhoneButton = document.querySelector("[data-meta-register-phone]");
 const profileMenu = document.querySelector("[data-profile-menu]");
 const profileTrigger = document.querySelector("[data-profile-trigger]");
@@ -1141,18 +1140,18 @@ function renderWabaTable() {
   host.innerHTML = `
     <div class="table-row waba-row">
       <strong>${escapeText(meta.displayPhoneNumber || meta.phoneNumberId || "—")}</strong>
-      <span>${escapeText(meta.phoneNumberId || "—")}</span>
-      <span>${escapeText(meta.wabaId || "—")}</span>
-      <span>InterCon</span>
-      <span>${escapeText(messagingLimit)}</span>
-      <span><em class="${quality.cls}"${qualityTitle}>${escapeText(quality.label)}</em></span>
-      <span><em class="${health.cls}"${healthTitle}>${escapeText(health.label)}</em></span>
-      <span>${escapeText(meta.verifiedName || "—")}</span>
-      <span>${escapeText(configured)}</span>
-      <span><em class="${webhookOk ? "approved" : "pending"}">${webhookLabel}</em></span>
-      <span class="waba-row-actions">
-        <button class="waba-action" type="button" data-waba-refresh title="Refresh" aria-label="Refresh">&#x21bb;</button>
-        <button class="waba-action danger" type="button" data-waba-delete title="Delete connected WABA" aria-label="Delete connected WABA">&times;</button>
+      <span data-label="PhoneNumber Id">${escapeText(meta.phoneNumberId || "—")}</span>
+      <span data-label="WABA BusinessId">${escapeText(meta.wabaId || "—")}</span>
+      <span data-label="BSP Name">InterCon</span>
+      <span data-label="Messaging Limit">${escapeText(messagingLimit)}</span>
+      <span data-label="Quality Rating"><em class="${quality.cls}"${qualityTitle}>${escapeText(quality.label)}</em></span>
+      <span data-label="Health"><em class="${health.cls}"${healthTitle}>${escapeText(health.label)}</em></span>
+      <span data-label="Display Name">${escapeText(meta.verifiedName || "—")}</span>
+      <span data-label="ConfigureDate">${escapeText(configured)}</span>
+      <span data-label="Webhook"><em class="${webhookOk ? "approved" : "pending"}">${webhookLabel}</em></span>
+      <span class="waba-row-actions" data-label="Actions">
+        <button class="waba-action" type="button" data-waba-refresh title="Refresh" aria-label="Refresh"><span class="waba-action-icon" aria-hidden="true">&#x21bb;</span><span class="waba-action-label">Refresh</span></button>
+        <button class="waba-action danger" type="button" data-waba-delete title="Delete connected WABA" aria-label="Delete connected WABA"><span class="waba-action-icon" aria-hidden="true">&times;</span><span class="waba-action-label">Delete</span></button>
       </span>
     </div>`;
 }
@@ -1303,10 +1302,10 @@ function renderContactRows(contacts) {
   contactList.innerHTML = contacts.map((contact) => `
     <div class="table-row contact-table-row contact-list-row">
       <strong>${escapeHtml(contact.name || "")}</strong>
-      <span>${escapeHtml(contact.phone || "")}</span>
-      <em class="${contact.optIn?.status ? "approved" : "pending"}">${contact.optIn?.status ? "Yes" : "Missing"}</em>
-      <span>${escapeHtml((contact.tags || []).join(", ") || "-")}</span>
-      <span>
+      <span data-label="Phone">${escapeHtml(contact.phone || "")}</span>
+      <span data-label="Opt-in"><em class="${contact.optIn?.status ? "approved" : "pending"}">${contact.optIn?.status ? "Yes" : "Missing"}</em></span>
+      <span data-label="Tags">${escapeHtml((contact.tags || []).join(", ") || "-")}</span>
+      <span data-label="Groups">
         <button type="button" class="btn btn-outline btn-small" data-assign-groups="${escapeHtml(contact._id)}" data-contact-name="${escapeHtml(contact.name || contact.phone || "")}">Assign group</button>
       </span>
     </div>
@@ -1528,9 +1527,9 @@ function renderTemplateStatusRows(templates) {
     return `
       <div class="table-row template-table-row">
         <strong>${escapeText(template.name)}</strong>
-        <span>${escapeText(template.category)}</span>
-        <em class="${meta.cls}">${escapeText(meta.label)}</em>
-        <span>${escapeText(template.rejectedReason || template.language || "-")}</span>
+        <span data-label="Category">${escapeText(template.category)}</span>
+        <span data-label="Status"><em class="${meta.cls}">${escapeText(meta.label)}</em></span>
+        <span data-label="Reason">${escapeText(template.rejectedReason || template.language || "-")}</span>
         <button class="template-delete-action" type="button" data-delete-template="${escapeText(template._id || template.id)}">Delete</button>
       </div>
     `;
@@ -1557,9 +1556,9 @@ function renderSendHistory(messages) {
   sendHistory.innerHTML = messages.map((message) => `
     <div class="table-row send-table-row">
       <strong>${message.to}</strong>
-      <span>${message.templateName}</span>
-      <em class="${message.status === "failed" ? "rejected" : "approved"}">${message.status}</em>
-      <span>${new Date(message.createdAt).toLocaleString()}</span>
+      <span data-label="Template">${message.templateName}</span>
+      <span data-label="Status"><em class="${message.status === "failed" ? "rejected" : "approved"}">${message.status}</em></span>
+      <span data-label="Sent at">${new Date(message.createdAt).toLocaleString()}</span>
     </div>
   `).join("");
 }
@@ -1620,9 +1619,9 @@ function renderApiKeys(apiKeys) {
     return `
       <div class="table-row api-key-table-row">
         <strong>${escapeHtml(apiKey.name)}</strong>
-        <span>${escapeHtml(apiKey.maskedKey)}</span>
-        <em class="${isActive ? "approved" : "rejected"}">${escapeHtml(apiKey.status)}</em>
-        <span>${apiKey.lastUsedAt ? new Date(apiKey.lastUsedAt).toLocaleString() : "Never"}</span>
+        <span data-label="Key">${escapeHtml(apiKey.maskedKey)}</span>
+        <span data-label="Status"><em class="${isActive ? "approved" : "rejected"}">${escapeHtml(apiKey.status)}</em></span>
+        <span data-label="Last used">${apiKey.lastUsedAt ? new Date(apiKey.lastUsedAt).toLocaleString() : "Never"}</span>
         <button type="button" data-revoke-api-key="${escapeHtml(apiKey.id)}" ${isActive ? "" : "disabled"}>Revoke</button>
       </div>
     `;
@@ -2046,19 +2045,6 @@ coexistenceButtons.forEach((button) => {
   }));
 });
 
-if (metaRefreshPhoneButton) {
-  metaRefreshPhoneButton.addEventListener("click", async () => {
-    metaRefreshPhoneButton.disabled = true;
-    try {
-      await refreshPhoneStatus();
-    } catch (error) {
-      setMetaConnectMessage(error.message, true);
-    } finally {
-      metaRefreshPhoneButton.disabled = false;
-    }
-  });
-}
-
 // Per-row "Actions" refresh in the WABA table.
 document.addEventListener("click", async (event) => {
   const action = event.target.closest("[data-waba-refresh]");
@@ -2394,18 +2380,24 @@ const inboxStatus = document.querySelector("[data-inbox-status]");
 const inboxWindowNote = document.querySelector("[data-inbox-window-note]");
 const inboxBackButton = document.querySelector("[data-inbox-back]");
 const inboxRailBadge = document.querySelector("[data-inbox-rail-badge]");
+const inboxPhoneMedia = window.matchMedia("(max-width: 560px)");
 
-const INBOX_POLL_MS = 7000;
-const INBOX_UNREAD_POLL_MS = 20000;
+const INBOX_POLL_MS = 15000;
+const INBOX_UNREAD_POLL_MS = 30000;
+const INBOX_STATUS_REFRESH_MS = 60000;
 
 const inboxState = {
   conversations: [],
   activeId: null,
   activeWindowOpen: false,
+  activeLoadToken: 0,
+  activeLastMessageAt: "",
+  lastMessageRefreshAt: 0,
   search: "",
   pollTimer: null,
   unreadTimer: null,
-  loadingActive: false
+  loadingActive: false,
+  polling: false
 };
 
 function getInitials(value) {
@@ -2453,7 +2445,17 @@ function updateInboxRailBadge(totalUnread) {
 }
 
 function setInboxPane(pane) {
-  if (inboxApp) inboxApp.setAttribute("data-inbox-pane", pane);
+  if (!inboxApp) return;
+  inboxApp.setAttribute("data-inbox-pane", inboxPhoneMedia.matches ? pane : "split");
+}
+
+function syncInboxPaneToViewport() {
+  setInboxPane(inboxState.activeId ? "chat" : "list");
+}
+
+function isInboxViewVisible() {
+  const view = inboxApp?.closest("[data-portal-view]");
+  return Boolean(view && !view.hidden && document.visibilityState !== "hidden");
 }
 
 function renderInboxConversations() {
@@ -2476,7 +2478,11 @@ function renderInboxConversations() {
     const unread = conversation.unreadCount > 0;
     const prefix = conversation.lastDirection === "out" ? "You: " : "";
     return `
-      <button type="button" class="inbox-thread${isActive ? " is-active" : ""}" data-inbox-thread="${escapeHtml(conversation.id)}">
+      <button
+        type="button"
+        class="inbox-thread${isActive ? " is-active" : ""}"
+        data-inbox-thread="${escapeHtml(conversation.id)}"
+        aria-pressed="${isActive ? "true" : "false"}">
         <span class="inbox-avatar">${escapeHtml(getInitials(conversation.customerName))}</span>
         <span class="inbox-thread-body">
           <span class="inbox-thread-top">
@@ -2542,6 +2548,21 @@ function applyInboxWindowState(conversation) {
   }
 }
 
+function setInboxConversationLoading() {
+  inboxState.activeWindowOpen = false;
+
+  if (inboxMessagesEl) {
+    inboxMessagesEl.setAttribute("aria-busy", "true");
+    inboxMessagesEl.innerHTML = `<div class="inbox-day-chip">Loading conversation...</div>`;
+  }
+  if (inboxInput) {
+    inboxInput.disabled = true;
+    inboxInput.placeholder = "Loading conversation...";
+  }
+  if (inboxSendButton) inboxSendButton.disabled = true;
+  if (inboxWindowNote) inboxWindowNote.hidden = true;
+}
+
 async function loadInboxConversations(silent = false) {
   if (!inboxThreads) return;
   try {
@@ -2558,9 +2579,12 @@ async function loadInboxConversations(silent = false) {
 
 async function openInboxConversation(conversationId) {
   if (!conversationId) return;
+  const loadToken = ++inboxState.activeLoadToken;
   inboxState.activeId = conversationId;
+  inboxState.loadingActive = true;
   setInboxStatus("");
   setInboxPane("chat");
+  setInboxConversationLoading();
 
   if (inboxChatEmpty) inboxChatEmpty.hidden = true;
   if (inboxChatActive) inboxChatActive.hidden = false;
@@ -2575,28 +2599,38 @@ async function openInboxConversation(conversationId) {
   renderInboxConversations();
 
   try {
-    inboxState.loadingActive = true;
     const data = await requestJson(`/api/inbox/conversations/${conversationId}/messages`);
-    if (inboxState.activeId !== conversationId) return;
+    if (inboxState.activeId !== conversationId || inboxState.activeLoadToken !== loadToken) return;
+    if (inboxMessagesEl) inboxMessagesEl.setAttribute("aria-busy", "false");
     renderInboxMessages(data.messages || []);
     applyInboxWindowState(data.conversation);
+    inboxState.activeLastMessageAt = data.conversation?.lastMessageAt || "";
+    inboxState.lastMessageRefreshAt = Date.now();
     if (inboxInput && !inboxInput.disabled) inboxInput.focus();
     // Unread was cleared server-side; refresh the list badges.
     loadInboxConversations(true);
   } catch (error) {
+    if (inboxState.activeId !== conversationId || inboxState.activeLoadToken !== loadToken) return;
+    if (inboxMessagesEl) inboxMessagesEl.setAttribute("aria-busy", "false");
+    if (inboxMessagesEl) {
+      inboxMessagesEl.innerHTML = `<div class="inbox-day-chip">Conversation could not be loaded</div>`;
+    }
     setInboxStatus(error.message, true);
   } finally {
-    inboxState.loadingActive = false;
+    if (inboxState.activeLoadToken === loadToken) inboxState.loadingActive = false;
   }
 }
 
 async function refreshActiveConversation() {
   if (!inboxState.activeId || inboxState.loadingActive) return;
+  const conversationId = inboxState.activeId;
   try {
-    const data = await requestJson(`/api/inbox/conversations/${inboxState.activeId}/messages`);
-    if (!data.conversation) return;
+    const data = await requestJson(`/api/inbox/conversations/${conversationId}/messages`);
+    if (!data.conversation || inboxState.activeId !== conversationId || inboxState.loadingActive) return;
     renderInboxMessages(data.messages || []);
     applyInboxWindowState(data.conversation);
+    inboxState.activeLastMessageAt = data.conversation.lastMessageAt || "";
+    inboxState.lastMessageRefreshAt = Date.now();
   } catch (error) {
     // Silent during polling.
   }
@@ -2636,6 +2670,8 @@ function autoGrowInboxInput() {
 }
 
 async function pollInboxUnread() {
+  // The visible inbox conversation-list response already contains this count.
+  if (isInboxViewVisible()) return;
   try {
     const data = await requestJson("/api/inbox/unread");
     updateInboxRailBadge(data.totalUnread || 0);
@@ -2644,15 +2680,34 @@ async function pollInboxUnread() {
   }
 }
 
+async function pollInboxView() {
+  if (!isInboxViewVisible() || inboxState.polling) return;
+  inboxState.polling = true;
+
+  try {
+    await loadInboxConversations(true);
+
+    const activeConversation = inboxState.conversations.find((item) => item.id === inboxState.activeId);
+    const lastMessageChanged = Boolean(
+      activeConversation
+      && String(activeConversation.lastMessageAt || "") !== String(inboxState.activeLastMessageAt || "")
+    );
+    const statusRefreshDue = Date.now() - inboxState.lastMessageRefreshAt >= INBOX_STATUS_REFRESH_MS;
+
+    if (inboxState.activeId && (lastMessageChanged || statusRefreshDue)) {
+      await refreshActiveConversation();
+    }
+  } finally {
+    inboxState.polling = false;
+  }
+}
+
 function startInboxView() {
   loadInboxConversations();
   if (inboxState.activeId) refreshActiveConversation();
 
   if (inboxState.pollTimer) clearInterval(inboxState.pollTimer);
-  inboxState.pollTimer = setInterval(() => {
-    loadInboxConversations(true);
-    refreshActiveConversation();
-  }, INBOX_POLL_MS);
+  inboxState.pollTimer = setInterval(pollInboxView, INBOX_POLL_MS);
 }
 
 function stopInboxPolling() {
@@ -2693,6 +2748,12 @@ if (inboxBackButton) {
   inboxBackButton.addEventListener("click", () => setInboxPane("list"));
 }
 
+if (typeof inboxPhoneMedia.addEventListener === "function") {
+  inboxPhoneMedia.addEventListener("change", syncInboxPaneToViewport);
+} else if (typeof inboxPhoneMedia.addListener === "function") {
+  inboxPhoneMedia.addListener(syncInboxPaneToViewport);
+}
+
 if (inboxComposer) {
   inboxComposer.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -2709,6 +2770,16 @@ if (inboxInput) {
     }
   });
 }
+
+document.addEventListener("visibilitychange", () => {
+  if (isInboxViewVisible()) {
+    pollInboxView();
+  } else if (document.visibilityState === "visible") {
+    pollInboxUnread();
+  }
+});
+
+syncInboxPaneToViewport();
 
 // ============================================================
 // Manage Groups: contact segments defined by a shared tag.
@@ -2769,10 +2840,10 @@ function renderGroups(segments) {
   groupList.innerHTML = segments.map((segment) => `
     <div class="table-row group-table-row">
       <strong>${escapeHtml(segment.name)}</strong>
-      <span><code class="group-tag-pill">${escapeHtml(segment.tag)}</code></span>
-      <span>${Number(segment.memberCount || 0)}</span>
-      <span>${escapeHtml(segment.description || "-")}</span>
-      <span class="group-row-actions">
+      <span data-label="Tag"><code class="group-tag-pill">${escapeHtml(segment.tag)}</code></span>
+      <span data-label="Members">${Number(segment.memberCount || 0)}</span>
+      <span data-label="Description">${escapeHtml(segment.description || "-")}</span>
+      <span class="group-row-actions" data-label="Actions">
         <button type="button" class="btn btn-outline btn-small" data-view-group="${escapeHtml(segment._id)}" data-group-label="${escapeHtml(segment.name)}">View</button>
         <button type="button" class="group-action danger" data-delete-group="${escapeHtml(segment._id)}" data-group-label="${escapeHtml(segment.name)}" aria-label="Delete group" title="Delete group">&times;</button>
       </span>
@@ -2821,9 +2892,9 @@ function renderGroupMembers(members) {
   groupMembersList.innerHTML = members.map((contact) => `
     <div class="table-row contact-table-row">
       <strong>${escapeHtml(contact.name || "")}</strong>
-      <span>${escapeHtml(contact.phone || "")}</span>
-      <em class="${contact.optIn?.status ? "approved" : "pending"}">${contact.optIn?.status ? "Yes" : "Missing"}</em>
-      <span>${escapeHtml(contact.status || "active")}</span>
+      <span data-label="Phone">${escapeHtml(contact.phone || "")}</span>
+      <span data-label="Opt-in"><em class="${contact.optIn?.status ? "approved" : "pending"}">${contact.optIn?.status ? "Yes" : "Missing"}</em></span>
+      <span data-label="Status">${escapeHtml(contact.status || "active")}</span>
     </div>
   `).join("");
 }

@@ -30,6 +30,7 @@ const env = {
   authCookieMaxAgeMs: Number(process.env.AUTH_COOKIE_MAX_AGE_MS || 7 * 24 * 60 * 60 * 1000),
   rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),
   rateLimitMax: Number(process.env.RATE_LIMIT_MAX || 300),
+  inboxReadRateLimitMax: Number(process.env.INBOX_READ_RATE_LIMIT_MAX || 1200),
   messageWorkerPollMs: Number(process.env.MESSAGE_WORKER_POLL_MS || 1000),
   messageQueueLockMs: Number(process.env.MESSAGE_QUEUE_LOCK_MS || 60 * 1000),
   messageQueueMaxRetries: Number(process.env.MESSAGE_QUEUE_MAX_RETRIES || 5),

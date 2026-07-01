@@ -43,20 +43,29 @@ app.use(express.static(publicPath, {
   }
 }));
 
+// Serve the app shells with no-cache so the browser always revalidates the
+// HTML and picks up new asset versions (the ?v= query on CSS/JS). Without
+// this, res.sendFile lets the browser hold a stale HTML that still links the
+// old stylesheet, so UI fixes appear not to take effect.
+function sendHtml(res, file) {
+  res.set("Cache-Control", "no-cache");
+  res.sendFile(path.join(publicPath, file));
+}
+
 app.get("/", (req, res) => {
-  res.sendFile(path.join(publicPath, "index.html"));
+  sendHtml(res, "index.html");
 });
 
 app.get("/customer", (req, res) => {
-  res.sendFile(path.join(publicPath, "customer-portal.html"));
+  sendHtml(res, "customer-portal.html");
 });
 
 app.get("/admin", (req, res) => {
-  res.sendFile(path.join(publicPath, "admin-portal.html"));
+  sendHtml(res, "admin-portal.html");
 });
 
 app.get("/privacy-policy", (req, res) => {
-  res.sendFile(path.join(publicPath, "privacy-policy.html"));
+  sendHtml(res, "privacy-policy.html");
 });
 
 app.use("/api", routes);

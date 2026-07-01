@@ -230,6 +230,21 @@ function describeIncomingMessage(message = {}) {
     return { type, text: "Shared a contact card", caption: "[contact]" };
   }
 
+  if (type === "reaction") {
+    const emoji = message.reaction?.emoji || "";
+    return { type, text: emoji ? `Reacted ${emoji}` : "Reaction", caption: "[reaction]" };
+  }
+
+  // Meta labels a message `type: "unsupported"` (error 131051) when the
+  // customer sent something the Cloud API cannot forward (polls, view-once,
+  // newer client features, etc.). Surface Meta's own reason where available
+  // instead of a bare "[unsupported]".
+  if (type === "unsupported") {
+    const err = Array.isArray(message.errors) ? message.errors[0] : null;
+    const reason = err?.title || err?.error_data?.details || err?.message || "";
+    return { type, text: "", caption: reason ? `Unsupported message — ${reason}` : "Unsupported message" };
+  }
+
   return { type, text: message.text?.body || "", caption: `[${type}]` };
 }
 

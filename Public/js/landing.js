@@ -265,3 +265,74 @@ document.addEventListener("keydown", (event) => {
 window.addEventListener("scroll", updateHeader, { passive: true });
 yearNode.textContent = new Date().getFullYear();
 updateHeader();
+
+/* ============================================================
+   Premium interactions — scroll reveal + 3D tilt
+   ============================================================ */
+(function () {
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // 3D tilt follows the pointer (skipped for reduced motion / touch).
+  if (!reduceMotion && window.matchMedia("(pointer: fine)").matches) {
+    document.querySelectorAll("[data-tilt]").forEach((el) => {
+      el.addEventListener("mousemove", (event) => {
+        const rect = el.getBoundingClientRect();
+        const px = (event.clientX - rect.left) / rect.width - 0.5;
+        const py = (event.clientY - rect.top) / rect.height - 0.5;
+        el.style.setProperty("--ry", (px * 10).toFixed(2) + "deg");
+        el.style.setProperty("--rx", (-py * 10).toFixed(2) + "deg");
+      });
+      el.addEventListener("mouseleave", () => {
+        el.style.setProperty("--rx", "0deg");
+        el.style.setProperty("--ry", "0deg");
+      });
+    });
+  }
+
+  if (reduceMotion) return;
+
+  const revealSelector = [
+    ".section-heading",
+    ".channel-card",
+    ".service-card",
+    ".step-card",
+    ".testimonial-card",
+    ".price-card",
+    ".stat",
+    ".logos-row",
+    ".hero-copy",
+    ".showcase-copy",
+    ".dashboard-preview",
+    ".cta-inner",
+    ".faq-list details"
+  ].join(",");
+
+  const revealEls = Array.from(document.querySelectorAll(revealSelector));
+  revealEls.forEach((el) => el.classList.add("reveal"));
+
+  // Stagger cards within each grid for a cascading entrance.
+  document
+    .querySelectorAll(".channels-grid, .service-grid, .steps-grid, .testimonial-grid, .pricing-grid, .stats-band")
+    .forEach((grid) => {
+      Array.from(grid.children).forEach((child, index) => {
+        child.style.setProperty("--reveal-delay", index * 70 + "ms");
+      });
+    });
+
+  if ("IntersectionObserver" in window) {
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("in");
+            io.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -6% 0px" }
+    );
+    revealEls.forEach((el) => io.observe(el));
+  } else {
+    revealEls.forEach((el) => el.classList.add("in"));
+  }
+})();

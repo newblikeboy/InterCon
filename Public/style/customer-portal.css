@@ -1,17 +1,21 @@
 :root {
-  --ink: #17211d;
-  --muted: #63706a;
-  --line: #dfe8e3;
+  --ink: #0f1e34;
+  --muted: #5a6b82;
+  --line: #e3e9f2;
   --paper: #ffffff;
-  --soft: #f3f8f5;
-  --brand: #0f9f6e;
-  --brand-dark: #08724d;
+  --soft: #f2f6fc;
+  /* Enterprise blue is the primary brand (matches a messaging-API platform). */
+  --brand: #1f6feb;
+  --brand-dark: #0b4aa8;
+  /* WhatsApp green is kept as a secondary accent for success + WA-specific UI. */
+  --wa: #0f9f6e;
+  --wa-dark: #08724d;
   --gold: #d89a24;
   --blue: #2d6cdf;
-  --shadow: 0 22px 60px rgba(16, 34, 26, 0.16);
-  --deep-shadow: 0 28px 44px rgba(10, 25, 18, 0.18), 0 10px 18px rgba(10, 25, 18, 0.1);
-  --lift-shadow: 0 34px 70px rgba(12, 31, 22, 0.22), 0 2px 0 rgba(255, 255, 255, 0.9) inset;
-  --radius: 8px;
+  --shadow: 0 22px 60px rgba(15, 30, 52, 0.16);
+  --deep-shadow: 0 28px 44px rgba(12, 26, 48, 0.18), 0 10px 18px rgba(12, 26, 48, 0.1);
+  --lift-shadow: 0 34px 70px rgba(12, 26, 48, 0.22), 0 2px 0 rgba(255, 255, 255, 0.9) inset;
+  --radius: 10px;
 }
 
 * {
@@ -163,10 +167,10 @@ img.brand-mark {
   color: #fff;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 42%),
-    linear-gradient(135deg, #18b87f, var(--brand-dark));
+    linear-gradient(135deg, #4f93f7, var(--brand-dark));
   cursor: pointer;
   font-weight: 800;
-  box-shadow: 0 16px 28px rgba(15, 159, 110, 0.28), 0 1px 0 rgba(255, 255, 255, 0.35) inset;
+  box-shadow: 0 16px 28px rgba(31, 111, 235, 0.28), 0 1px 0 rgba(255, 255, 255, 0.35) inset;
   transform: translateY(0);
   transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease, border-color 160ms ease;
 }
@@ -174,7 +178,7 @@ img.brand-mark {
 .btn:hover {
   background: var(--brand-dark);
   border-color: var(--brand-dark);
-  box-shadow: 0 22px 34px rgba(15, 159, 110, 0.32), 0 1px 0 rgba(255, 255, 255, 0.35) inset;
+  box-shadow: 0 22px 34px rgba(31, 111, 235, 0.32), 0 1px 0 rgba(255, 255, 255, 0.35) inset;
   transform: translateY(-2px);
 }
 
@@ -538,8 +542,8 @@ h3 {
   border-radius: var(--radius);
   color: #fff;
   background:
-    linear-gradient(145deg, #18b87f, var(--brand-dark));
-  box-shadow: 0 14px 26px rgba(15, 159, 110, 0.25), 0 1px 0 rgba(255, 255, 255, 0.32) inset;
+    linear-gradient(145deg, #4f93f7, var(--brand-dark));
+  box-shadow: 0 14px 26px rgba(31, 111, 235, 0.25), 0 1px 0 rgba(255, 255, 255, 0.32) inset;
   font-weight: 900;
 }
 
@@ -554,10 +558,10 @@ h3 {
   gap: 22px;
   margin-top: 20px;
   padding: 24px;
-  border: 1px solid rgba(15, 159, 110, 0.22);
+  border: 1px solid rgba(31, 111, 235, 0.22);
   border-radius: var(--radius);
   background:
-    linear-gradient(135deg, rgba(15, 159, 110, 0.12), rgba(255, 255, 255, 0.92));
+    linear-gradient(135deg, rgba(31, 111, 235, 0.12), rgba(255, 255, 255, 0.92));
   box-shadow: 0 18px 42px rgba(17, 41, 29, 0.1);
 }
 
@@ -654,7 +658,7 @@ h3 {
 }
 
 .service-card:hover {
-  border-color: rgba(15, 159, 110, 0.42);
+  border-color: rgba(31, 111, 235, 0.42);
   box-shadow: var(--lift-shadow);
   transform: translateY(-8px) rotateX(3deg);
 }
@@ -669,7 +673,7 @@ h3 {
   color: var(--brand-dark);
   background:
     linear-gradient(145deg, #ffffff, #d6f3e5);
-  box-shadow: 0 12px 24px rgba(15, 159, 110, 0.18), 0 1px 0 #fff inset;
+  box-shadow: 0 12px 24px rgba(31, 111, 235, 0.18), 0 1px 0 #fff inset;
   font-weight: 850;
 }
 
@@ -937,12 +941,12 @@ h3 {
 
 .price-card.featured {
   border-color: var(--brand);
-  box-shadow: 0 36px 76px rgba(15, 159, 110, 0.2), 0 1px 0 #fff inset;
+  box-shadow: 0 36px 76px rgba(31, 111, 235, 0.2), 0 1px 0 #fff inset;
   transform: translateY(-10px) rotateX(2deg);
 }
 
 .price-card:hover {
-  border-color: rgba(15, 159, 110, 0.42);
+  border-color: rgba(31, 111, 235, 0.42);
   box-shadow: var(--lift-shadow);
   transform: translateY(-8px);
 }
@@ -1208,13 +1212,13 @@ address {
 .auth-form input:focus,
 .auth-form select:focus {
   border-color: var(--brand);
-  box-shadow: 0 0 0 4px rgba(15, 159, 110, 0.12);
+  box-shadow: 0 0 0 4px rgba(31, 111, 235, 0.12);
 }
 
 .portal-body {
   min-height: 100vh;
   background:
-    linear-gradient(120deg, rgba(15, 159, 110, 0.06), transparent 36%),
+    linear-gradient(120deg, rgba(31, 111, 235, 0.06), transparent 36%),
     linear-gradient(180deg, #f7fbf8 0%, #ffffff 72%);
 }
 
@@ -1288,7 +1292,7 @@ address {
 
 .portal-nav a.active span {
   background: var(--brand);
-  box-shadow: 0 10px 18px rgba(15, 159, 110, 0.22);
+  box-shadow: 0 10px 18px rgba(31, 111, 235, 0.22);
 }
 
 .portal-side-note {
@@ -1351,7 +1355,7 @@ address {
   height: 48px;
   padding: 0;
   place-items: center;
-  border: 1px solid rgba(15, 159, 110, 0.24);
+  border: 1px solid rgba(31, 111, 235, 0.24);
   border-radius: 50%;
   background: #fff;
   cursor: pointer;
@@ -1560,7 +1564,7 @@ address {
 .billing-status-card,
 .billing-plan-card,
 .portal-stats article {
-  border-color: rgba(15, 159, 110, 0.14);
+  border-color: rgba(31, 111, 235, 0.14);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 252, 250, 0.96)),
     #fff;
@@ -1582,10 +1586,10 @@ address {
   display: grid;
   gap: 14px;
   padding: 20px;
-  border: 1px solid rgba(15, 159, 110, 0.22);
+  border: 1px solid rgba(31, 111, 235, 0.22);
   border-radius: var(--radius);
   background:
-    linear-gradient(135deg, rgba(15, 159, 110, 0.12), #ffffff 48%);
+    linear-gradient(135deg, rgba(31, 111, 235, 0.12), #ffffff 48%);
   box-shadow: 0 14px 30px rgba(17, 41, 29, 0.08);
 }
 
@@ -1677,7 +1681,7 @@ address {
 .contact-panel {
   margin-top: 16px;
   padding: 18px;
-  border: 1px solid rgba(15, 159, 110, 0.14);
+  border: 1px solid rgba(31, 111, 235, 0.14);
   border-radius: var(--radius);
 }
 
@@ -1767,17 +1771,17 @@ address {
   width: 32px;
   height: 32px;
   padding: 0;
-  border: 1px solid rgba(15, 159, 110, 0.25);
+  border: 1px solid rgba(31, 111, 235, 0.25);
   border-radius: 9px;
-  background: rgba(15, 159, 110, 0.07);
+  background: rgba(31, 111, 235, 0.07);
   color: var(--brand-dark);
   cursor: pointer;
   transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
 }
 
 .console-body .table-row .contact-group-assign:hover {
-  border-color: rgba(15, 159, 110, 0.48);
-  background: rgba(15, 159, 110, 0.14);
+  border-color: rgba(31, 111, 235, 0.48);
+  background: rgba(31, 111, 235, 0.14);
   transform: translateY(-1px);
 }
 
@@ -1934,7 +1938,7 @@ address {
 
 .group-action:hover {
   color: var(--brand-dark);
-  border-color: rgba(15, 159, 110, 0.3);
+  border-color: rgba(31, 111, 235, 0.3);
 }
 
 .group-action.danger {
@@ -2038,7 +2042,7 @@ address {
 .connection-card {
   overflow: hidden;
   padding: 18px;
-  border: 1px solid rgba(15, 159, 110, 0.18);
+  border: 1px solid rgba(31, 111, 235, 0.18);
   border-radius: var(--radius);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 252, 249, 0.96)),
@@ -2193,7 +2197,7 @@ address {
   justify-content: space-between;
   gap: 18px;
   padding: 18px;
-  border: 1px solid rgba(15, 159, 110, 0.2);
+  border: 1px solid rgba(31, 111, 235, 0.2);
   border-radius: var(--radius);
   background: linear-gradient(180deg, #f5fbf8, #ffffff);
 }
@@ -2245,8 +2249,8 @@ address {
 }
 
 .billing-plan-card.selected {
-  border-color: rgba(15, 159, 110, 0.42);
-  box-shadow: 0 0 0 4px rgba(15, 159, 110, 0.09);
+  border-color: rgba(31, 111, 235, 0.42);
+  box-shadow: 0 0 0 4px rgba(31, 111, 235, 0.09);
 }
 
 .billing-plan-card > span {
@@ -2354,7 +2358,7 @@ address {
 }
 
 .approved {
-  color: var(--brand-dark);
+  color: var(--wa-dark);
   background: #dff6eb;
 }
 
@@ -2424,7 +2428,7 @@ address {
 .template-form-panel select:focus,
 .template-form-panel textarea:focus {
   border-color: var(--brand);
-  box-shadow: 0 0 0 4px rgba(15, 159, 110, 0.12);
+  box-shadow: 0 0 0 4px rgba(31, 111, 235, 0.12);
 }
 
 .template-actions {
@@ -2656,7 +2660,7 @@ address {
 .campaign-form input:focus,
 .campaign-form select:focus {
   border-color: var(--brand);
-  box-shadow: 0 0 0 4px rgba(15, 159, 110, 0.12);
+  box-shadow: 0 0 0 4px rgba(31, 111, 235, 0.12);
 }
 
 .campaign-checks {
@@ -2804,7 +2808,7 @@ address {
   padding: 6px 10px;
   border-radius: 999px;
   color: var(--brand-dark);
-  background: rgba(15, 159, 110, 0.12);
+  background: rgba(31, 111, 235, 0.12);
   font-size: 11px;
   font-weight: 900;
 }
@@ -2827,7 +2831,7 @@ address {
   flex: none;
   min-height: 36px;
   padding: 0 10px;
-  border: 1px solid rgba(15, 159, 110, 0.22);
+  border: 1px solid rgba(31, 111, 235, 0.22);
   border-radius: 9px;
   color: var(--brand-dark);
   background: #fff;
@@ -2883,7 +2887,7 @@ address {
 
 .send-form .send-recipient-option:hover,
 .send-form .send-recipient-option:has(input:checked) {
-  border-color: rgba(15, 159, 110, 0.24);
+  border-color: rgba(31, 111, 235, 0.24);
   background: #edf9f4;
 }
 
@@ -2942,7 +2946,7 @@ address {
   padding: 3px 6px;
   border-radius: 999px;
   color: var(--brand-dark);
-  background: rgba(15, 159, 110, 0.1);
+  background: rgba(31, 111, 235, 0.1);
   font-size: 9px;
   font-style: normal;
   white-space: nowrap;
@@ -3007,7 +3011,7 @@ address {
   align-items: center;
   min-height: 36px;
   padding: 0 11px;
-  border: 1px solid rgba(15, 159, 110, 0.24);
+  border: 1px solid rgba(31, 111, 235, 0.24);
   border-radius: 9px;
   color: var(--brand-dark);
   background: #fff;
@@ -3061,7 +3065,7 @@ address {
 
 .send-variable-file-state.is-ready {
   border-style: solid;
-  border-color: rgba(15, 159, 110, 0.22);
+  border-color: rgba(31, 111, 235, 0.22);
   color: var(--brand-dark);
   background: #edf9f4;
 }
@@ -3194,7 +3198,7 @@ address {
 
 .bulk-preview-tools input:focus {
   border-color: var(--brand);
-  box-shadow: 0 0 0 3px rgba(15, 159, 110, 0.1);
+  box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.1);
 }
 
 .bulk-preview-tools span {
@@ -3841,7 +3845,7 @@ address {
   gap: 10px;
   margin-bottom: 16px;
   padding: 16px;
-  border: 1px solid rgba(15, 159, 110, 0.24);
+  border: 1px solid rgba(31, 111, 235, 0.24);
   border-radius: var(--radius);
   background: #f2fbf7;
 }
@@ -3977,8 +3981,8 @@ address {
 
 .flow-builder {
   background:
-    linear-gradient(90deg, rgba(15, 159, 110, 0.06) 0 1px, transparent 1px 42px),
-    linear-gradient(0deg, rgba(15, 159, 110, 0.05) 0 1px, transparent 1px 42px),
+    linear-gradient(90deg, rgba(31, 111, 235, 0.06) 0 1px, transparent 1px 42px),
+    linear-gradient(0deg, rgba(31, 111, 235, 0.05) 0 1px, transparent 1px 42px),
     #ffffff;
 }
 
@@ -4026,7 +4030,7 @@ address {
   display: grid;
   gap: 0;
   padding: 18px;
-  border: 1px solid rgba(15, 159, 110, 0.18);
+  border: 1px solid rgba(31, 111, 235, 0.18);
   border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.78);
 }
@@ -4044,7 +4048,7 @@ address {
 }
 
 .flow-builder-node.trigger-node {
-  border-color: rgba(15, 159, 110, 0.34);
+  border-color: rgba(31, 111, 235, 0.34);
   background: #f2fbf7;
 }
 
@@ -4122,7 +4126,7 @@ address {
 }
 
 .flow-template-list button:hover {
-  border-color: rgba(15, 159, 110, 0.34);
+  border-color: rgba(31, 111, 235, 0.34);
   background: #f4fbf8;
 }
 
@@ -4166,7 +4170,7 @@ address {
 .automation-form select:focus,
 .automation-form textarea:focus {
   border-color: var(--brand);
-  box-shadow: 0 0 0 4px rgba(15, 159, 110, 0.12);
+  box-shadow: 0 0 0 4px rgba(31, 111, 235, 0.12);
 }
 
 .automation-control-grid {
@@ -4216,7 +4220,7 @@ address {
 }
 
 .flow-node.active {
-  border-color: rgba(15, 159, 110, 0.36);
+  border-color: rgba(31, 111, 235, 0.36);
   background: #f2fbf7;
 }
 
@@ -4334,7 +4338,7 @@ address {
 }
 
 .inbox-preview article.active {
-  border-color: rgba(15, 159, 110, 0.36);
+  border-color: rgba(31, 111, 235, 0.36);
   background: #f4fbf8;
 }
 
@@ -4488,7 +4492,7 @@ address {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   background:
-    linear-gradient(120deg, rgba(15, 159, 110, 0.05), transparent 32%),
+    linear-gradient(120deg, rgba(31, 111, 235, 0.05), transparent 32%),
     #f6fbf8;
 }
 
@@ -4665,8 +4669,8 @@ address {
   min-width: 28px;
   border-radius: var(--radius) var(--radius) 0 0;
   background:
-    linear-gradient(180deg, #18b87f, var(--brand-dark));
-  box-shadow: 0 12px 22px rgba(15, 159, 110, 0.2);
+    linear-gradient(180deg, #4f93f7, var(--brand-dark));
+  box-shadow: 0 12px 22px rgba(31, 111, 235, 0.2);
 }
 
 .form-grid {
@@ -5566,8 +5570,8 @@ address {
 
 .console-rail .console-rail-nav a.active {
   color: var(--brand-dark);
-  background: rgba(15, 159, 110, 0.1);
-  border-color: rgba(15, 159, 110, 0.22);
+  background: rgba(31, 111, 235, 0.1);
+  border-color: rgba(31, 111, 235, 0.22);
 }
 
 .console-rail-spacer {
@@ -5717,11 +5721,11 @@ address {
 /* Controls — round to match the cards */
 .console-body .btn {
   border-radius: 12px;
-  box-shadow: 0 10px 20px rgba(15, 159, 110, 0.2);
+  box-shadow: 0 10px 20px rgba(31, 111, 235, 0.2);
 }
 
 .console-body .btn:hover {
-  box-shadow: 0 14px 26px rgba(15, 159, 110, 0.26);
+  box-shadow: 0 14px 26px rgba(31, 111, 235, 0.26);
 }
 
 .console-body .btn-outline {
@@ -5922,7 +5926,7 @@ address {
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: rgba(15, 159, 110, 0.1);
+  background: rgba(31, 111, 235, 0.1);
   color: var(--brand-dark);
 }
 
@@ -5964,7 +5968,7 @@ address {
 
 .launch-card:hover {
   transform: translateY(-4px);
-  border-color: rgba(15, 159, 110, 0.32);
+  border-color: rgba(31, 111, 235, 0.32);
   box-shadow: 0 22px 40px rgba(17, 41, 29, 0.12);
 }
 
@@ -6039,7 +6043,7 @@ address {
 
 .console-back:hover {
   color: var(--brand-dark);
-  border-color: rgba(15, 159, 110, 0.3);
+  border-color: rgba(31, 111, 235, 0.3);
   transform: translateX(-2px);
 }
 
@@ -6108,7 +6112,7 @@ address {
 
 .admin-chip:hover {
   background: #fff;
-  border-color: rgba(15, 159, 110, 0.32);
+  border-color: rgba(31, 111, 235, 0.32);
   transform: translateY(-1px);
 }
 
@@ -6187,7 +6191,7 @@ address {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: rgba(15, 159, 110, 0.14);
+  background: rgba(31, 111, 235, 0.14);
   box-shadow: inset 0 0 0 2px var(--brand);
 }
 
@@ -6300,7 +6304,7 @@ address {
 
 .waba-action:hover {
   color: var(--brand-dark);
-  border-color: rgba(15, 159, 110, 0.3);
+  border-color: rgba(31, 111, 235, 0.3);
 }
 
 /* Desktop keeps the compact icon-only button; the text label only shows on
@@ -6449,13 +6453,13 @@ address {
 
 .tpl-chip:hover {
   color: var(--brand-dark);
-  border-color: rgba(15, 159, 110, 0.3);
+  border-color: rgba(31, 111, 235, 0.3);
 }
 
 .tpl-chip.is-active {
   color: var(--brand-dark);
-  background: rgba(15, 159, 110, 0.1);
-  border-color: rgba(15, 159, 110, 0.28);
+  background: rgba(31, 111, 235, 0.1);
+  border-color: rgba(31, 111, 235, 0.28);
 }
 
 .tpl-chip.is-active span {
@@ -6756,7 +6760,7 @@ address {
   justify-items: center;
   gap: 9px;
   padding: 30px;
-  border: 1px dashed rgba(15, 159, 110, 0.3);
+  border: 1px dashed rgba(31, 111, 235, 0.3);
   border-radius: 18px;
   background: linear-gradient(145deg, #fff, #f4faf7);
   color: var(--muted);
@@ -6769,7 +6773,7 @@ address {
   width: 62px;
   height: 62px;
   border-radius: 18px;
-  background: rgba(15, 159, 110, 0.1);
+  background: rgba(31, 111, 235, 0.1);
   color: var(--brand-dark);
 }
 
@@ -6800,7 +6804,7 @@ address {
 
 .media-card:hover {
   transform: translateY(-4px);
-  border-color: rgba(15, 159, 110, 0.3);
+  border-color: rgba(31, 111, 235, 0.3);
   box-shadow: 0 20px 40px rgba(17, 41, 29, 0.13);
 }
 
@@ -6809,7 +6813,7 @@ address {
   aspect-ratio: 4 / 3;
   overflow: hidden;
   background:
-    linear-gradient(135deg, rgba(15, 159, 110, 0.08), rgba(45, 108, 223, 0.08)),
+    linear-gradient(135deg, rgba(31, 111, 235, 0.08), rgba(45, 108, 223, 0.08)),
     #edf3f0;
 }
 
@@ -6995,9 +6999,9 @@ address {
   justify-items: center;
   gap: 7px;
   padding: 25px 18px;
-  border: 1.5px dashed rgba(15, 159, 110, 0.42);
+  border: 1.5px dashed rgba(31, 111, 235, 0.42);
   border-radius: 14px;
-  background: rgba(15, 159, 110, 0.045);
+  background: rgba(31, 111, 235, 0.045);
   text-align: center;
   cursor: pointer;
   transition: border-color 140ms ease, background 140ms ease;
@@ -7005,7 +7009,7 @@ address {
 
 .media-dropzone:hover {
   border-color: var(--brand);
-  background: rgba(15, 159, 110, 0.08);
+  background: rgba(31, 111, 235, 0.08);
 }
 
 .media-dropzone input {
@@ -7201,13 +7205,13 @@ address {
 }
 
 .inbox-thread:focus-visible {
-  outline: 2px solid rgba(15, 159, 110, 0.45);
+  outline: 2px solid rgba(31, 111, 235, 0.45);
   outline-offset: -2px;
 }
 
 .inbox-thread-row.is-active,
 .inbox-thread.is-active {
-  background: rgba(15, 159, 110, 0.075);
+  background: rgba(31, 111, 235, 0.075);
 }
 
 .inbox-thread-row.is-active::before {
@@ -7428,7 +7432,7 @@ address {
   width: 84px;
   height: 84px;
   border-radius: 50%;
-  background: rgba(15, 159, 110, 0.12);
+  background: rgba(31, 111, 235, 0.12);
 }
 
 .inbox-chat-empty-art svg {
@@ -7708,7 +7712,7 @@ address {
   }
 
   .inbox-back:active {
-    background: rgba(15, 159, 110, 0.14);
+    background: rgba(31, 111, 235, 0.14);
   }
 
   .inbox-bubble {

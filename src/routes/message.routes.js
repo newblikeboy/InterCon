@@ -14,5 +14,8 @@ router.get("/send-template", (req, res) => {
   });
 });
 router.post("/send-template", messageController.sendTemplateMessage);
+router.post("/bulk-recipients", messageController.listBulkRecipients);
+router.post("/bulk-preview", messageController.previewBulkTemplateMessages);
+router.post("/send-template-bulk", messageController.sendTemplateMessages);
 
 module.exports = router;

@@ -36,11 +36,18 @@ const contactSchema = new mongoose.Schema(
       trim: true,
       maxlength: 120
     },
-    tags: [{
-      type: String,
-      trim: true,
-      maxlength: 40
-    }],
+    tags: {
+      type: [{
+        type: String,
+        trim: true,
+        maxlength: 40
+      }],
+      default: [],
+      validate: {
+        validator: (tags) => !Array.isArray(tags) || tags.length <= 1,
+        message: "A contact can have only one tag"
+      }
+    },
     optIn: {
       status: {
         type: Boolean,

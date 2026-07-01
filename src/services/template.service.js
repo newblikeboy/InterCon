@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const Template = require("../models/Template");
+const MediaAsset = require("../models/MediaAsset");
 const Tenant = require("../models/Tenant");
 const env = require("../config/env");
 const HttpError = require("../utils/httpError");
@@ -23,6 +24,14 @@ function normalizeCategory(category) {
 function normalizeLanguage(language) {
   const normalized = String(language || "en").trim();
   return normalized === "English" ? "en" : normalized;
+}
+
+function normalizeHeaderType(headerType) {
+  const normalized = String(headerType || "none").toLowerCase().trim();
+  if (!["none", "image", "video"].includes(normalized)) {
+    throw new HttpError(400, "Template header must be none, image, or video");
+  }
+  return normalized;
 }
 
 function normalizeTemplateName(name) {
@@ -49,6 +58,12 @@ function extractBodyPlaceholders(text) {
 
 function getBodyComponent(components = []) {
   return components.find((component) => String(component.type || "").toUpperCase() === "BODY");
+}
+
+function getHeaderTypeFromComponents(components = []) {
+  const header = components.find((component) => String(component.type || "").toUpperCase() === "HEADER");
+  const format = String(header?.format || "").toLowerCase();
+  return ["image", "video"].includes(format) ? format : "none";
 }
 
 function getBodyTextFromComponents(components = []) {
@@ -96,6 +111,8 @@ function buildMetaTemplatePayload(body) {
   const name = normalizeTemplateName(body.name || body.templateName || body.template_name);
   const category = normalizeCategory(body.category);
   const language = normalizeLanguage(body.language);
+  const headerType = normalizeHeaderType(body.headerType || body.header_type);
+  const headerMediaId = String(body.headerMediaId || body.header_media_id || "").trim();
   const text = String(body.body || body.messageBody || body.message_body || "").trim();
 
   if (!name || (!text && category !== "authentication")) {
@@ -103,6 +120,9 @@ function buildMetaTemplatePayload(body) {
   }
 
   if (category === "authentication") {
+    if (headerType !== "none") {
+      throw new HttpError(400, "Authentication templates cannot use an image or video header");
+    }
     return {
       name,
       category: category.toUpperCase(),
@@ -130,7 +150,9 @@ function buildMetaTemplatePayload(body) {
       messageSendTtlSeconds: AUTHENTICATION_CODE_EXPIRATION_MINUTES * 60,
       localCategory: category,
       body: AUTHENTICATION_TEMPLATE_BODY,
-      parameterCount: 1
+      parameterCount: 1,
+      headerType: "none",
+      headerMediaId: ""
     };
   }
 
@@ -156,8 +178,78 @@ function buildMetaTemplatePayload(body) {
     components: [bodyComponent],
     localCategory: category,
     body: text,
-    parameterCount: placeholders.length
+    parameterCount: placeholders.length,
+    headerType,
+    headerMediaId
   };
+}
+
+function assertTemplateMediaCompatible(asset, headerType) {
+  if (!asset || asset.mediaType !== headerType) {
+    throw new HttpError(400, `Choose a ${headerType} from the Media Library`);
+  }
+
+  const allowedMimeTypes = headerType === "image"
+    ? ["image/jpeg", "image/png"]
+    : ["video/mp4"];
+  const maximumBytes = headerType === "image" ? 5 * 1024 * 1024 : 16 * 1024 * 1024;
+
+  if (!allowedMimeTypes.includes(asset.mimeType)) {
+    throw new HttpError(400, headerType === "image"
+      ? "Meta template image headers require a JPG or PNG asset"
+      : "Meta template video headers require an MP4 asset");
+  }
+  if (asset.bytes > maximumBytes) {
+    throw new HttpError(400, `Meta template ${headerType} samples must be ${headerType === "image" ? "5" : "16"} MB or smaller`);
+  }
+}
+
+async function createMetaHeaderHandle(accessToken, asset) {
+  if (!env.facebookAppId) {
+    throw new HttpError(503, "Meta App ID is required to upload a template header sample");
+  }
+
+  const sourceResponse = await fetch(asset.secureUrl);
+  if (!sourceResponse.ok) {
+    throw new HttpError(502, "Unable to download the selected Cloudinary media");
+  }
+  const buffer = Buffer.from(await sourceResponse.arrayBuffer());
+  const maximumBytes = asset.mediaType === "image" ? 5 * 1024 * 1024 : 16 * 1024 * 1024;
+  if (buffer.length > maximumBytes) {
+    throw new HttpError(400, `Meta template ${asset.mediaType} samples must be ${asset.mediaType === "image" ? "5" : "16"} MB or smaller`);
+  }
+  const params = new URLSearchParams({
+    file_name: asset.originalName || `${asset.mediaId}.${asset.format}`,
+    file_length: String(buffer.length),
+    file_type: asset.mimeType,
+    access_token: accessToken
+  });
+  const sessionResponse = await fetch(
+    `https://graph.facebook.com/${env.metaGraphApiVersion}/${env.facebookAppId}/uploads?${params}`,
+    { method: "POST", headers: { "Authorization": `Bearer ${accessToken}` } }
+  );
+  const session = await sessionResponse.json().catch(() => ({}));
+  if (!sessionResponse.ok || session.error || !session.id) {
+    throw new HttpError(sessionResponse.status || 502, session.error?.message || "Meta could not start the template media upload", session.error || session);
+  }
+
+  const uploadResponse = await fetch(
+    `https://graph.facebook.com/${session.id}`,
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `OAuth ${accessToken}`,
+        "file_offset": "0",
+        "Content-Type": "application/octet-stream"
+      },
+      body: buffer
+    }
+  );
+  const uploaded = await uploadResponse.json().catch(() => ({}));
+  if (!uploadResponse.ok || uploaded.error || !uploaded.h) {
+    throw new HttpError(uploadResponse.status || 502, uploaded.error?.message || "Meta could not upload the template media sample", uploaded.error || uploaded);
+  }
+  return uploaded.h;
 }
 
 function mapMetaTemplateStatus(status) {
@@ -256,6 +348,7 @@ async function doSyncMetaTemplates(tenantId) {
   await Promise.all(templates.map((template) => {
     const category = String(template.category || "utility").toLowerCase();
     const body = getStoredTemplateBody(template);
+    const headerType = getHeaderTypeFromComponents(template.components || []);
     const placeholders = category === "authentication" ? [1] : extractBodyPlaceholders(body);
 
     return Template.findOneAndUpdate(
@@ -268,6 +361,7 @@ async function doSyncMetaTemplates(tenantId) {
           language: template.language || "en",
           body,
           parameterCount: placeholders.length,
+          headerType,
           status: mapMetaTemplateStatus(template.status),
           metaTemplateId: template.id || "",
           rejectedReason: template.rejected_reason || "",
@@ -338,6 +432,8 @@ async function createTemplateDraft(tenantId, body) {
         language: payload.language,
         body: payload.body,
         parameterCount: payload.parameterCount,
+        headerType: payload.headerType,
+        headerMediaId: payload.headerMediaId,
         status: "draft"
       }
     },
@@ -355,6 +451,25 @@ async function submitTemplateForMetaReview(tenantId, body) {
 
   if (!tenant?.meta?.wabaId || !accessToken) {
     throw new HttpError(409, "Connect WhatsApp first. WABA ID and Meta access token are required before template submission.");
+  }
+
+  if (payload.headerType !== "none") {
+    if (!payload.headerMediaId) {
+      throw new HttpError(400, `Choose a ${payload.headerType} from the Media Library for Meta review`);
+    }
+    const asset = await MediaAsset.findOne({
+      tenantId,
+      mediaId: payload.headerMediaId
+    }).lean();
+    assertTemplateMediaCompatible(asset, payload.headerType);
+    const headerHandle = await createMetaHeaderHandle(accessToken, asset);
+    payload.components.unshift({
+      type: "HEADER",
+      format: payload.headerType.toUpperCase(),
+      example: {
+        header_handle: [headerHandle]
+      }
+    });
   }
 
   const response = await fetch(`https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.wabaId}/message_templates`, {
@@ -389,6 +504,8 @@ async function submitTemplateForMetaReview(tenantId, body) {
         language: payload.language,
         body: payload.body,
         parameterCount: payload.parameterCount,
+        headerType: payload.headerType,
+        headerMediaId: payload.headerMediaId,
         status: "in_review",
         metaTemplateId: metaResponse.id || metaResponse.message_template_id || ""
       }
@@ -423,6 +540,8 @@ async function deleteTemplate(tenantId, templateId) {
 }
 
 module.exports = {
+  buildMetaTemplatePayload,
+  createMetaHeaderHandle,
   listTemplates,
   listApprovedTemplates,
   createTemplateDraft,

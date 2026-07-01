@@ -10,6 +10,7 @@ router.get("/", contactController.listContacts);
 router.post("/", contactController.createContact);
 router.post("/import", contactController.importContacts);
 router.get("/opt-outs", contactController.listOptOuts);
+router.put("/:contactId/group", contactController.setContactGroup);
 router.get("/segments", contactController.listSegments);
 router.post("/segments", contactController.createSegment);
 router.get("/segments/:segmentId/members", contactController.getSegmentMembers);

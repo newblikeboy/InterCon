@@ -94,6 +94,20 @@ const removeSegmentMember = asyncHandler(async (req, res) => {
   });
 });
 
+const setContactGroup = asyncHandler(async (req, res) => {
+  const data = await contactService.setContactGroup(
+    req.tenantId,
+    req.params.contactId,
+    req.body.segmentId || null
+  );
+
+  res.json({
+    success: true,
+    message: data.group ? "Contact group updated" : "Contact removed from group",
+    ...data
+  });
+});
+
 const deleteSegment = asyncHandler(async (req, res) => {
   await contactService.deleteSegment(req.tenantId, req.params.segmentId);
 
@@ -113,5 +127,6 @@ module.exports = {
   getSegmentMembers,
   assignSegmentMember,
   removeSegmentMember,
+  setContactGroup,
   deleteSegment
 };

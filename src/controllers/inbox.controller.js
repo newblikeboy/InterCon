@@ -37,6 +37,16 @@ const markConversationRead = asyncHandler(async (req, res) => {
   });
 });
 
+const deleteConversation = asyncHandler(async (req, res) => {
+  const data = await inboxService.deleteConversation(req.tenantId, req.params.conversationId);
+
+  res.json({
+    success: true,
+    message: "Chat deleted",
+    ...data
+  });
+});
+
 const sendReply = asyncHandler(async (req, res) => {
   const data = await inboxService.sendReply(req.tenantId, req.params.conversationId, req.body);
 
@@ -52,5 +62,6 @@ module.exports = {
   getUnreadSummary,
   getConversationMessages,
   markConversationRead,
+  deleteConversation,
   sendReply
 };

@@ -1,6 +1,8 @@
 const mongoose = require("mongoose");
 const Conversation = require("../models/Conversation");
 const InboxMessage = require("../models/InboxMessage");
+const Contact = require("../models/Contact");
+const ContactSegment = require("../models/ContactSegment");
 const Tenant = require("../models/Tenant");
 const env = require("../config/env");
 const HttpError = require("../utils/httpError");
@@ -26,14 +28,33 @@ function getWindowState(conversation) {
   };
 }
 
-function publicConversation(conversation) {
+function publicConversation(conversation, groupNamesByTag = new Map()) {
   const windowState = getWindowState(conversation);
+  const populatedContact = conversation?.contactId && typeof conversation.contactId === "object"
+    ? conversation.contactId
+    : null;
+  const tags = Array.isArray(populatedContact?.tags)
+    ? populatedContact.tags.filter(Boolean)
+    : [];
+  const groupDetails = tags.flatMap((tag) => (
+    (groupNamesByTag.get(tag) || []).map((name) => ({ name, tag }))
+  ));
+  const groups = [...new Set(groupDetails.map((group) => group.name))];
+  const manualTags = tags.filter((tag) => !groupNamesByTag.has(tag));
 
   return {
     id: String(conversation._id),
-    contactId: conversation.contactId ? String(conversation.contactId) : null,
+    contactId: populatedContact?._id
+      ? String(populatedContact._id)
+      : conversation.contactId
+        ? String(conversation.contactId)
+        : null,
     customerPhone: conversation.customerPhone,
-    customerName: conversation.customerName || conversation.customerPhone,
+    customerName: conversation.customerName || populatedContact?.name || conversation.customerPhone,
+    tags,
+    groups,
+    groupDetails,
+    manualTags,
     lastMessageText: conversation.lastMessageText || "",
     lastMessageAt: conversation.lastMessageAt,
     lastDirection: conversation.lastDirection || "in",
@@ -58,15 +79,27 @@ function publicMessage(message) {
 
 async function listConversations(tenantId, query = {}) {
   const limit = Math.min(Number(query.limit) || 100, 300);
-  const conversations = await Conversation.find({ tenantId })
-    .sort({ lastMessageAt: -1 })
-    .limit(limit)
-    .lean();
+  const [conversations, segments] = await Promise.all([
+    Conversation.find({ tenantId })
+      .populate({ path: "contactId", model: Contact, select: "name tags" })
+      .sort({ lastMessageAt: -1 })
+      .limit(limit)
+      .lean(),
+    ContactSegment.find({ tenantId })
+      .select("name tag")
+      .lean()
+  ]);
+  const groupNamesByTag = segments.reduce((map, segment) => {
+    const tag = String(segment.tag || "").trim();
+    if (!tag) return map;
+    map.set(tag, [...(map.get(tag) || []), segment.name]);
+    return map;
+  }, new Map());
 
   const totalUnread = conversations.reduce((sum, item) => sum + (item.unreadCount || 0), 0);
 
   return {
-    conversations: conversations.map(publicConversation),
+    conversations: conversations.map((conversation) => publicConversation(conversation, groupNamesByTag)),
     totalUnread
   };
 }
@@ -121,6 +154,30 @@ async function markConversationRead(tenantId, conversationId) {
   return publicConversation(conversation);
 }
 
+async function deleteConversation(tenantId, conversationId) {
+  if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+    throw new HttpError(400, "Conversation ID is invalid");
+  }
+
+  const conversation = await Conversation.findOneAndDelete({
+    _id: conversationId,
+    tenantId
+  });
+  if (!conversation) {
+    throw new HttpError(404, "Conversation not found");
+  }
+
+  const result = await InboxMessage.deleteMany({
+    tenantId,
+    conversationId: conversation._id
+  });
+
+  return {
+    conversationId: String(conversation._id),
+    deletedMessages: result.deletedCount || 0
+  };
+}
+
 async function sendReply(tenantId, conversationId, body = {}) {
   await requireActivePaidPlan(tenantId);
 
@@ -138,7 +195,7 @@ async function sendReply(tenantId, conversationId, body = {}) {
   if (!windowOpen) {
     throw new HttpError(
       409,
-      "The 24-hour customer service window has closed. Send an approved template message to re-open the conversation.",
+      "The 24-hour customer service window has closed. Use an approved template to contact the customer; free-form replies remain unavailable until the customer sends a new message.",
       { code: "SERVICE_WINDOW_CLOSED" }
     );
   }
@@ -209,5 +266,6 @@ module.exports = {
   getUnreadSummary,
   getConversationMessages,
   markConversationRead,
+  deleteConversation,
   sendReply
 };

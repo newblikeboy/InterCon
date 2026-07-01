@@ -36,6 +36,16 @@ const templateSchema = new mongoose.Schema(
       min: 0,
       max: 100
     },
+    headerType: {
+      type: String,
+      enum: ["none", "image", "video"],
+      default: "none"
+    },
+    headerMediaId: {
+      type: String,
+      trim: true,
+      maxlength: 80
+    },
     status: {
       type: String,
       enum: ["draft", "in_review", "approved", "rejected", "paused", "disabled"],

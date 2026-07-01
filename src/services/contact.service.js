@@ -14,14 +14,11 @@ function normalizePhone(phone) {
 }
 
 function normalizeTags(tags) {
-  if (Array.isArray(tags)) {
-    return tags.map((tag) => String(tag).trim()).filter(Boolean);
-  }
-
-  return String(tags || "")
-    .split(",")
-    .map((tag) => tag.trim())
+  const normalized = (Array.isArray(tags) ? tags : String(tags || "").split(","))
+    .map((tag) => String(tag).trim())
     .filter(Boolean);
+  const latestTag = normalized.at(-1);
+  return latestTag ? [latestTag] : [];
 }
 
 function assertValidWhatsappPhone(phone) {
@@ -65,7 +62,24 @@ async function listContacts(tenantId, query = {}) {
     filter.tags = String(query.tag).trim();
   }
 
-  return Contact.find(filter).sort({ createdAt: -1 }).limit(100).lean();
+  const [contacts, segments] = await Promise.all([
+    Contact.find(filter).sort({ createdAt: -1 }).limit(100).lean(),
+    ContactSegment.find({ tenantId }).select("_id name tag").lean()
+  ]);
+  const groupByTag = new Map(
+    segments
+      .filter((segment) => segment.tag)
+      .map((segment) => [segment.tag, {
+        id: String(segment._id),
+        name: segment.name,
+        tag: segment.tag
+      }])
+  );
+
+  return contacts.map((contact) => ({
+    ...contact,
+    group: groupByTag.get(contact.tags?.[0]) || null
+  }));
 }
 
 async function createContact(tenantId, body) {
@@ -201,13 +215,18 @@ async function setContactSegmentMembership(tenantId, segmentId, contactId, attac
     throw new HttpError(404, "Group not found");
   }
 
-  const update = attach
-    ? { $addToSet: { tags: segment.tag } }
-    : { $pull: { tags: segment.tag } };
+  if (attach) {
+    const data = await setContactGroup(tenantId, contactId, segmentId);
+    return {
+      contact: data.contact,
+      segmentId,
+      attached: true
+    };
+  }
 
   const contact = await Contact.findOneAndUpdate(
     { _id: contactId, tenantId },
-    update,
+    { $pull: { tags: segment.tag } },
     { returnDocument: "after" }
   ).lean();
 
@@ -216,6 +235,47 @@ async function setContactSegmentMembership(tenantId, segmentId, contactId, attac
   }
 
   return { contact, segmentId, attached: attach };
+}
+
+async function setContactGroup(tenantId, contactId, segmentId) {
+  if (!mongoose.Types.ObjectId.isValid(contactId)) {
+    throw new HttpError(400, "Contact ID is invalid");
+  }
+  if (segmentId && !mongoose.Types.ObjectId.isValid(segmentId)) {
+    throw new HttpError(400, "Group ID is invalid");
+  }
+
+  const segments = await ContactSegment.find({ tenantId })
+    .select("_id name tag")
+    .lean();
+  const selectedSegment = segmentId
+    ? segments.find((segment) => String(segment._id) === String(segmentId))
+    : null;
+
+  if (segmentId && !selectedSegment) {
+    throw new HttpError(404, "Group not found");
+  }
+
+  const contact = await Contact.findOne({ _id: contactId, tenantId });
+  if (!contact) {
+    throw new HttpError(404, "Contact not found");
+  }
+
+  // Group tags use the contact's single tag slot. A new selection fully
+  // replaces the previous tag; choosing no group clears it.
+  contact.tags = selectedSegment?.tag ? [selectedSegment.tag] : [];
+  await contact.save();
+
+  return {
+    contact: contact.toObject(),
+    group: selectedSegment
+      ? {
+          id: String(selectedSegment._id),
+          name: selectedSegment.name,
+          tag: selectedSegment.tag
+        }
+      : null
+  };
 }
 
 async function deleteSegment(tenantId, segmentId) {
@@ -242,5 +302,6 @@ module.exports = {
   listSegments,
   getSegmentMembers,
   setContactSegmentMembership,
+  setContactGroup,
   deleteSegment
 };

@@ -10,6 +10,7 @@ router.get("/conversations", inboxController.listConversations);
 router.get("/unread", inboxController.getUnreadSummary);
 router.get("/conversations/:conversationId/messages", inboxController.getConversationMessages);
 router.post("/conversations/:conversationId/read", inboxController.markConversationRead);
+router.delete("/conversations/:conversationId", inboxController.deleteConversation);
 router.post("/conversations/:conversationId/reply", inboxController.sendReply);
 
 module.exports = router;

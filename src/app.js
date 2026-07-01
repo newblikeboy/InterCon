@@ -16,12 +16,12 @@ securityMiddleware(app);
 
 app.use(compression());
 app.use(express.json({
-  limit: "1mb",
+  limit: "5mb",
   verify: (req, res, buf) => {
     req.rawBody = buf;
   }
 }));
-app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 app.use(cookieParser());
 
 if (env.nodeEnv !== "test") {
@@ -29,7 +29,7 @@ if (env.nodeEnv !== "test") {
 }
 
 app.use(express.static(publicPath, {
-  maxAge: env.nodeEnv === "production" ? "7d" : 0,
+  maxAge: 0,
   etag: true,
   setHeaders(res, filePath) {
     if (filePath.endsWith(".html")) {
@@ -37,9 +37,13 @@ app.use(express.static(publicPath, {
       return;
     }
 
-    if (env.nodeEnv === "production" && /\.(?:css|js|ico|png|jpg|jpeg|webp|svg|woff2?)$/i.test(filePath)) {
+    const isVersionedAsset = Boolean(res.req?.query?.v);
+    if (isVersionedAsset && /\.(?:css|js|ico|png|jpg|jpeg|webp|svg|woff2?)$/i.test(filePath)) {
       res.setHeader("Cache-Control", "public, max-age=604800, immutable");
+      return;
     }
+
+    res.setHeader("Cache-Control", "no-cache");
   }
 }));
 

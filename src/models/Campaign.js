@@ -20,6 +20,11 @@ const campaignSchema = new mongoose.Schema(
       trim: true,
       maxlength: 120
     },
+    mediaId: {
+      type: String,
+      trim: true,
+      maxlength: 80
+    },
     category: {
       type: String,
       enum: ["utility", "marketing", "authentication"],

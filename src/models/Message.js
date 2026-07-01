@@ -52,6 +52,25 @@ const messageSchema = new mongoose.Schema(
       trim: true,
       maxlength: 300
     }],
+    mediaId: {
+      type: String,
+      trim: true,
+      maxlength: 80
+    },
+    mediaType: {
+      type: String,
+      enum: ["image", "video"]
+    },
+    mediaUrl: {
+      type: String,
+      trim: true
+    },
+    batchId: {
+      type: String,
+      trim: true,
+      maxlength: 80,
+      index: true
+    },
     metaMessageId: {
       type: String,
       trim: true,
@@ -114,6 +133,7 @@ const messageSchema = new mongoose.Schema(
 );
 
 messageSchema.index({ tenantId: 1, createdAt: -1 });
+messageSchema.index({ tenantId: 1, batchId: 1 });
 messageSchema.index({ tenantId: 1, to: 1 });
 messageSchema.index({ status: 1, nextAttemptAt: 1, createdAt: 1 });
 messageSchema.index({ phoneNumberId: 1, status: 1, nextAttemptAt: 1 });

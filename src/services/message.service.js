@@ -1,8 +1,11 @@
 const Contact = require("../models/Contact");
+const ContactSegment = require("../models/ContactSegment");
 const Message = require("../models/Message");
+const MediaAsset = require("../models/MediaAsset");
 const Template = require("../models/Template");
 const Tenant = require("../models/Tenant");
 const mongoose = require("mongoose");
+const crypto = require("crypto");
 const env = require("../config/env");
 const HttpError = require("../utils/httpError");
 const { isMetaSampleTemplate } = require("./template.service");
@@ -32,15 +35,36 @@ function normalizePhone(phone) {
   return digits;
 }
 
+function normalizeSingleTag(tags, fallback = "") {
+  const normalized = (Array.isArray(tags) ? tags : String(tags || fallback).split(","))
+    .map((tag) => String(tag).trim())
+    .filter(Boolean);
+  const latestTag = normalized.at(-1);
+  return latestTag ? [latestTag] : [];
+}
+
 function isMetaProvided555Number(value) {
   return /^\+?1\s*555[\s-]?/i.test(String(value || ""));
 }
 
-function buildTemplateComponents(variables, template = {}) {
-  if (!variables.length) return undefined;
+function buildTemplateComponents(message, template = {}) {
+  const variables = message.variables || [];
+  const components = [];
+
+  if (template.headerType && template.headerType !== "none") {
+    components.push({
+      type: "header",
+      parameters: [{
+        type: template.headerType,
+        [template.headerType]: {
+          link: message.mediaUrl
+        }
+      }]
+    });
+  }
 
   if (template.category === "authentication") {
-    return [
+    components.push(
       {
         type: "body",
         parameters: [
@@ -61,16 +85,38 @@ function buildTemplateComponents(variables, template = {}) {
           }
         ]
       }
-    ];
+    );
+    return components;
   }
 
-  return [{
-    type: "body",
-    parameters: variables.map((value) => ({
-      type: "text",
-      text: value
-    }))
-  }];
+  if (variables.length) {
+    components.push({
+      type: "body",
+      parameters: variables.map((value) => ({
+        type: "text",
+        text: value
+      }))
+    });
+  }
+  return components.length ? components : undefined;
+}
+
+function assertSendMediaCompatible(asset, headerType) {
+  if (!asset || asset.mediaType !== headerType) {
+    throw new HttpError(400, `Choose a ${headerType} from the Media Library for this template`);
+  }
+  const valid = headerType === "image"
+    ? ["image/jpeg", "image/png"].includes(asset.mimeType)
+    : ["video/mp4", "video/3gpp"].includes(asset.mimeType);
+  if (!valid) {
+    throw new HttpError(400, headerType === "image"
+      ? "WhatsApp image headers require a JPG or PNG asset"
+      : "WhatsApp video headers require an MP4 or 3GP asset");
+  }
+  const maximumBytes = headerType === "image" ? 5 * 1024 * 1024 : 16 * 1024 * 1024;
+  if (Number(asset.bytes || 0) > maximumBytes) {
+    throw new HttpError(400, `WhatsApp ${headerType} headers must be ${headerType === "image" ? "5" : "16"} MB or smaller`);
+  }
 }
 
 function assertTemplateParameterCount(template, variables) {
@@ -90,6 +136,277 @@ function assertTemplateParameterCount(template, variables) {
       language: template.language
     }
   );
+}
+
+function personalizeVariables(variables, contact) {
+  return variables.map((value) => String(value).replace(
+    /\{\{\s*(?:contact\.)?(name|phone|email|city|tag)\s*\}\}/gi,
+    (match, field) => {
+      const normalizedField = field.toLowerCase();
+      if (normalizedField === "tag") return String(contact?.tags?.[0] || "");
+      return String(contact?.[normalizedField] || "");
+    }
+  ));
+}
+
+function hasResolvedTemplateVariables(variables, contact) {
+  return personalizeVariables(variables, contact).every((value) => String(value).trim());
+}
+
+async function resolveTemplateSendContext(tenantId, body = {}, options = {}) {
+  await requireActivePaidPlan(tenantId);
+
+  const templateName = String(body.templateName || body.template_name || "").trim();
+  const language = String(body.language || "").trim();
+  const variables = normalizeVariables(body.variables ?? body.parameters ?? body.templateParams);
+
+  if (!templateName) {
+    throw new HttpError(400, "Approved template is required");
+  }
+  if (isMetaSampleTemplate(templateName)) {
+    throw new HttpError(400, "Meta's hello_world sample template can only be sent from public test numbers. Create and use your own approved template for this WhatsApp number.", { code: 131058 });
+  }
+
+  const templateFilter = {
+    tenantId,
+    name: templateName,
+    status: "approved"
+  };
+  if (language) templateFilter.language = language;
+
+  const [tenant, template] = await Promise.all([
+    Tenant.findById(tenantId).select("+meta.accessToken"),
+    Template.findOne(templateFilter).select("name language category status body parameterCount headerType headerMediaId").lean()
+  ]);
+
+  if (!template) {
+    throw new HttpError(400, language
+      ? `Select a Meta-approved template for language ${language}`
+      : "Select a Meta-approved template");
+  }
+  if (!options.perRecipientVariables) {
+    assertTemplateParameterCount(template, variables);
+  }
+
+  let mediaAsset = null;
+  if (template.headerType && template.headerType !== "none") {
+    const mediaId = String(body.mediaId || body.media_id || template.headerMediaId || "").trim();
+    if (!mediaId) {
+      throw new HttpError(400, `This template requires a ${template.headerType} from the Media Library`);
+    }
+    mediaAsset = await MediaAsset.findOne({ tenantId, mediaId }).lean();
+    assertSendMediaCompatible(mediaAsset, template.headerType);
+  }
+
+  const accessToken = tenant?.getMetaAccessToken();
+  if (!tenant?.meta?.phoneNumberId || !accessToken) {
+    throw new HttpError(409, "Connect WhatsApp first. Phone number ID and Meta access token are required before sending messages.");
+  }
+
+  return {
+    tenant,
+    template,
+    templateName,
+    language: language || template.language || "en",
+    variables: options.perRecipientVariables ? [] : variables,
+    mediaAsset
+  };
+}
+
+function buildQueuedMessage(context, tenantId, contact, extra = {}) {
+  return {
+    tenantId,
+    contactId: contact._id,
+    to: contact.phone,
+    wabaId: context.tenant.meta.wabaId,
+    phoneNumberId: context.tenant.meta.phoneNumberId,
+    templateName: context.templateName,
+    language: context.language,
+    variables: personalizeVariables(context.variables, contact),
+    ...(context.mediaAsset ? {
+      mediaId: context.mediaAsset.mediaId,
+      mediaType: context.mediaAsset.mediaType,
+      mediaUrl: context.mediaAsset.secureUrl
+    } : {}),
+    status: "queued",
+    nextAttemptAt: new Date(),
+    maxAttempts: env.messageQueueMaxRetries,
+    ...extra
+  };
+}
+
+function normalizeBulkSelection(body = {}) {
+  const contactIds = [...new Set(
+    (Array.isArray(body.contactIds) ? body.contactIds : [])
+      .map((value) => String(value).trim())
+      .filter(Boolean)
+  )];
+  const groupIds = [...new Set(
+    (Array.isArray(body.groupIds) ? body.groupIds : [])
+      .map((value) => String(value).trim())
+      .filter(Boolean)
+  )];
+
+  if (!contactIds.length && !groupIds.length) {
+    throw new HttpError(400, "Select at least one contact or group");
+  }
+  if ([...contactIds, ...groupIds].some((id) => !mongoose.Types.ObjectId.isValid(id))) {
+    throw new HttpError(400, "One or more selected contacts or groups are invalid");
+  }
+  return { contactIds, groupIds };
+}
+
+async function resolveBulkRecipients(tenantId, body = {}) {
+  const { contactIds, groupIds } = normalizeBulkSelection(body);
+  const groups = groupIds.length
+    ? await ContactSegment.find({ tenantId, _id: { $in: groupIds } }).select("_id tag name").lean()
+    : [];
+  if (groups.length !== groupIds.length) {
+    throw new HttpError(400, "One or more selected groups no longer exist");
+  }
+
+  const recipientClauses = [];
+  if (contactIds.length) recipientClauses.push({ _id: { $in: contactIds } });
+  const groupTags = groups.map((group) => group.tag).filter(Boolean);
+  if (groupTags.length) recipientClauses.push({ tags: { $in: groupTags } });
+
+  const selectedContacts = await Contact.find({
+    tenantId,
+    $or: recipientClauses
+  }).select("_id name phone status optIn tags").lean();
+  const eligibleContacts = selectedContacts.filter(
+    (contact) => contact.status === "active" && contact.optIn?.status
+  );
+  if (!eligibleContacts.length) {
+    throw new HttpError(400, "No active opted-in contacts were found in this selection");
+  }
+  if (eligibleContacts.length > 500) {
+    throw new HttpError(400, "A bulk send can include at most 500 eligible contacts");
+  }
+
+  const foundDirectIds = new Set(selectedContacts.map((contact) => String(contact._id)));
+  const missingDirectCount = contactIds.filter((id) => !foundDirectIds.has(id)).length;
+  return {
+    contactIds,
+    groupIds,
+    selectedContacts,
+    eligibleContacts,
+    missingDirectCount,
+    ineligibleCount: selectedContacts.length - eligibleContacts.length
+  };
+}
+
+function buildRecipientVariableMap(rows, expectedCount) {
+  if (!expectedCount) return new Map();
+  if (expectedCount > 10) {
+    throw new HttpError(400, "Bulk CSV sending supports templates with a maximum of 10 variables");
+  }
+  if (!Array.isArray(rows) || !rows.length) {
+    throw new HttpError(400, "Upload recipient variable data keyed by phone number");
+  }
+  if (rows.length > 1000) {
+    throw new HttpError(400, "Recipient variable data can contain at most 1000 rows");
+  }
+
+  const variableMap = new Map();
+  rows.forEach((row, index) => {
+    const rowNumber = index + 2;
+    const phone = normalizePhone(row?.phone);
+    const variables = Array.isArray(row?.variables)
+      ? row.variables.map((value) => String(value ?? "").trim())
+      : [];
+    if (!/^\d{11,15}$/.test(phone)) {
+      throw new HttpError(400, `Variable row ${rowNumber} has an invalid phone number`);
+    }
+    if (variableMap.has(phone)) {
+      throw new HttpError(400, `Phone ${phone} appears more than once in the variable data`);
+    }
+    if (variables.length !== expectedCount || variables.some((value) => !value)) {
+      throw new HttpError(400, `Variable row ${rowNumber} must contain all ${expectedCount} template values`);
+    }
+    if (variables.some((value) => value.length > 300)) {
+      throw new HttpError(400, `Variable row ${rowNumber} contains a value longer than 300 characters`);
+    }
+    variableMap.set(phone, variables);
+  });
+  return variableMap;
+}
+
+async function listBulkRecipients(tenantId, body = {}) {
+  const result = await resolveBulkRecipients(tenantId, body);
+  return {
+    contacts: result.eligibleContacts.map((contact) => ({
+      id: String(contact._id),
+      name: contact.name,
+      phone: contact.phone
+    })),
+    eligibleCount: result.eligibleContacts.length,
+    skippedCount: result.ineligibleCount + result.missingDirectCount
+  };
+}
+
+function renderTemplateBody(body, variables) {
+  return String(body || "").replace(/\{\{\s*(\d+)\s*\}\}/g, (match, position) => (
+    variables[Number(position) - 1] ?? match
+  ));
+}
+
+async function previewBulkTemplateMessages(tenantId, body = {}) {
+  const templateName = String(body.templateName || body.template_name || "").trim();
+  const language = String(body.language || "").trim();
+  if (!templateName) throw new HttpError(400, "Select an approved template");
+
+  const templateFilter = { tenantId, name: templateName, status: "approved" };
+  if (language) templateFilter.language = language;
+  const [template, recipients] = await Promise.all([
+    Template.findOne(templateFilter).select("name language category body parameterCount headerType").lean(),
+    resolveBulkRecipients(tenantId, body)
+  ]);
+  if (!template) throw new HttpError(400, "The selected template is not approved or no longer exists");
+
+  const expectedVariableCount = Number(template.parameterCount || 0);
+  const recipientVariableMap = buildRecipientVariableMap(body.recipientVariables, expectedVariableCount);
+  const tags = [...new Set(recipients.eligibleContacts.flatMap((contact) => contact.tags || []).filter(Boolean))];
+  const segments = tags.length
+    ? await ContactSegment.find({ tenantId, tag: { $in: tags } }).select("name tag").lean()
+    : [];
+  const groupByTag = new Map(segments.map((segment) => [segment.tag, segment.name]));
+  const selectedPhones = new Set(recipients.eligibleContacts.map((contact) => normalizePhone(contact.phone)));
+
+  const rows = recipients.eligibleContacts.map((contact) => {
+    const phone = normalizePhone(contact.phone);
+    const variables = expectedVariableCount ? recipientVariableMap.get(phone) || [] : [];
+    const matched = !expectedVariableCount || variables.length === expectedVariableCount;
+    const tag = contact.tags?.[0] || "";
+    return {
+      contactId: String(contact._id),
+      phone,
+      name: contact.name || "",
+      group: groupByTag.get(tag) || "",
+      tag,
+      variables,
+      matched,
+      finalMessage: matched ? renderTemplateBody(template.body, variables) : ""
+    };
+  });
+
+  return {
+    template: {
+      name: template.name,
+      language: template.language,
+      category: template.category,
+      headerType: template.headerType || "none",
+      parameterCount: expectedVariableCount
+    },
+    rows,
+    summary: {
+      selectedCount: rows.length,
+      matchedCount: rows.filter((row) => row.matched).length,
+      missingCount: rows.filter((row) => !row.matched).length,
+      unmatchedVariableRowCount: [...recipientVariableMap.keys()].filter((phone) => !selectedPhones.has(phone)).length,
+      skippedContactCount: recipients.ineligibleCount + recipients.missingDirectCount
+    }
+  };
 }
 
 async function assertWabaCanSendTemplates(tenant, accessToken) {
@@ -206,7 +523,7 @@ async function resolveContact(tenantId, body) {
       throw new HttpError(400, "Contact ID is invalid");
     }
 
-    const contact = await Contact.findOne({ _id: contactId, tenantId }).select("phone name status optIn").lean();
+    const contact = await Contact.findOne({ _id: contactId, tenantId }).select("phone name email city tags status optIn").lean();
     if (!contact) {
       throw new HttpError(404, "Contact not found");
     }
@@ -238,9 +555,7 @@ async function resolveContact(tenantId, body) {
         email: body.email || "",
         city: body.city || "",
         source: body.source || "api",
-        tags: Array.isArray(body.tags)
-          ? body.tags.map((tag) => String(tag).trim()).filter(Boolean)
-          : String(body.tags || "api").split(",").map((tag) => tag.trim()).filter(Boolean),
+        tags: normalizeSingleTag(body.tags, "api"),
         optIn: {
           status: true,
           proof: body.optInProof || body.opt_in_proof || body.proof || "API consent flag",
@@ -270,7 +585,7 @@ function buildMetaMessagePayload(message, template) {
     }
   };
 
-  const components = buildTemplateComponents(message.variables || [], template);
+  const components = buildTemplateComponents(message, template);
   if (components) {
     payload.template.components = components;
   }
@@ -309,12 +624,8 @@ function getRetryDelayMs(attempts) {
 }
 
 async function sendTemplateMessage(tenantId, body = {}) {
-  await requireActivePaidPlan(tenantId);
-
-  const templateName = String(body.templateName || body.template_name || "").trim();
-  const language = String(body.language || "").trim();
-  const variables = normalizeVariables(body.variables ?? body.parameters ?? body.templateParams);
   const idempotencyKey = getIdempotencyKey(body);
+  const context = await resolveTemplateSendContext(tenantId, body);
 
   if (idempotencyKey) {
     const existingMessage = await Message.findOne({ tenantId, idempotencyKey }).lean();
@@ -326,66 +637,70 @@ async function sendTemplateMessage(tenantId, body = {}) {
     }
   }
 
-  if (!templateName) {
-    throw new HttpError(400, "Approved template is required");
-  }
-
-  if (isMetaSampleTemplate(templateName)) {
-    throw new HttpError(400, "Meta's hello_world sample template can only be sent from public test numbers. Create and use your own approved template for this WhatsApp number.", { code: 131058 });
-  }
-
-  const templateFilter = {
-    tenantId,
-    name: templateName,
-    status: "approved"
-  };
-
-  if (language) {
-    templateFilter.language = language;
-  }
-
-  const [tenant, contact, template] = await Promise.all([
-    Tenant.findById(tenantId).select("+meta.accessToken"),
-    resolveContact(tenantId, body),
-    Template.findOne(templateFilter).select("name language category status body parameterCount").lean()
-  ]);
+  const contact = await resolveContact(tenantId, body);
 
   if (contact.status !== "active" || !contact.optIn?.status) {
     throw new HttpError(400, "Only active opted-in contacts can receive WhatsApp messages");
   }
-
-  if (!template) {
-    throw new HttpError(400, language
-      ? `Select a Meta-approved template for language ${language}`
-      : "Select a Meta-approved template");
-  }
-
-  assertTemplateParameterCount(template, variables);
-
-  const accessToken = tenant?.getMetaAccessToken();
-
-  if (!tenant?.meta?.phoneNumberId || !accessToken) {
-    throw new HttpError(409, "Connect WhatsApp first. Phone number ID and Meta access token are required before sending messages.");
+  if (!hasResolvedTemplateVariables(context.variables, contact)) {
+    throw new HttpError(400, "This contact is missing data required by the selected template variable mapping");
   }
 
   const message = await Message.create({
-    tenantId,
-    contactId: contact._id,
-    to: contact.phone,
-    wabaId: tenant.meta.wabaId,
-    phoneNumberId: tenant.meta.phoneNumberId,
-    templateName,
-    language: language || template.language || "en",
-    variables,
-    status: "queued",
-    nextAttemptAt: new Date(),
-    maxAttempts: env.messageQueueMaxRetries,
+    ...buildQueuedMessage(context, tenantId, contact),
     ...(idempotencyKey ? { idempotencyKey } : {})
   });
 
   return {
     queued: true,
     message
+  };
+}
+
+async function sendTemplateMessages(tenantId, body = {}) {
+  const context = await resolveTemplateSendContext(tenantId, body, { perRecipientVariables: true });
+  const recipients = await resolveBulkRecipients(tenantId, body);
+  const expectedVariableCount = Number(context.template.parameterCount || 0);
+  const recipientVariableMap = buildRecipientVariableMap(body.recipientVariables, expectedVariableCount);
+  const sendableContacts = expectedVariableCount
+    ? recipients.eligibleContacts.filter((contact) => recipientVariableMap.has(normalizePhone(contact.phone)))
+    : recipients.eligibleContacts;
+  const missingVariableCount = recipients.eligibleContacts.length - sendableContacts.length;
+  if (!sendableContacts.length) {
+    throw new HttpError(400, "No selected contact has a matching phone row in the recipient variable data");
+  }
+  if (missingVariableCount) {
+    throw new HttpError(
+      400,
+      `${missingVariableCount} selected recipient${missingVariableCount === 1 ? " does" : "s do"} not have a matching phone row in the variable data`,
+      { code: "RECIPIENT_VARIABLE_ROWS_MISSING", missingVariableCount }
+    );
+  }
+  const selectedPhones = new Set(recipients.selectedContacts.map((contact) => normalizePhone(contact.phone)));
+  const unmatchedVariableRowCount = [...recipientVariableMap.keys()]
+    .filter((phone) => !selectedPhones.has(phone))
+    .length;
+  const batchId = `BATCH-${crypto.randomUUID()}`;
+  const messages = await Message.insertMany(
+    sendableContacts.map((contact) => buildQueuedMessage(context, tenantId, contact, {
+      batchId,
+      variables: expectedVariableCount
+        ? recipientVariableMap.get(normalizePhone(contact.phone))
+        : []
+    })),
+    { ordered: false }
+  );
+
+  return {
+    batchId,
+    requestedContactCount: recipients.contactIds.length,
+    requestedGroupCount: recipients.groupIds.length,
+    selectedCount: recipients.selectedContacts.length + recipients.missingDirectCount,
+    queuedCount: messages.length,
+    skippedCount: recipients.ineligibleCount + recipients.missingDirectCount + missingVariableCount,
+    missingVariableCount,
+    unmatchedVariableRowCount,
+    messageIds: messages.map((message) => String(message._id))
   };
 }
 
@@ -527,7 +842,7 @@ async function processQueuedMessage(message) {
       name: message.templateName,
       language: message.language,
       status: "approved"
-    }).select("name language category status body parameterCount").lean()
+    }).select("name language category status body parameterCount headerType").lean()
   ]);
 
   if (!tenant) {
@@ -541,6 +856,10 @@ async function processQueuedMessage(message) {
 
   if (!template) {
     return failMessage(message, `Template "${message.templateName}" is not approved for language ${message.language}.`);
+  }
+
+  if (template.headerType && template.headerType !== "none" && !message.mediaUrl) {
+    return failMessage(message, `Template "${message.templateName}" requires a ${template.headerType}, but this queued message has no media.`);
   }
 
   if (!await hasDailyUniqueCapacity(message)) {
@@ -628,9 +947,13 @@ async function processNextQueuedMessage(workerId) {
 }
 
 module.exports = {
+  buildMetaMessagePayload,
   getMessage,
+  listBulkRecipients,
   listMessages,
+  previewBulkTemplateMessages,
   processNextQueuedMessage,
   summarizeMessages,
-  sendTemplateMessage
+  sendTemplateMessage,
+  sendTemplateMessages
 };

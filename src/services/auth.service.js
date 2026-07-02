@@ -132,7 +132,7 @@ async function loginCustomer(body) {
       { email: normalizedLoginId },
       { phone: String(loginId).trim() }
     ]
-  }).select("+passwordHash");
+  }).select("+passwordHash +sessionVersion");
   if (!user) {
     throw new HttpError(401, "Invalid email or password");
   }

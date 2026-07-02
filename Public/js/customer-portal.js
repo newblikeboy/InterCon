@@ -44,6 +44,7 @@ const profileRole = document.querySelector("[data-profile-role]");
 const logoutButton = document.querySelector("[data-logout]");
 const contactFileInput = document.querySelector("[data-contact-file]");
 const contactUploadButtons = document.querySelectorAll("[data-contact-upload]");
+const contactTemplateButtons = document.querySelectorAll("[data-contact-template]");
 const contactMessage = document.querySelector("[data-contact-message]");
 const contactList = document.querySelector("[data-contact-list]");
 const refreshContactsButton = document.querySelector("[data-refresh-contacts]");
@@ -1373,6 +1374,31 @@ function parseCsv(text) {
       return row;
     }, {});
   });
+}
+
+// Header names mirror the fields accepted by contact.service.normalizeContact,
+// with a sample row so businesses can fill in their own list and re-upload.
+function downloadContactCsvTemplate() {
+  const headers = ["name", "whatsapp_number", "optIn", "tags"];
+  const sampleRow = [
+    "Priya Sharma",
+    "919210699076",
+    "yes",
+    "vip"
+  ];
+  const csv = [
+    headers.join(","),
+    sampleRow.map(escapeCsvValue).join(",")
+  ].join("\r\n");
+  const blobUrl = URL.createObjectURL(new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = blobUrl;
+  link.download = "contacts_template.csv";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(blobUrl);
+  setContactMessage("Downloaded contacts_template.csv. Fill in your contacts, then use Upload CSV.");
 }
 
 function renderContactRows(contacts) {
@@ -2778,6 +2804,16 @@ if (metaRegisterPhoneButton) {
 contactUploadButtons.forEach((button) => {
   button.addEventListener("click", () => {
     contactFileInput?.click();
+  });
+});
+
+contactTemplateButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    try {
+      downloadContactCsvTemplate();
+    } catch (error) {
+      setContactMessage(error.message, true);
+    }
   });
 });
 

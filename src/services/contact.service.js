@@ -52,9 +52,11 @@ async function listContacts(tenantId, query = {}) {
 
   if (query.search) {
     const search = String(query.search).trim();
+    if (search.length > 100) throw new HttpError(400, "Search must be 100 characters or fewer");
+    const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     filter.$or = [
-      { name: new RegExp(search, "i") },
-      { phone: new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") }
+      { name: new RegExp(escapedSearch, "i") },
+      { phone: new RegExp(escapedSearch, "i") }
     ];
   }
 
@@ -169,18 +171,19 @@ async function createSegment(tenantId, body) {
 }
 
 async function listSegments(tenantId) {
-  const segments = await ContactSegment.find({ tenantId }).sort({ createdAt: -1 }).lean();
+  const [segments, tagCounts] = await Promise.all([
+    ContactSegment.find({ tenantId }).sort({ createdAt: -1 }).limit(500).lean(),
+    Contact.aggregate([
+      { $match: { tenantId: new mongoose.Types.ObjectId(String(tenantId)), status: "active" } },
+      { $unwind: "$tags" },
+      { $group: { _id: "$tags", count: { $sum: 1 } } }
+    ])
+  ]);
+  const countByTag = new Map(tagCounts.map((item) => [item._id, item.count]));
 
-  // Group membership is defined by the contact carrying the segment's tag.
-  const counts = await Promise.all(
-    segments.map((segment) =>
-      Contact.countDocuments({ tenantId, tags: segment.tag, status: "active" })
-    )
-  );
-
-  return segments.map((segment, index) => ({
+  return segments.map((segment) => ({
     ...segment,
-    memberCount: counts[index]
+    memberCount: countByTag.get(segment.tag) || 0
   }));
 }
 

@@ -76,5 +76,6 @@ const contactSchema = new mongoose.Schema(
 
 contactSchema.index({ tenantId: 1, phone: 1 }, { unique: true });
 contactSchema.index({ tenantId: 1, tags: 1 });
+contactSchema.index({ tenantId: 1, status: 1, tags: 1 });
 
 module.exports = mongoose.model("Contact", contactSchema);

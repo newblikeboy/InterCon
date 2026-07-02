@@ -2,30 +2,58 @@ const path = require("path");
 const express = require("express");
 const compression = require("compression");
 const cookieParser = require("cookie-parser");
-const morgan = require("morgan");
+const pinoHttp = require("pino-http");
 const routes = require("./routes");
 const securityMiddleware = require("./middleware/security");
 const notFound = require("./middleware/notFound");
 const errorHandler = require("./middleware/errorHandler");
 const env = require("./config/env");
+const metrics = require("./services/metrics.service");
 
 const app = express();
 const publicPath = path.resolve(process.cwd(), "Public");
 
+app.use((req, res, next) => {
+  const requestId = /^[A-Za-z0-9._-]{8,100}$/.test(String(req.headers["x-request-id"] || ""))
+    ? String(req.headers["x-request-id"])
+    : crypto.randomUUID();
+  req.id = requestId;
+  res.setHeader("X-Request-Id", requestId);
+  next();
+});
+app.use(metrics.middleware);
 securityMiddleware(app);
 
 app.use(compression());
 app.use(express.json({
   limit: "5mb",
   verify: (req, res, buf) => {
-    req.rawBody = buf;
+    if (/^\/api\/webhooks(?:\/|$)/.test(req.originalUrl.split("?")[0])) {
+      req.rawBody = Buffer.from(buf);
+    }
   }
 }));
-app.use(express.urlencoded({ extended: true, limit: "5mb" }));
+app.use(express.urlencoded({ extended: false, limit: "256kb" }));
 app.use(cookieParser());
 
 if (env.nodeEnv !== "test") {
-  app.use(morgan(env.nodeEnv === "production" ? "combined" : "dev"));
+  app.use(pinoHttp({
+    level: env.nodeEnv === "production" ? "info" : "debug",
+    genReqId: (req) => req.id,
+    autoLogging: {
+      ignore: (req) => /^\/api\/health(?:\/|$)/.test(req.url.split("?")[0])
+    },
+    serializers: {
+      req(req) {
+        return {
+          id: req.id,
+          method: req.method,
+          url: String(req.url || "").split("?")[0],
+          remoteAddress: req.remoteAddress
+        };
+      }
+    }
+  }));
 }
 
 app.use(express.static(publicPath, {
@@ -78,3 +106,4 @@ app.use(notFound);
 app.use(errorHandler);
 
 module.exports = app;
+const crypto = require("crypto");

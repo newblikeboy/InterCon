@@ -1,13 +1,68 @@
+const crypto = require("crypto");
 const env = require("../config/env");
 const Tenant = require("../models/Tenant");
 const Message = require("../models/Message");
 const Template = require("../models/Template");
 const WebhookEvent = require("../models/WebhookEvent");
+const OnboardingSession = require("../models/OnboardingSession");
 const HttpError = require("../utils/httpError");
 const { invalidateTemplateSync } = require("./template.service");
+const { fetchWithPolicy } = require("../utils/httpClient");
+const { getRedisClient } = require("../config/redis");
 
 const onboardingMetaCache = new Map();
 const ONBOARDING_META_TTL_MS = 20 * 1000;
+const ONBOARDING_SESSION_TTL_MS = 10 * 60 * 1000;
+
+function hashOnboardingState(state) {
+  return crypto.createHash("sha256").update(String(state)).digest("hex");
+}
+
+async function createOnboardingSession(tenantId, userId) {
+  const state = crypto.randomBytes(32).toString("base64url");
+  const expiresAt = new Date(Date.now() + ONBOARDING_SESSION_TTL_MS);
+  await OnboardingSession.create({
+    tenantId,
+    userId,
+    stateHash: hashOnboardingState(state),
+    expiresAt
+  });
+  return { state, expiresAt };
+}
+
+async function consumeOnboardingSession(tenantId, userId, state) {
+  if (!state) throw new HttpError(403, "Meta onboarding session is missing or expired");
+
+  const session = await OnboardingSession.findOneAndUpdate(
+    {
+      tenantId,
+      userId,
+      stateHash: hashOnboardingState(state),
+      usedAt: { $exists: false },
+      expiresAt: { $gt: new Date() }
+    },
+    { $set: { usedAt: new Date() } },
+    { returnDocument: "after" }
+  ).lean();
+
+  if (!session) throw new HttpError(403, "Meta onboarding session is invalid or expired");
+}
+
+async function assertMetaAssetsAvailable(tenantId, wabaId, phoneNumberId) {
+  const clauses = [];
+  if (wabaId) clauses.push({ "meta.wabaId": String(wabaId) });
+  if (phoneNumberId) clauses.push({ "meta.phoneNumberId": String(phoneNumberId) });
+  if (!clauses.length) return;
+
+  const owner = await Tenant.findOne({
+    _id: { $ne: tenantId },
+    $or: clauses
+  }).select("_id").lean();
+
+  if (owner) {
+    throw new HttpError(409, "This WhatsApp Business Account or phone number is already connected to another InterCon workspace");
+  }
+}
 
 function getEmbeddedSignupUrl() {
   if (!env.embeddedSignupUrl) {
@@ -225,7 +280,7 @@ async function exchangeCodeForToken({ code, redirectUri, requestUrl, requireRedi
     params.set("redirect_uri", resolvedRedirectUri);
   }
 
-  const response = await fetch(tokenUrl, {
+  const response = await fetchWithPolicy(tokenUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded"
@@ -242,7 +297,7 @@ async function exchangeCodeForToken({ code, redirectUri, requestUrl, requireRedi
 }
 
 async function fetchMetaJson(path, accessToken, options = {}) {
-  const response = await fetch(`https://graph.facebook.com/${env.metaGraphApiVersion}/${path}`, {
+  const response = await fetchWithPolicy(`https://graph.facebook.com/${env.metaGraphApiVersion}/${path}`, {
     ...options,
     headers: {
       "Authorization": `Bearer ${accessToken}`,
@@ -261,7 +316,10 @@ async function fetchMetaJson(path, accessToken, options = {}) {
 
 function invalidateOnboardingMetaCache(wabaId) {
   if (wabaId) {
-    onboardingMetaCache.delete(String(wabaId));
+    const key = String(wabaId);
+    onboardingMetaCache.delete(key);
+    const redis = getRedisClient();
+    if (redis?.isReady) redis.del(`intercon:onboarding-state:${key}`).catch(() => {});
   }
 }
 
@@ -281,11 +339,39 @@ async function getOnboardingMetaState(tenant, accessToken) {
   if (cached && cached.expiresAt > Date.now()) {
     return cached.promise;
   }
-
-  const promise = fetchOnboardingMetaState(tenant, accessToken).catch((error) => {
-    onboardingMetaCache.delete(cacheKey);
-    throw error;
-  });
+  const redis = getRedisClient();
+  const sharedKey = `intercon:onboarding-state:${cacheKey}`;
+  if (redis?.isReady) {
+    const shared = await redis.get(sharedKey);
+    if (shared && shared !== "syncing") return JSON.parse(shared);
+    if (shared === "syncing") return {
+      webhookStatus: "unknown",
+      canSendMessage: "unknown",
+      wabaHealthError: "",
+      businessHealthStatus: "unknown",
+      businessHealthError: ""
+    };
+    const lock = await redis.set(sharedKey, "syncing", { NX: true, EX: 30 });
+    if (!lock) return {
+      webhookStatus: "unknown",
+      canSendMessage: "unknown",
+      wabaHealthError: "",
+      businessHealthStatus: "unknown",
+      businessHealthError: ""
+    };
+  }
+  const promise = fetchOnboardingMetaState(tenant, accessToken)
+    .then(async (result) => {
+      if (redis?.isReady) {
+        await redis.set(sharedKey, JSON.stringify(result), { EX: Math.ceil(ONBOARDING_META_TTL_MS / 1000) });
+      }
+      return result;
+    })
+    .catch((error) => {
+      onboardingMetaCache.delete(cacheKey);
+      if (redis?.isReady) redis.del(sharedKey).catch(() => {});
+      throw error;
+    });
 
   onboardingMetaCache.set(cacheKey, {
     expiresAt: Date.now() + ONBOARDING_META_TTL_MS,
@@ -348,7 +434,7 @@ async function debugMetaToken(accessToken) {
     input_token: accessToken,
     access_token: appAccessToken
   });
-  const response = await fetch(`https://graph.facebook.com/${env.facebookSdkVersion}/debug_token?${params}`);
+  const response = await fetchWithPolicy(`https://graph.facebook.com/${env.facebookSdkVersion}/debug_token?${params}`);
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok || data.error) {
@@ -501,14 +587,26 @@ async function savePhoneDetails(tenantId, details, error = "") {
 
 async function refreshTenantPhoneDetails(tenant, accessToken) {
   if (!tenant?.meta?.phoneNumberId || !accessToken) return tenant;
+  const redis = getRedisClient();
+  const cacheKey = `intercon:phone-details:${tenant.meta.phoneNumberId}`;
+  if (redis?.isReady) {
+    const lock = await redis.set(cacheKey, "syncing", { NX: true, EX: 30 });
+    if (!lock) return tenant;
+  }
 
-  const data = await fetchMetaJson(
-    `${tenant.meta.phoneNumberId}?fields=status,account_mode,display_phone_number,code_verification_status,verified_name,name_status,new_name_status,quality_rating,messaging_limit_tier`,
-    accessToken
-  );
+  let data;
+  try {
+    data = await fetchMetaJson(
+      `${tenant.meta.phoneNumberId}?fields=status,account_mode,display_phone_number,code_verification_status,verified_name,name_status,new_name_status,quality_rating,messaging_limit_tier`,
+      accessToken
+    );
+  } catch (error) {
+    if (redis?.isReady) await redis.del(cacheKey);
+    throw error;
+  }
   const details = publicPhoneDetails(data);
 
-  return Tenant.findByIdAndUpdate(
+  const updated = await Tenant.findByIdAndUpdate(
     tenant._id,
     {
       $set: {
@@ -526,6 +624,8 @@ async function refreshTenantPhoneDetails(tenant, accessToken) {
     },
     { returnDocument: "after" }
   ).select("+meta.accessToken");
+  if (redis?.isReady) await redis.set(cacheKey, "1", { EX: 20 });
+  return updated;
 }
 
 async function getPhoneNumberStatus(tenantId) {
@@ -837,7 +937,8 @@ async function getMetaDiagnostics(tenantId, req) {
   };
 }
 
-async function completeEmbeddedSignup(tenantId, body) {
+async function completeEmbeddedSignup(tenantId, userId, body) {
+  await consumeOnboardingSession(tenantId, userId, body.state);
   const sessionInfo = parseSessionInfo(body.sessionInfo || body.session_info);
   let wabaId = body.wabaId || body.waba_id || sessionInfo.wabaId;
   let phoneNumberId = body.phoneNumberId || body.phone_number_id || sessionInfo.phoneNumberId;
@@ -881,6 +982,8 @@ async function completeEmbeddedSignup(tenantId, body) {
     await recordSignupFailure(tenantId, "Embedded Signup finished in Meta, but no WABA ID was received by InterCon. Make sure FB.login extras include sessionInfoVersion 3 and the Login for Business configuration grants WhatsApp permissions.", lastSignupEvent);
     throw new HttpError(400, "Embedded Signup did not return a WABA ID");
   }
+
+  await assertMetaAssetsAvailable(tenantId, wabaId, phoneNumberId);
 
   let subscribed = null;
   try {
@@ -951,68 +1054,13 @@ async function completeEmbeddedSignup(tenantId, body) {
   };
 }
 
-async function exchangeOAuthCode({ code, redirectUri, tenantId, wabaId, phoneNumberId, requestUrl }) {
-  const tokenData = await exchangeCodeForToken({ code, redirectUri, requestUrl });
-
-  let tenant = null;
-  if (tenantId) {
-    let discoveredAssets = null;
-    let resolvedWabaId = wabaId;
-    let resolvedPhoneNumberId = phoneNumberId;
-
-    if (!resolvedWabaId || !resolvedPhoneNumberId) {
-      try {
-        discoveredAssets = await discoverSignupAssets(tokenData.access_token);
-        resolvedWabaId = resolvedWabaId || discoveredAssets.wabaId;
-        resolvedPhoneNumberId = resolvedPhoneNumberId || discoveredAssets.phoneNumberId;
-      } catch (error) {
-        discoveredAssets = {
-          error: error.message
-        };
-      }
-    }
-
-    tenant = await Tenant.findByIdAndUpdate(
-      tenantId,
-      {
-        $set: {
-          onboardingStatus: resolvedPhoneNumberId ? "meta_connected" : resolvedWabaId ? "meta_pending" : "account_created",
-          ...(resolvedWabaId ? { "meta.wabaId": resolvedWabaId } : {}),
-          ...(resolvedPhoneNumberId ? { "meta.phoneNumberId": resolvedPhoneNumberId } : {}),
-          ...(discoveredAssets?.phoneDetails?.displayPhoneNumber ? { "meta.displayPhoneNumber": discoveredAssets.phoneDetails.displayPhoneNumber } : {}),
-          ...(discoveredAssets?.phoneDetails?.status ? { "meta.phoneStatus": discoveredAssets.phoneDetails.status } : {}),
-          ...(discoveredAssets?.phoneDetails?.accountMode ? { "meta.accountMode": discoveredAssets.phoneDetails.accountMode } : {}),
-          ...(discoveredAssets?.phoneDetails?.codeVerificationStatus ? { "meta.codeVerificationStatus": discoveredAssets.phoneDetails.codeVerificationStatus } : {}),
-          ...(discoveredAssets?.phoneDetails?.verifiedName ? { "meta.verifiedName": discoveredAssets.phoneDetails.verifiedName } : {}),
-          ...(discoveredAssets?.phoneDetails?.nameStatus ? { "meta.nameStatus": discoveredAssets.phoneDetails.nameStatus } : {}),
-          ...(discoveredAssets?.phoneDetails?.newNameStatus ? { "meta.newNameStatus": discoveredAssets.phoneDetails.newNameStatus } : {}),
-          "meta.appId": env.facebookAppId,
-          "meta.tokenType": tokenData.token_type || "",
-          ...(tokenData.expires_in ? { "meta.tokenExpiresAt": new Date(Date.now() + Number(tokenData.expires_in) * 1000) } : {}),
-          ...(resolvedWabaId ? { "meta.connectedAt": new Date() } : {}),
-          "meta.lastSignupEvent": "OAUTH_CALLBACK",
-          "meta.lastSignupError": discoveredAssets?.error || "",
-          "meta.accessToken": tokenData.access_token
-        }
-      },
-      { returnDocument: "after" }
-    );
-    invalidateOnboardingMetaCache(resolvedWabaId);
-  }
-
-  return {
-    publicToken: publicToken(tokenData),
-    tenant: tenant ? publicTenant(tenant) : null
-  };
-}
-
 module.exports = {
+  createOnboardingSession,
   getEmbeddedSignupUrl,
   getFacebookSdkConfig,
   getOnboardingStatus,
   getMetaDiagnostics,
   completeEmbeddedSignup,
-  exchangeOAuthCode,
   getPhoneNumberStatus,
   requestPhoneVerificationCode,
   verifyPhoneCode,

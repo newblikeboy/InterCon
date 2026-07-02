@@ -1,8 +1,8 @@
-const User = require("../models/User");
 const asyncHandler = require("../utils/asyncHandler");
 const HttpError = require("../utils/httpError");
 const env = require("../config/env");
 const { verifyAuthToken } = require("../services/authToken.service");
+const sessionCache = require("../services/sessionCache.service");
 
 const authenticate = asyncHandler(async (req, res, next) => {
   const bearerToken = req.headers.authorization?.startsWith("Bearer ")
@@ -21,8 +21,13 @@ const authenticate = asyncHandler(async (req, res, next) => {
     throw new HttpError(401, "Invalid or expired session");
   }
 
-  const user = await User.findById(payload.sub).select("-passwordHash");
-  if (!user || user.status !== "active") {
+  const user = await sessionCache.getUser(payload.sub);
+  if (
+    !user
+    || user.status !== "active"
+    || Number(payload.sv || 0) !== Number(user.sessionVersion || 0)
+    || String(payload.tenantId) !== String(user.tenantId)
+  ) {
     throw new HttpError(401, "User account is not active");
   }
 

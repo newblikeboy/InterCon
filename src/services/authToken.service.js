@@ -15,11 +15,15 @@ function signAuthToken(user) {
     {
       sub: user._id.toString(),
       tenantId: user.tenantId.toString(),
-      role: user.role
+      role: user.role,
+      sv: Number(user.sessionVersion || 0)
     },
     env.jwtSecret,
     {
-      expiresIn: env.jwtExpiresIn
+      expiresIn: env.jwtExpiresIn,
+      algorithm: "HS256",
+      issuer: "intercon-api",
+      audience: "intercon-portal"
     }
   );
 }
@@ -49,7 +53,11 @@ function clearAuthCookie(res) {
 
 function verifyAuthToken(token) {
   ensureJwtSecret();
-  return jwt.verify(token, env.jwtSecret);
+  return jwt.verify(token, env.jwtSecret, {
+    algorithms: ["HS256"],
+    issuer: "intercon-api",
+    audience: "intercon-portal"
+  });
 }
 
 module.exports = {

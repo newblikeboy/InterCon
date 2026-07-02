@@ -14,7 +14,7 @@ const verifyMetaWebhook = asyncHandler(async (req, res) => {
 });
 
 const receiveMetaWebhook = asyncHandler(async (req, res) => {
-  await webhookService.processMetaWebhook(req);
+  await webhookService.enqueueMetaWebhook(req);
   res.sendStatus(200);
 });
 

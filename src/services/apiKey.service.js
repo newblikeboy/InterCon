@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const ApiKey = require("../models/ApiKey");
 const Tenant = require("../models/Tenant");
 const HttpError = require("../utils/httpError");
+const { getRedisClient } = require("../config/redis");
 
 const KEY_PREFIX = "ic_live";
 
@@ -79,6 +80,10 @@ async function revokeApiKey(tenantId, apiKeyId) {
   if (!apiKey) {
     throw new HttpError(404, "API key not found");
   }
+  const redis = getRedisClient();
+  if (redis?.isReady && apiKey.keyHash) {
+    await redis.del(`intercon:api-key:${apiKey.keyHash}`);
+  }
 
   return serializeApiKey(apiKey);
 }
@@ -89,8 +94,22 @@ async function authenticateApiKey(rawKey) {
     throw new HttpError(401, "API key required");
   }
 
+  const keyHash = hashApiKey(key);
+  const cacheKey = `intercon:api-key:${keyHash}`;
+  const redis = getRedisClient();
+  if (redis?.isReady) {
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      const value = JSON.parse(cached);
+      return {
+        apiKey: { _id: value.apiKeyId },
+        tenant: { _id: value.tenantId, status: "active" }
+      };
+    }
+  }
+
   const apiKey = await ApiKey.findOne({
-    keyHash: hashApiKey(key),
+    keyHash,
     status: "active"
   }).lean();
 
@@ -103,7 +122,16 @@ async function authenticateApiKey(rawKey) {
     throw new HttpError(403, "Workspace is not active");
   }
 
-  await ApiKey.updateOne({ _id: apiKey._id }, { $set: { lastUsedAt: new Date() } });
+  const usageCutoff = Date.now() - 5 * 60 * 1000;
+  if (!apiKey.lastUsedAt || new Date(apiKey.lastUsedAt).getTime() < usageCutoff) {
+    await ApiKey.updateOne({ _id: apiKey._id }, { $set: { lastUsedAt: new Date() } });
+  }
+  if (redis?.isReady) {
+    await redis.set(cacheKey, JSON.stringify({
+      apiKeyId: String(apiKey._id),
+      tenantId: String(tenant._id)
+    }), { EX: 10 });
+  }
 
   return {
     apiKey,

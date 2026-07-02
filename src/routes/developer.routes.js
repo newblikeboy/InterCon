@@ -1,10 +1,12 @@
 const express = require("express");
 const authenticate = require("../middleware/authenticate");
+const authorize = require("../middleware/authorize");
 const developerController = require("../controllers/developer.controller");
 
 const router = express.Router();
 
 router.use(authenticate);
+router.use(authorize("owner"));
 
 router.get("/api-keys", developerController.listApiKeys);
 router.post("/api-keys", developerController.createApiKey);

@@ -33,8 +33,13 @@ const getMetaDiagnostics = asyncHandler(async (req, res) => {
   });
 });
 
+const createOnboardingSession = asyncHandler(async (req, res) => {
+  const session = await metaService.createOnboardingSession(req.tenantId, req.user._id);
+  res.status(201).json({ success: true, ...session });
+});
+
 const completeEmbeddedSignup = asyncHandler(async (req, res) => {
-  const result = await metaService.completeEmbeddedSignup(req.tenantId, req.body);
+  const result = await metaService.completeEmbeddedSignup(req.tenantId, req.user._id, req.body);
   const isConnected = result.tenant?.onboardingStatus === "meta_connected" && Boolean(result.tenant?.meta?.phoneNumberId);
 
   res.json({
@@ -43,22 +48,6 @@ const completeEmbeddedSignup = asyncHandler(async (req, res) => {
       ? "WhatsApp account connected"
       : "Meta signup saved, but WhatsApp phone number connection is pending",
     ...result
-  });
-});
-
-const exchangeOAuthCode = asyncHandler(async (req, res) => {
-  const result = await metaService.exchangeOAuthCode({
-    code: req.body.code,
-    redirectUri: req.body.redirectUri,
-    tenantId: req.tenantId,
-    wabaId: req.body.wabaId,
-    phoneNumberId: req.body.phoneNumberId
-  });
-
-  res.json({
-    success: true,
-    token: result.publicToken,
-    tenant: result.tenant
   });
 });
 
@@ -121,30 +110,17 @@ const deleteConnectedWaba = asyncHandler(async (req, res) => {
   });
 });
 
-const handleOAuthCallback = asyncHandler(async (req, res) => {
-  const result = await metaService.exchangeOAuthCode({
-    code: req.query.code,
-    redirectUri: req.query.redirect_uri,
-    tenantId: req.tenantId,
-    requestUrl: `${req.protocol}://${req.get("host")}${req.originalUrl}`
-  });
-
-  const status = result.tenant ? "connected" : "token_exchanged";
-  res.redirect(`/customer?meta=${status}#connect`);
-});
-
 module.exports = {
+  createOnboardingSession,
   getEmbeddedSignupUrl,
   getFacebookSdkConfig,
   getOnboardingStatus,
   getMetaDiagnostics,
   completeEmbeddedSignup,
-  exchangeOAuthCode,
   getPhoneNumberStatus,
   requestPhoneVerificationCode,
   verifyPhoneCode,
   registerPhoneNumber,
   deregisterPhoneNumber,
-  deleteConnectedWaba,
-  handleOAuthCallback
+  deleteConnectedWaba
 };

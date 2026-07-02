@@ -35,6 +35,23 @@ const env = {
   rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),
   rateLimitMax: Number(process.env.RATE_LIMIT_MAX || 300),
   inboxReadRateLimitMax: Number(process.env.INBOX_READ_RATE_LIMIT_MAX || 1200),
+  publicApiRateLimitMax: Number(process.env.PUBLIC_API_RATE_LIMIT_MAX || 6000),
+  authLoginRateLimitMax: Number(process.env.AUTH_LOGIN_RATE_LIMIT_MAX || 10),
+  authSignupRateLimitMax: Number(process.env.AUTH_SIGNUP_RATE_LIMIT_MAX || 5),
+  mediaUploadRateLimitMax: Number(process.env.MEDIA_UPLOAD_RATE_LIMIT_MAX || 20),
+  mediaMaxAssetsPerTenant: Number(process.env.MEDIA_MAX_ASSETS_PER_TENANT || 500),
+  mediaStorageQuotaBytes: Number(process.env.MEDIA_STORAGE_QUOTA_BYTES || 512 * 1024 * 1024),
+  redisUrl: process.env.REDIS_URL || "",
+  trustProxy: process.env.TRUST_PROXY === undefined
+    ? false
+    : /^\d+$/.test(process.env.TRUST_PROXY)
+      ? Number(process.env.TRUST_PROXY)
+      : process.env.TRUST_PROXY,
+  outboundHttpTimeoutMs: Number(process.env.OUTBOUND_HTTP_TIMEOUT_MS || 10000),
+  webhookWorkerPollMs: Number(process.env.WEBHOOK_WORKER_POLL_MS || 250),
+  webhookQueueLockMs: Number(process.env.WEBHOOK_QUEUE_LOCK_MS || 30000),
+  webhookRetentionDays: Number(process.env.WEBHOOK_RETENTION_DAYS || 30),
+  metricsToken: process.env.METRICS_TOKEN || "",
   messageWorkerPollMs: Number(process.env.MESSAGE_WORKER_POLL_MS || 1000),
   messageQueueLockMs: Number(process.env.MESSAGE_QUEUE_LOCK_MS || 60 * 1000),
   messageQueueMaxRetries: Number(process.env.MESSAGE_QUEUE_MAX_RETRIES || 5),

@@ -1,4 +1,6 @@
 const path = require("path");
+const fs = require("fs");
+const mongoose = require("mongoose");
 const { v2: cloudinary } = require("cloudinary");
 const MediaAsset = require("../models/MediaAsset");
 const Message = require("../models/Message");
@@ -38,14 +40,38 @@ function publicMedia(asset) {
   };
 }
 
-function uploadBuffer(buffer, options) {
-  return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(options, (error, result) => {
-      if (error) reject(error);
-      else resolve(result);
-    });
-    stream.end(buffer);
-  });
+async function detectMediaType(filePath) {
+  const handle = await fs.promises.open(filePath, "r");
+  try {
+    const buffer = Buffer.alloc(32);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    const head = buffer.subarray(0, bytesRead);
+    if (head.length >= 3 && head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) {
+      return { mediaType: "image", mimeType: "image/jpeg" };
+    }
+    if (head.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+      return { mediaType: "image", mimeType: "image/png" };
+    }
+    if (head.subarray(0, 6).toString("ascii").match(/^GIF8[79]a$/)) {
+      return { mediaType: "image", mimeType: "image/gif" };
+    }
+    if (head.subarray(0, 4).toString("ascii") === "RIFF" && head.subarray(8, 12).toString("ascii") === "WEBP") {
+      return { mediaType: "image", mimeType: "image/webp" };
+    }
+    if (head.length >= 12 && head.subarray(4, 8).toString("ascii") === "ftyp") {
+      const brand = head.subarray(8, 12).toString("ascii").toLowerCase();
+      const mimeType = brand.startsWith("3g") ? "video/3gpp"
+        : brand.includes("qt") ? "video/quicktime"
+          : "video/mp4";
+      return { mediaType: "video", mimeType };
+    }
+    if (head.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))) {
+      return { mediaType: "video", mimeType: "video/webm" };
+    }
+    return null;
+  } finally {
+    await handle.close();
+  }
 }
 
 async function listMedia(tenantId, query = {}) {
@@ -62,12 +88,33 @@ async function listMedia(tenantId, query = {}) {
 
 async function createMedia(tenantId, file, body = {}) {
   assertCloudinaryConfigured();
-  if (!file?.buffer) throw new HttpError(400, "Choose a photo or video to upload");
+  if (!file?.path) throw new HttpError(400, "Choose a photo or video to upload");
 
-  const mediaType = file.mimetype.startsWith("video/") ? "video" : "image";
+  const detected = await detectMediaType(file.path);
+  if (!detected) {
+    await fs.promises.unlink(file.path).catch(() => {});
+    throw new HttpError(400, "The uploaded file is not a supported photo or video");
+  }
+  const mediaType = detected.mediaType;
   const title = String(body.title || path.parse(file.originalname).name || "Untitled media").trim();
   const description = String(body.description || "").trim();
   if (!title) throw new HttpError(400, "Media title is required");
+
+  const [assetCount, storage] = await Promise.all([
+    MediaAsset.countDocuments({ tenantId }),
+    MediaAsset.aggregate([
+      { $match: { tenantId: new mongoose.Types.ObjectId(String(tenantId)) } },
+      { $group: { _id: null, bytes: { $sum: "$bytes" } } }
+    ])
+  ]);
+  if (assetCount >= env.mediaMaxAssetsPerTenant) {
+    await fs.promises.unlink(file.path).catch(() => {});
+    throw new HttpError(409, "Media asset limit reached for this workspace");
+  }
+  if (Number(storage[0]?.bytes || 0) + Number(file.size || 0) > env.mediaStorageQuotaBytes) {
+    await fs.promises.unlink(file.path).catch(() => {});
+    throw new HttpError(409, "Media storage quota reached for this workspace");
+  }
 
   const draft = new MediaAsset({
     tenantId,
@@ -75,7 +122,7 @@ async function createMedia(tenantId, file, body = {}) {
     description,
     mediaType,
     originalName: file.originalname,
-    mimeType: file.mimetype,
+    mimeType: detected.mimeType,
     cloudinaryPublicId: "pending",
     secureUrl: "pending"
   });
@@ -83,7 +130,7 @@ async function createMedia(tenantId, file, body = {}) {
   let uploaded;
 
   try {
-    uploaded = await uploadBuffer(file.buffer, {
+    uploaded = await cloudinary.uploader.upload(file.path, {
       resource_type: mediaType,
       folder,
       public_id: draft.mediaId,
@@ -110,6 +157,8 @@ async function createMedia(tenantId, file, body = {}) {
     }
     if (error instanceof HttpError) throw error;
     throw new HttpError(502, error.message || "Cloudinary upload failed");
+  } finally {
+    await fs.promises.unlink(file.path).catch(() => {});
   }
 
   return publicMedia(draft);

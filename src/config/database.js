@@ -11,6 +11,7 @@ async function connectDatabase() {
 
   try {
     const connection = await mongoose.connect(env.mongoUri, {
+      autoIndex: false,
       maxPoolSize: 20,
       minPoolSize: env.nodeEnv === "production" ? 2 : 0,
       maxIdleTimeMS: 30000,
@@ -18,6 +19,9 @@ async function connectDatabase() {
     });
 
     console.log(`MongoDB connected: ${connection.connection.host}`);
+    const { ensureCriticalIndexes } = require("./indexes");
+    await ensureCriticalIndexes();
+    console.log("Critical MongoDB indexes verified");
     return connection;
   } catch (error) {
     console.error("MongoDB connection failed:", error.message);

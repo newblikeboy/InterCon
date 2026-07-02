@@ -4,15 +4,19 @@ const Message = require("../models/Message");
 const MediaAsset = require("../models/MediaAsset");
 const Template = require("../models/Template");
 const Tenant = require("../models/Tenant");
+const RecipientUsage = require("../models/RecipientUsage");
 const mongoose = require("mongoose");
 const crypto = require("crypto");
 const env = require("../config/env");
 const HttpError = require("../utils/httpError");
 const { isMetaSampleTemplate } = require("./template.service");
 const { requireActivePaidPlan } = require("./billing.service");
+const { acquireSlot, releaseDailyRecipient, reserveDailyRecipient } = require("./distributedLimit.service");
+const { fetchWithPolicy } = require("../utils/httpClient");
 
 const wabaSendHealthCache = new Map();
 const WABA_SEND_HEALTH_TTL_MS = 30 * 1000;
+let lastStaleRecoveryAt = 0;
 
 function normalizeVariables(variables) {
   if (Array.isArray(variables)) {
@@ -432,7 +436,7 @@ async function assertWabaCanSendTemplates(tenant, accessToken) {
 }
 
 async function fetchWabaCanSendTemplates(tenant, accessToken) {
-  const response = await fetch(`https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.wabaId}?fields=health_status`, {
+  const response = await fetchWithPolicy(`https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.wabaId}?fields=health_status`, {
     headers: {
       "Authorization": `Bearer ${accessToken}`,
       "Content-Type": "application/json"
@@ -512,7 +516,8 @@ function summarizeMessages(messages = []) {
     sent: 0,
     delivered: 0,
     read: 0,
-    failed: 0
+    failed: 0,
+    uncertain: 0
   });
 }
 
@@ -620,7 +625,8 @@ function isRetryableMetaError(statusCode, metaError = {}) {
 function getRetryDelayMs(attempts) {
   const baseDelayMs = 30 * 1000;
   const maxDelayMs = 30 * 60 * 1000;
-  return Math.min(baseDelayMs * Math.max(1, 2 ** Math.max(0, attempts - 1)), maxDelayMs);
+  const base = Math.min(baseDelayMs * Math.max(1, 2 ** Math.max(0, attempts - 1)), maxDelayMs);
+  return base + Math.floor(Math.random() * Math.max(1000, base * 0.2));
 }
 
 async function sendTemplateMessage(tenantId, body = {}) {
@@ -646,10 +652,19 @@ async function sendTemplateMessage(tenantId, body = {}) {
     throw new HttpError(400, "This contact is missing data required by the selected template variable mapping");
   }
 
-  const message = await Message.create({
-    ...buildQueuedMessage(context, tenantId, contact),
-    ...(idempotencyKey ? { idempotencyKey } : {})
-  });
+  let message;
+  try {
+    message = await Message.create({
+      ...buildQueuedMessage(context, tenantId, contact),
+      ...(idempotencyKey ? { idempotencyKey } : {})
+    });
+  } catch (error) {
+    if (error?.code === 11000 && idempotencyKey) {
+      message = await Message.findOne({ tenantId, idempotencyKey });
+    } else {
+      throw error;
+    }
+  }
 
   return {
     queued: true,
@@ -705,34 +720,63 @@ async function sendTemplateMessages(tenantId, body = {}) {
 }
 
 async function hasDailyUniqueCapacity(message) {
-  if (!env.whatsappDailyUniqueLimit || env.whatsappDailyUniqueLimit <= 0) return true;
+  if (!env.whatsappDailyUniqueLimit || env.whatsappDailyUniqueLimit <= 0) {
+    return { allowed: true, newlyReserved: false };
+  }
 
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const sentStatuses = ["accepted", "sent", "delivered", "read"];
-  const distinctRecipients = await Message.distinct("to", {
+  const key = `${message.tenantId}:${message.phoneNumberId}`;
+  const distributed = await reserveDailyRecipient(key, message.to, env.whatsappDailyUniqueLimit);
+  if (distributed) return distributed;
+
+  let existing = await RecipientUsage.findOne({
     tenantId: message.tenantId,
     phoneNumberId: message.phoneNumberId,
-    status: { $in: sentStatuses },
-    acceptedAt: { $gte: since }
-  });
+    recipient: message.to,
+    lastAcceptedAt: { $gte: since }
+  }).select("_id").lean();
 
-  return distinctRecipients.includes(message.to) || distinctRecipients.length < env.whatsappDailyUniqueLimit;
+  if (!existing) {
+    const historical = await Message.exists({
+      tenantId: message.tenantId,
+      phoneNumberId: message.phoneNumberId,
+      to: message.to,
+      status: { $in: sentStatuses },
+      acceptedAt: { $gte: since }
+    });
+    if (historical) {
+      existing = await RecipientUsage.findOneAndUpdate(
+        { tenantId: message.tenantId, phoneNumberId: message.phoneNumberId, recipient: message.to },
+        { $set: { lastAcceptedAt: new Date() } },
+        { upsert: true, returnDocument: "after" }
+      ).lean();
+    }
+  }
+
+  if (existing) return { allowed: true, newlyReserved: false };
+  const count = await RecipientUsage.countDocuments({
+    tenantId: message.tenantId,
+    phoneNumberId: message.phoneNumberId,
+    lastAcceptedAt: { $gte: since }
+  });
+  if (count >= env.whatsappDailyUniqueLimit) return { allowed: false, newlyReserved: false };
+
+  await RecipientUsage.findOneAndUpdate(
+    { tenantId: message.tenantId, phoneNumberId: message.phoneNumberId, recipient: message.to },
+    { $set: { lastAcceptedAt: new Date() } },
+    { upsert: true, returnDocument: "after" }
+  );
+  return { allowed: true, newlyReserved: true };
 }
 
-async function getPairDelayMs(message) {
-  if (!env.whatsappPairMinIntervalMs || env.whatsappPairMinIntervalMs <= 0) return 0;
-
-  const lastMessage = await Message.findOne({
-    tenantId: message.tenantId,
-    to: message.to,
-    _id: { $ne: message._id },
-    lastAttemptAt: { $exists: true }
-  }).sort({ lastAttemptAt: -1 }).select("lastAttemptAt").lean();
-
-  if (!lastMessage?.lastAttemptAt) return 0;
-
-  const elapsedMs = Date.now() - new Date(lastMessage.lastAttemptAt).getTime();
-  return Math.max(env.whatsappPairMinIntervalMs - elapsedMs, 0);
+async function getSendSlotDelayMs(message) {
+  const phoneInterval = Math.ceil(1000 / Math.max(0.1, Number(env.whatsappDefaultMps || 1)));
+  const phoneDelay = await acquireSlot(`phone:${message.phoneNumberId}`, phoneInterval);
+  const pairDelay = env.whatsappPairMinIntervalMs > 0
+    ? await acquireSlot(`pair:${message.phoneNumberId}:${message.to}`, env.whatsappPairMinIntervalMs)
+    : 0;
+  return Math.max(phoneDelay, pairDelay);
 }
 
 async function rescheduleMessage(message, delayMs, error = "") {
@@ -779,6 +823,26 @@ async function failMessage(message, error, metaError = {}) {
   };
 }
 
+async function markMessageUncertain(message, error) {
+  await Message.updateOne(
+    { _id: message._id },
+    {
+      $set: {
+        status: "uncertain",
+        error,
+        lockedAt: null,
+        lockedBy: ""
+      }
+    }
+  );
+  return {
+    action: "uncertain",
+    messageId: message._id,
+    phoneNumberId: message.phoneNumberId,
+    error
+  };
+}
+
 async function acceptMessage(message, metaResponse = {}) {
   const metaMessageId = metaResponse.messages?.[0]?.id || "";
   await Message.updateOne(
@@ -794,6 +858,11 @@ async function acceptMessage(message, metaResponse = {}) {
       }
     }
   );
+  await RecipientUsage.findOneAndUpdate(
+    { tenantId: message.tenantId, phoneNumberId: message.phoneNumberId, recipient: message.to },
+    { $set: { lastAcceptedAt: new Date() } },
+    { upsert: true }
+  );
 
   return {
     action: "accepted",
@@ -807,6 +876,25 @@ async function claimNextQueuedMessage(workerId) {
   const now = new Date();
   const staleLockCutoff = new Date(Date.now() - env.messageQueueLockMs);
 
+  if (Date.now() - lastStaleRecoveryAt > 10000) {
+    lastStaleRecoveryAt = Date.now();
+    await Message.updateMany(
+      {
+        status: "processing",
+        lockedAt: { $lt: staleLockCutoff },
+        lastAttemptAt: { $exists: true }
+      },
+      {
+        $set: {
+          status: "uncertain",
+          error: "Worker stopped after starting provider delivery. Automatic retry was suppressed to prevent a duplicate message.",
+          lockedAt: null,
+          lockedBy: ""
+        }
+      }
+    );
+  }
+
   return Message.findOneAndUpdate(
     {
       $or: [
@@ -816,7 +904,8 @@ async function claimNextQueuedMessage(workerId) {
         },
         {
           status: "processing",
-          lockedAt: { $lt: staleLockCutoff }
+          lockedAt: { $lt: staleLockCutoff },
+          lastAttemptAt: { $exists: false }
         }
       ]
     },
@@ -862,7 +951,8 @@ async function processQueuedMessage(message) {
     return failMessage(message, `Template "${message.templateName}" requires a ${template.headerType}, but this queued message has no media.`);
   }
 
-  if (!await hasDailyUniqueCapacity(message)) {
+  const capacity = await hasDailyUniqueCapacity(message);
+  if (!capacity.allowed) {
     return rescheduleMessage(
       message,
       15 * 60 * 1000,
@@ -870,9 +960,9 @@ async function processQueuedMessage(message) {
     );
   }
 
-  const pairDelayMs = await getPairDelayMs(message);
-  if (pairDelayMs > 0) {
-    return rescheduleMessage(message, pairDelayMs, "Waiting to avoid sending too many messages to the same customer too quickly.");
+  const sendSlotDelayMs = await getSendSlotDelayMs(message);
+  if (sendSlotDelayMs > 0) {
+    return rescheduleMessage(message, sendSlotDelayMs, "Waiting for the provider-safe send rate.");
   }
 
   await assertWabaCanSendTemplates(tenant, accessToken);
@@ -890,14 +980,25 @@ async function processQueuedMessage(message) {
     }
   );
 
-  const response = await fetch(`https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.phoneNumberId}/messages`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${accessToken}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(buildMetaMessagePayload(message, template))
-  });
+  let response;
+  try {
+    response = await fetchWithPolicy(`https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.phoneNumberId}/messages`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(buildMetaMessagePayload(message, template))
+    });
+  } catch (error) {
+    if (["UPSTREAM_TIMEOUT", "UPSTREAM_UNAVAILABLE"].includes(error.details?.code)) {
+      return markMessageUncertain(
+        message,
+        "Meta delivery outcome is unknown. Automatic retry was suppressed to prevent a duplicate message."
+      );
+    }
+    throw error;
+  }
 
   const metaResponse = await response.json().catch(() => ({}));
 
@@ -906,9 +1007,21 @@ async function processQueuedMessage(message) {
     const errorMessage = getMetaSendErrorMessage(metaError, tenant);
 
     if (isRetryableMetaError(response.status, metaError) && attempts < message.maxAttempts) {
-      return rescheduleMessage(message, getRetryDelayMs(attempts), errorMessage);
+      const retryAfter = Number(response.headers.get("retry-after"));
+      const delay = Number.isFinite(retryAfter) && retryAfter >= 0
+        ? Math.min(retryAfter * 1000, 30 * 60 * 1000)
+        : getRetryDelayMs(attempts);
+      return rescheduleMessage(message, delay, errorMessage);
     }
 
+    if (capacity.newlyReserved) {
+      await releaseDailyRecipient(`${message.tenantId}:${message.phoneNumberId}`, message.to);
+      await RecipientUsage.deleteOne({
+        tenantId: message.tenantId,
+        phoneNumberId: message.phoneNumberId,
+        recipient: message.to
+      });
+    }
     return failMessage(message, errorMessage, metaError);
   }
 

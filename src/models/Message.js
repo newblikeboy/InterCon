@@ -78,7 +78,7 @@ const messageSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["queued", "scheduled", "processing", "accepted", "sent", "delivered", "read", "failed"],
+      enum: ["queued", "scheduled", "processing", "accepted", "sent", "delivered", "read", "failed", "uncertain"],
       default: "queued",
       index: true
     },
@@ -137,6 +137,11 @@ messageSchema.index({ tenantId: 1, batchId: 1 });
 messageSchema.index({ tenantId: 1, to: 1 });
 messageSchema.index({ status: 1, nextAttemptAt: 1, createdAt: 1 });
 messageSchema.index({ phoneNumberId: 1, status: 1, nextAttemptAt: 1 });
+messageSchema.index({ status: 1, lockedAt: 1 });
+messageSchema.index(
+  { tenantId: 1, metaMessageId: 1 },
+  { unique: true, partialFilterExpression: { metaMessageId: { $type: "string", $gt: "" } } }
+);
 messageSchema.index(
   { tenantId: 1, idempotencyKey: 1 },
   { unique: true, partialFilterExpression: { idempotencyKey: { $type: "string" } } }

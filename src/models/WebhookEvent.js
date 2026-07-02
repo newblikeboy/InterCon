@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const env = require("../config/env");
 
 const webhookEventSchema = new mongoose.Schema(
   {
@@ -12,6 +13,12 @@ const webhookEventSchema = new mongoose.Schema(
       enum: ["meta"],
       default: "meta",
       index: true
+    },
+    eventKey: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 64
     },
     object: {
       type: String,
@@ -42,9 +49,26 @@ const webhookEventSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["received", "processed", "failed"],
-      default: "received",
+      enum: ["queued", "processing", "retry", "processed", "dead"],
+      default: "queued",
       index: true
+    },
+    attempts: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 20
+    },
+    nextAttemptAt: {
+      type: Date,
+      default: Date.now,
+      index: true
+    },
+    lockedAt: Date,
+    lockedBy: {
+      type: String,
+      trim: true,
+      maxlength: 120
     },
     error: {
       type: String,
@@ -57,5 +81,14 @@ const webhookEventSchema = new mongoose.Schema(
 );
 
 webhookEventSchema.index({ createdAt: -1 });
+webhookEventSchema.index(
+  { provider: 1, eventKey: 1 },
+  { unique: true, partialFilterExpression: { eventKey: { $type: "string", $gt: "" } } }
+);
+webhookEventSchema.index({ status: 1, nextAttemptAt: 1, createdAt: 1 });
+webhookEventSchema.index(
+  { createdAt: 1 },
+  { expireAfterSeconds: Math.max(1, Number(env.webhookRetentionDays || 30)) * 24 * 60 * 60 }
+);
 
 module.exports = mongoose.model("WebhookEvent", webhookEventSchema);

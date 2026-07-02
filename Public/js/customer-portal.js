@@ -134,6 +134,7 @@ let facebookSdkPromise;
 // Once resolved, holds { FB, config } synchronously so the Meta popup can be
 // opened directly inside a click gesture (required by Safari's popup blocker).
 let facebookSdk = null;
+let metaOnboardingSession = null;
 let razorpayCheckoutPromise;
 let embeddedSignupSessionInfo = null;
 let embeddedSignupSessionResolvers = [];
@@ -925,7 +926,16 @@ async function loadAuthenticatedProfile() {
 }
 
 function parseEmbeddedSignupMessage(event) {
-  if (!String(event.origin || "").endsWith("facebook.com")) {
+  let hostname = "";
+  try {
+    const origin = new URL(String(event.origin || ""));
+    if (origin.protocol !== "https:") return null;
+    hostname = origin.hostname.toLowerCase();
+  } catch (error) {
+    return null;
+  }
+
+  if (hostname !== "facebook.com" && !hostname.endsWith(".facebook.com")) {
     return null;
   }
 
@@ -1061,6 +1071,15 @@ async function loadFacebookSdk() {
     }));
 
   return facebookSdkPromise;
+}
+
+async function loadMetaOnboardingSession() {
+  const data = await requestJson("/api/meta/onboarding-session", { method: "POST" });
+  metaOnboardingSession = {
+    state: data.state,
+    expiresAt: data.expiresAt
+  };
+  return metaOnboardingSession;
 }
 
 function launchEmbeddedSignup(FB, config, overrides = {}) {
@@ -2623,9 +2642,9 @@ function runEmbeddedSignup({ button, featureType, onboardingType, setMessage }) 
   // click gesture. FB.login opens a popup, so the SDK must already be loaded —
   // we cannot `await` the SDK first or Safari will block the popup. If the SDK
   // is not ready yet, kick off loading and ask the user to click once more.
-  if (!facebookSdk) {
+  if (!facebookSdk || !metaOnboardingSession?.state) {
     setMessage("Preparing Meta login, one moment...");
-    loadFacebookSdk()
+    Promise.all([loadFacebookSdk(), loadMetaOnboardingSession()])
       .then(() => setMessage("Ready — click connect again to open Meta."))
       .catch((error) => setMessage(error.message, true));
     return;
@@ -2666,13 +2685,16 @@ function runEmbeddedSignup({ button, featureType, onboardingType, setMessage }) 
       }
 
       const sessionInfo = await waitForEmbeddedSignupSessionInfo();
+      const onboardingState = metaOnboardingSession.state;
+      metaOnboardingSession = null;
 
       const result = await requestJson("/api/meta/embedded-signup/complete", {
         method: "POST",
         body: JSON.stringify({
           code,
           sessionInfo,
-          onboardingType
+          onboardingType,
+          state: onboardingState
         })
       });
 
@@ -3944,6 +3966,7 @@ function onPortalViewShown(viewId) {
     // Warm up the Facebook SDK so the Meta popup can be opened synchronously on
     // click (Safari blocks popups opened after an async wait).
     loadFacebookSdk().catch(() => {});
+    loadMetaOnboardingSession().catch(() => {});
   }
   if (viewId === "billing" || viewId === "payments") {
     loadBilling().catch((error) => {

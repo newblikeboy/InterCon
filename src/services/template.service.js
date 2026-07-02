@@ -4,6 +4,8 @@ const MediaAsset = require("../models/MediaAsset");
 const Tenant = require("../models/Tenant");
 const env = require("../config/env");
 const HttpError = require("../utils/httpError");
+const { fetchWithPolicy } = require("../utils/httpClient");
+const { getRedisClient } = require("../config/redis");
 const { requireActivePaidPlan } = require("./billing.service");
 
 const templateSyncCache = new Map();
@@ -209,7 +211,7 @@ async function createMetaHeaderHandle(accessToken, asset) {
     throw new HttpError(503, "Meta App ID is required to upload a template header sample");
   }
 
-  const sourceResponse = await fetch(asset.secureUrl);
+  const sourceResponse = await fetchWithPolicy(asset.secureUrl);
   if (!sourceResponse.ok) {
     throw new HttpError(502, "Unable to download the selected Cloudinary media");
   }
@@ -224,7 +226,7 @@ async function createMetaHeaderHandle(accessToken, asset) {
     file_type: asset.mimeType,
     access_token: accessToken
   });
-  const sessionResponse = await fetch(
+  const sessionResponse = await fetchWithPolicy(
     `https://graph.facebook.com/${env.metaGraphApiVersion}/${env.facebookAppId}/uploads?${params}`,
     { method: "POST", headers: { "Authorization": `Bearer ${accessToken}` } }
   );
@@ -233,7 +235,7 @@ async function createMetaHeaderHandle(accessToken, asset) {
     throw new HttpError(sessionResponse.status || 502, session.error?.message || "Meta could not start the template media upload", session.error || session);
   }
 
-  const uploadResponse = await fetch(
+  const uploadResponse = await fetchWithPolicy(
     `https://graph.facebook.com/${session.id}`,
     {
       method: "POST",
@@ -308,10 +310,20 @@ async function syncMetaTemplates(tenantId) {
   if (cached && cached.expiresAt > Date.now()) {
     return cached.promise;
   }
-
+  const redis = getRedisClient();
+  const sharedKey = `intercon:template-sync:${cacheKey}`;
+  if (redis?.isReady) {
+    const lock = await redis.set(sharedKey, "syncing", { NX: true, EX: 30 });
+    if (!lock) return;
+  }
   const promise = doSyncMetaTemplates(tenantId)
+    .then(async (result) => {
+      if (redis?.isReady) await redis.set(sharedKey, "1", { EX: Math.ceil(TEMPLATE_SYNC_TTL_MS / 1000) });
+      return result;
+    })
     .catch((error) => {
       templateSyncCache.delete(cacheKey);
+      if (redis?.isReady) redis.del(sharedKey).catch(() => {});
       throw error;
     });
 
@@ -329,7 +341,7 @@ async function doSyncMetaTemplates(tenantId) {
 
   if (!tenant?.meta?.wabaId || !accessToken) return;
 
-  const response = await fetch(
+  const response = await fetchWithPolicy(
     `https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.wabaId}/message_templates?fields=id,name,status,category,language,rejected_reason,quality_score,components&limit=100`,
     {
       headers: {
@@ -345,34 +357,39 @@ async function doSyncMetaTemplates(tenantId) {
   }
 
   const templates = Array.isArray(metaResponse.data) ? metaResponse.data : [];
-  await Promise.all(templates.map((template) => {
+  const operations = templates.map((template) => {
     const category = String(template.category || "utility").toLowerCase();
     const body = getStoredTemplateBody(template);
     const headerType = getHeaderTypeFromComponents(template.components || []);
     const placeholders = category === "authentication" ? [1] : extractBodyPlaceholders(body);
 
-    return Template.findOneAndUpdate(
-      { tenantId, name: template.name, language: template.language || "en" },
-      {
-        $set: {
-          tenantId,
-          name: template.name,
-          category,
-          language: template.language || "en",
-          body,
-          parameterCount: placeholders.length,
-          headerType,
-          status: mapMetaTemplateStatus(template.status),
-          metaTemplateId: template.id || "",
-          rejectedReason: template.rejected_reason || "",
-          qualityRating: ["high", "medium", "low"].includes(String(template.quality_score?.score || "").toLowerCase())
-            ? String(template.quality_score.score).toLowerCase()
-            : "unknown"
-        }
-      },
-      { returnDocument: "after", upsert: true, setDefaultsOnInsert: true }
-    );
-  }));
+    return {
+      updateOne: {
+        filter: { tenantId, name: template.name, language: template.language || "en" },
+        update: {
+          $set: {
+            tenantId,
+            name: template.name,
+            category,
+            language: template.language || "en",
+            body,
+            parameterCount: placeholders.length,
+            headerType,
+            status: mapMetaTemplateStatus(template.status),
+            metaTemplateId: template.id || "",
+            rejectedReason: template.rejected_reason || "",
+            qualityRating: ["high", "medium", "low"].includes(String(template.quality_score?.score || "").toLowerCase())
+              ? String(template.quality_score.score).toLowerCase()
+              : "unknown"
+          }
+        },
+        upsert: true
+      }
+    };
+  });
+  if (operations.length) {
+    await Template.bulkWrite(operations, { ordered: false });
+  }
 
   const staleFilter = {
     tenantId,
@@ -397,7 +414,10 @@ async function doSyncMetaTemplates(tenantId) {
 }
 
 function invalidateTemplateSync(tenantId) {
-  templateSyncCache.delete(String(tenantId));
+  const key = String(tenantId);
+  templateSyncCache.delete(key);
+  const redis = getRedisClient();
+  if (redis?.isReady) redis.del(`intercon:template-sync:${key}`).catch(() => {});
 }
 
 async function listTemplates(tenantId) {
@@ -472,7 +492,7 @@ async function submitTemplateForMetaReview(tenantId, body) {
     });
   }
 
-  const response = await fetch(`https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.wabaId}/message_templates`, {
+  const response = await fetchWithPolicy(`https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.wabaId}/message_templates`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${accessToken}`,

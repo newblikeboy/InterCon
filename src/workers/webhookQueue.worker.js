@@ -4,35 +4,29 @@ const { connectDatabase } = require("../config/database");
 const { connectRedis, closeRedis } = require("../config/redis");
 const { assertProductionEnvironment } = require("../config/validate");
 const env = require("../config/env");
-const messageService = require("../services/message.service");
+const webhookService = require("../services/webhook.service");
 
-const workerId = `message-worker-${os.hostname()}-${process.pid}`;
+const workerId = `webhook-worker-${os.hostname()}-${process.pid}`;
 let stopping = false;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function runWorker() {
+async function run() {
   assertProductionEnvironment();
   await Promise.all([connectDatabase(), connectRedis()]);
-  console.log(`${workerId} started. Poll=${env.messageWorkerPollMs}ms, MPS=${env.whatsappDefaultMps}, dailyUniqueLimit=${env.whatsappDailyUniqueLimit}`);
+  console.log(`${workerId} started`);
 
   while (!stopping) {
     try {
-      const result = await messageService.processNextQueuedMessage(workerId);
-
+      const result = await webhookService.processNextWebhookEvent(workerId);
       if (!result) {
-        await sleep(env.messageWorkerPollMs);
-        continue;
-      }
-
-      if (result.action !== "scheduled") {
-        console.log(`${workerId} ${result.action} message ${result.messageId}`);
+        await sleep(env.webhookWorkerPollMs);
       }
     } catch (error) {
-      console.error(`${workerId} loop error:`, error);
-      await sleep(Math.max(env.messageWorkerPollMs, 1000));
+      console.error(`${workerId} loop error:`, error.message);
+      await sleep(Math.max(env.webhookWorkerPollMs, 1000));
     }
   }
   await Promise.allSettled([mongoose.disconnect(), closeRedis()]);
@@ -46,7 +40,7 @@ function shutdown(signal) {
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 
-runWorker().catch((error) => {
-  console.error("Failed to start message queue worker:", error);
+run().catch((error) => {
+  console.error("Webhook worker failed:", error);
   process.exit(1);
 });

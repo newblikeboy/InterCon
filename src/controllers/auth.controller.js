@@ -1,6 +1,8 @@
 const asyncHandler = require("../utils/asyncHandler");
 const { signAuthToken, setAuthCookie, clearAuthCookie } = require("../services/authToken.service");
 const authService = require("../services/auth.service");
+const User = require("../models/User");
+const sessionCache = require("../services/sessionCache.service");
 
 const signup = asyncHandler(async (req, res) => {
   const { user, tenant } = await authService.signupCustomer(req.body);
@@ -26,19 +28,12 @@ const login = asyncHandler(async (req, res) => {
   });
 });
 
-const facebookLogin = asyncHandler(async (req, res) => {
-  const { user, tenant, created } = await authService.loginWithFacebook(req.body);
-  const token = signAuthToken(user);
-  setAuthCookie(res, token);
-
-  res.status(created ? 201 : 200).json({
-    success: true,
-    message: created ? "Signup successful" : "Login successful",
-    user: authService.publicUser(user, tenant)
-  });
-});
-
 const logout = asyncHandler(async (req, res) => {
+  await User.updateOne(
+    { _id: req.user._id },
+    { $inc: { sessionVersion: 1 } }
+  );
+  await sessionCache.invalidateUser(req.user._id);
   clearAuthCookie(res);
 
   res.json({
@@ -59,7 +54,6 @@ const me = asyncHandler(async (req, res) => {
 module.exports = {
   signup,
   login,
-  facebookLogin,
   logout,
   me
 };

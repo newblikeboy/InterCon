@@ -1,7 +1,10 @@
 const crypto = require("crypto");
+const mongoose = require("mongoose");
 const env = require("../config/env");
 const Tenant = require("../models/Tenant");
+const Payment = require("../models/Payment");
 const HttpError = require("../utils/httpError");
+const { fetchWithPolicy } = require("../utils/httpClient");
 
 const plans = [
   {
@@ -80,7 +83,7 @@ function requireRazorpayConfig() {
 async function razorpayRequest(path, options = {}) {
   requireRazorpayConfig();
 
-  const response = await fetch(`https://api.razorpay.com/v1/${path}`, {
+  const response = await fetchWithPolicy(`https://api.razorpay.com/v1/${path}`, {
     ...options,
     headers: {
       "Authorization": `Basic ${Buffer.from(`${env.razorpayKeyId}:${env.razorpayKeySecret}`).toString("base64")}`,
@@ -279,11 +282,96 @@ async function verifyPayment(tenantId, body = {}) {
     });
   }
 
-  return activatePlan(tenantId, tenant.billing.plan, {
-    razorpayOrderId,
-    razorpayPaymentId,
-    razorpaySignature
-  });
+  const session = await mongoose.startSession();
+  let result;
+  try {
+    await session.withTransaction(async () => {
+      const existingPayment = await Payment.findOne({
+        provider: "razorpay",
+        providerPaymentId: razorpayPaymentId
+      }).session(session);
+
+      if (existingPayment) {
+        if (
+          String(existingPayment.tenantId) !== String(tenantId)
+          || existingPayment.providerOrderId !== razorpayOrderId
+        ) {
+          throw new HttpError(409, "This payment has already been used");
+        }
+
+        const currentTenant = await Tenant.findById(tenantId).select("billing").session(session);
+        result = {
+          billing: publicBilling(currentTenant),
+          plan: getPlan(existingPayment.plan),
+          idempotent: true
+        };
+        return;
+      }
+
+      const currentTenant = await Tenant.findById(tenantId).select("billing").session(session);
+      if (!currentTenant || currentTenant.billing?.razorpayOrderId !== razorpayOrderId) {
+        throw new HttpError(409, "The selected payment order is no longer active");
+      }
+
+      const plan = getPlan(currentTenant.billing.plan);
+      if (!plan) throw new HttpError(400, "The selected InterCon plan is invalid");
+
+      await Payment.create([{
+        tenantId,
+        provider: "razorpay",
+        providerOrderId: razorpayOrderId,
+        providerPaymentId: razorpayPaymentId,
+        signatureHash: crypto.createHash("sha256").update(razorpaySignature).digest("hex"),
+        plan: plan.id,
+        amount: Number(payment.amount),
+        currency: payment.currency,
+        status: "captured",
+        capturedAt: new Date()
+      }], { session });
+
+      const activatedAt = new Date();
+      const updatedTenant = await Tenant.findByIdAndUpdate(
+        tenantId,
+        {
+          $set: {
+            "billing.plan": plan.id,
+            "billing.status": "active",
+            "billing.amount": plan.amount,
+            "billing.currency": plan.currency,
+            "billing.selectedAt": currentTenant.billing?.selectedAt || activatedAt,
+            "billing.activatedAt": activatedAt,
+            "billing.currentPeriodEnd": addMonths(activatedAt, plan.months),
+            "billing.razorpayOrderId": razorpayOrderId,
+            "billing.razorpayPaymentId": razorpayPaymentId,
+            "billing.razorpaySignature": ""
+          }
+        },
+        { returnDocument: "after", session }
+      );
+
+      result = { billing: publicBilling(updatedTenant), plan, idempotent: false };
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      const existing = await Payment.findOne({
+        provider: "razorpay",
+        providerPaymentId: razorpayPaymentId,
+        tenantId
+      }).lean();
+      if (existing) {
+        return {
+          billing: await getBillingStatus(tenantId),
+          plan: getPlan(existing.plan),
+          idempotent: true
+        };
+      }
+    }
+    throw error;
+  } finally {
+    await session.endSession();
+  }
+
+  return result;
 }
 
 async function requireActivePaidPlan(tenantId) {

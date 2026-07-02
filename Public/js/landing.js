@@ -6,9 +6,7 @@ const authTabs = document.querySelectorAll("[data-auth-tab]");
 const authForms = document.querySelectorAll("[data-auth-form]");
 const openAuthButtons = document.querySelectorAll("[data-open-auth]");
 const closeAuthButtons = document.querySelectorAll("[data-close-auth]");
-const facebookLoginButtons = document.querySelectorAll("[data-facebook-login]");
 const yearNode = document.querySelector("[data-year]");
-let facebookSdkPromise;
 
 function updateHeader() {
   header.classList.toggle("scrolled", window.scrollY > 20);
@@ -59,125 +57,6 @@ function setFormMessage(form, message, isError = false) {
   messageNode.classList.toggle("error", isError);
 }
 
-async function loadFacebookSdk() {
-  if (window.FB) {
-    return window.FB;
-  }
-
-  if (facebookSdkPromise) {
-    return facebookSdkPromise;
-  }
-
-  facebookSdkPromise = fetch("/api/meta/facebook-sdk-config", {
-    credentials: "include"
-  })
-    .then(async (response) => {
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(data.message || "Facebook Login is not configured");
-      }
-      return data.config;
-    })
-    .then((config) => new Promise((resolve, reject) => {
-      window.fbAsyncInit = function () {
-        window.FB.init({
-          appId: config.appId,
-          autoLogAppEvents: true,
-          xfbml: true,
-          version: config.version || "v25.0"
-        });
-        resolve(window.FB);
-      };
-
-      const existingScript = document.getElementById("facebook-jssdk");
-      if (existingScript) {
-        existingScript.addEventListener("load", () => resolve(window.FB));
-        existingScript.addEventListener("error", () => reject(new Error("Unable to load Facebook SDK")));
-        return;
-      }
-
-      const firstScript = document.getElementsByTagName("script")[0];
-      const sdkScript = document.createElement("script");
-      sdkScript.id = "facebook-jssdk";
-      sdkScript.async = true;
-      sdkScript.defer = true;
-      sdkScript.crossOrigin = "anonymous";
-      sdkScript.src = "https://connect.facebook.net/en_US/sdk.js";
-      sdkScript.onerror = () => reject(new Error("Unable to load Facebook SDK"));
-      firstScript.parentNode.insertBefore(sdkScript, firstScript);
-    }));
-
-  return facebookSdkPromise;
-}
-
-function requestFacebookLogin(FB, config) {
-  return new Promise((resolve) => {
-    const options = config.loginConfigId
-      ? {
-          config_id: config.loginConfigId,
-          response_type: "code",
-          override_default_response_type: true,
-          ...(config.loginExtras ? { extras: config.loginExtras } : {})
-        }
-      : {
-          scope: "public_profile"
-        };
-
-    FB.login(resolve, options);
-  });
-}
-
-async function submitFacebookLogin(button) {
-  const form = button.closest("[data-auth-form]");
-  const originalHtml = button.innerHTML;
-
-  button.disabled = true;
-  button.textContent = "Connecting...";
-  setFormMessage(form, "");
-
-  try {
-    const FB = await loadFacebookSdk();
-    const sdkConfig = await fetch("/api/meta/facebook-sdk-config", {
-      credentials: "include"
-    }).then((response) => response.json()).then((data) => data.config || {});
-    const loginResponse = await requestFacebookLogin(FB, sdkConfig);
-    const accessToken = loginResponse.authResponse?.accessToken;
-    const code = loginResponse.authResponse?.code;
-
-    if (!accessToken && !code) {
-      throw new Error("Facebook login was cancelled");
-    }
-
-    const formData = Object.fromEntries(new FormData(form).entries());
-    const response = await fetch("/api/auth/facebook", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      credentials: "include",
-      body: JSON.stringify({
-        ...formData,
-        accessToken,
-        code,
-        redirectUri: sdkConfig.redirectUri
-      })
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.message || "Facebook login failed");
-    }
-
-    setFormMessage(form, data.message || "Success");
-    window.location.href = "/customer";
-  } catch (error) {
-    setFormMessage(form, error.message, true);
-  } finally {
-    button.disabled = false;
-    button.innerHTML = originalHtml;
-  }
-}
-
 navToggle.addEventListener("click", () => {
   const isOpen = header.classList.toggle("menu-open");
   document.body.classList.toggle("nav-open", isOpen);
@@ -210,10 +89,6 @@ closeAuthButtons.forEach((button) => {
 
 authTabs.forEach((tab) => {
   tab.addEventListener("click", () => setAuthMode(tab.dataset.authTab));
-});
-
-facebookLoginButtons.forEach((button) => {
-  button.addEventListener("click", () => submitFacebookLogin(button));
 });
 
 authForms.forEach((form) => {

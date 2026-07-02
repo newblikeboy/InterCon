@@ -7,6 +7,7 @@ const Tenant = require("../models/Tenant");
 const env = require("../config/env");
 const HttpError = require("../utils/httpError");
 const { requireActivePaidPlan } = require("./billing.service");
+const { fetchWithPolicy } = require("../utils/httpClient");
 
 // Meta's customer-service window: free-form (non-template) replies are only
 // permitted within 24 hours of the customer's most recent inbound message.
@@ -209,7 +210,7 @@ async function sendReply(tenantId, conversationId, body = {}) {
     throw new HttpError(409, "Connect WhatsApp first. Phone number ID and Meta access token are required before replying.");
   }
 
-  const response = await fetch(`https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.phoneNumberId}/messages`, {
+  const response = await fetchWithPolicy(`https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.phoneNumberId}/messages`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${accessToken}`,

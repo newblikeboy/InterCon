@@ -223,8 +223,14 @@ const tenantSchema = new mongoose.Schema(
 tenantSchema.index({ businessEmail: 1 });
 tenantSchema.index({ status: 1 });
 tenantSchema.index({ "meta.businessId": 1 });
-tenantSchema.index({ "meta.wabaId": 1 });
-tenantSchema.index({ "meta.phoneNumberId": 1 });
+tenantSchema.index(
+  { "meta.wabaId": 1 },
+  { unique: true, partialFilterExpression: { "meta.wabaId": { $type: "string", $gt: "" } } }
+);
+tenantSchema.index(
+  { "meta.phoneNumberId": 1 },
+  { unique: true, partialFilterExpression: { "meta.phoneNumberId": { $type: "string", $gt: "" } } }
+);
 tenantSchema.index({ "billing.status": 1, "billing.plan": 1 });
 
 tenantSchema.methods.getMetaAccessToken = function getMetaAccessToken() {

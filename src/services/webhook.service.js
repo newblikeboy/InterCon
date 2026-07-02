@@ -162,6 +162,8 @@ async function processTemplateStatus(tenantId, value) {
 }
 
 async function processMessageStatuses(tenantId, statuses = []) {
+  const messageOperations = [];
+  const inboxOperations = [];
   for (const status of statuses) {
     const metaMessageId = status.id;
     const mappedStatus = ["sent", "delivered", "read", "failed"].includes(status.status)
@@ -176,27 +178,21 @@ async function processMessageStatuses(tenantId, statuses = []) {
         .join(" - ")
       : "";
 
-    await Message.findOneAndUpdate(
-      { tenantId, metaMessageId },
-      {
-        $set: {
-          status: mappedStatus,
-          ...(errorMessage ? { error: errorMessage } : {})
-        }
+    const update = {
+      $set: {
+        status: mappedStatus,
+        ...(errorMessage ? { error: errorMessage } : {})
       }
-    );
-
-    // Keep delivery receipts for inbox replies in sync as well.
-    await InboxMessage.findOneAndUpdate(
-      { tenantId, metaMessageId, direction: "out" },
-      {
-        $set: {
-          status: mappedStatus,
-          ...(errorMessage ? { error: errorMessage } : {})
-        }
-      }
-    );
+    };
+    messageOperations.push({ updateOne: { filter: { tenantId, metaMessageId }, update } });
+    inboxOperations.push({
+      updateOne: { filter: { tenantId, metaMessageId, direction: "out" }, update }
+    });
   }
+  await Promise.all([
+    messageOperations.length ? Message.bulkWrite(messageOperations, { ordered: false }) : null,
+    inboxOperations.length ? InboxMessage.bulkWrite(inboxOperations, { ordered: false }) : null
+  ]);
 }
 
 // Reduce a Cloud API inbound message object to a short, displayable summary.
@@ -472,67 +468,142 @@ async function processPhoneNameUpdate(tenantId, value = {}) {
   );
 }
 
-async function processChange(entry, change, payload) {
+async function processStoredEvent(event) {
+  const entry = { id: event.wabaId };
+  const change = event.payload;
   const { tenant, wabaId, phoneNumberId } = await resolveTenant(entry, change);
   const eventType = extractEventType(change);
 
-  const event = await WebhookEvent.create({
-    tenantId: tenant?._id,
-    object: payload.object,
-    eventType,
-    wabaId,
-    phoneNumberId,
-    payload: change,
-    status: "received"
-  });
-
-  try {
-    if (tenant && eventType === "message_template_status_update") {
-      await processTemplateStatus(tenant._id, change.value || {});
-    }
-
-    if (tenant && eventType === "phone_number_name_update") {
-      await processPhoneNameUpdate(tenant._id, change.value || {});
-    }
-
-    if (tenant && change.value?.statuses?.length) {
-      await processMessageStatuses(tenant._id, change.value.statuses);
-    }
-
-    if (tenant && change.value?.messages?.length) {
-      await processInboundMessages(tenant._id, change.value, wabaId, phoneNumberId);
-    }
-
-    if (tenant && change.value?.message_echoes?.length) {
-      await processMessageEchoes(tenant._id, change.value, wabaId, phoneNumberId);
-    }
-
-    event.status = "processed";
-    await event.save();
-  } catch (error) {
-    event.status = "failed";
-    event.error = error.message;
-    await event.save();
-    throw error;
+  if (tenant && !event.tenantId) {
+    await WebhookEvent.updateOne({ _id: event._id }, { $set: { tenantId: tenant._id, eventType } });
+  }
+  if (tenant && eventType === "message_template_status_update") {
+    await processTemplateStatus(tenant._id, change.value || {});
+  }
+  if (tenant && eventType === "phone_number_name_update") {
+    await processPhoneNameUpdate(tenant._id, change.value || {});
+  }
+  if (tenant && change.value?.statuses?.length) {
+    await processMessageStatuses(tenant._id, change.value.statuses);
+  }
+  if (tenant && change.value?.messages?.length) {
+    await processInboundMessages(tenant._id, change.value, wabaId, phoneNumberId);
+  }
+  if (tenant && change.value?.message_echoes?.length) {
+    await processMessageEchoes(tenant._id, change.value, wabaId, phoneNumberId);
   }
 }
 
-async function processMetaWebhook(req) {
+function eventKey(entry, change) {
+  return crypto.createHash("sha256")
+    .update(String(entry.id || ""))
+    .update("\0")
+    .update(JSON.stringify(change))
+    .digest("hex");
+}
+
+async function enqueueMetaWebhook(req) {
   verifyMetaSignature(req);
 
   const payload = req.body;
   const entries = payload.entry || [];
+  const events = [];
 
   for (const entry of entries) {
     const changes = entry.changes || [];
     for (const change of changes) {
-      await processChange(entry, change, payload);
+      const value = change.value || {};
+      events.push({
+        provider: "meta",
+        eventKey: eventKey(entry, change),
+        object: payload.object,
+        eventType: extractEventType(change),
+        wabaId: entry.id || value.waba_id,
+        phoneNumberId: value.metadata?.phone_number_id || value.phone_number_id,
+        payload: change,
+        status: "queued",
+        nextAttemptAt: new Date()
+      });
     }
+  }
+
+  if (!events.length) return { queued: 0 };
+  try {
+    const inserted = await WebhookEvent.insertMany(events, { ordered: false });
+    return { queued: inserted.length };
+  } catch (error) {
+    if (error?.code === 11000 || error?.writeErrors?.every((item) => item.code === 11000)) {
+      return { queued: error.insertedDocs?.length || 0 };
+    }
+    throw error;
+  }
+}
+
+async function claimNextWebhookEvent(workerId) {
+  const now = new Date();
+  const stale = new Date(Date.now() - env.webhookQueueLockMs);
+  return WebhookEvent.findOneAndUpdate(
+    {
+      $or: [
+        { status: { $in: ["queued", "retry"] }, nextAttemptAt: { $lte: now } },
+        { status: "processing", lockedAt: { $lt: stale } }
+      ]
+    },
+    {
+      $set: {
+        status: "processing",
+        lockedAt: now,
+        lockedBy: workerId
+      }
+    },
+    { returnDocument: "after", sort: { nextAttemptAt: 1, createdAt: 1 } }
+  ).lean();
+}
+
+async function processNextWebhookEvent(workerId) {
+  const event = await claimNextWebhookEvent(workerId);
+  if (!event) return null;
+
+  const attempts = Number(event.attempts || 0) + 1;
+  try {
+    await processStoredEvent(event);
+    await WebhookEvent.updateOne(
+      { _id: event._id, lockedBy: workerId },
+      {
+        $set: {
+          status: "processed",
+          attempts,
+          error: "",
+          lockedAt: null,
+          lockedBy: ""
+        }
+      }
+    );
+    return { action: "processed", eventId: event._id };
+  } catch (error) {
+    const dead = attempts >= 10;
+    const base = Math.min(1000 * (2 ** Math.max(0, attempts - 1)), 10 * 60 * 1000);
+    const delay = base + Math.floor(Math.random() * Math.max(100, base * 0.25));
+    await WebhookEvent.updateOne(
+      { _id: event._id, lockedBy: workerId },
+      {
+        $set: {
+          status: dead ? "dead" : "retry",
+          attempts,
+          nextAttemptAt: new Date(Date.now() + delay),
+          error: String(error.message || "Webhook processing failed").slice(0, 500),
+          lockedAt: null,
+          lockedBy: ""
+        }
+      }
+    );
+    return { action: dead ? "dead" : "retry", eventId: event._id };
   }
 }
 
 module.exports = {
   getMetaWebhookSetup,
   verifyMetaChallenge,
-  processMetaWebhook
+  enqueueMetaWebhook,
+  processNextWebhookEvent
 };

@@ -29,18 +29,8 @@ const userSchema = new mongoose.Schema(
     },
     passwordHash: {
       type: String,
-      required() {
-        return !this.authProviders?.facebookId;
-      },
+      required: true,
       select: false
-    },
-    authProviders: {
-      facebookId: {
-        type: String,
-        trim: true,
-        index: true,
-        sparse: true
-      }
     },
     role: {
       type: String,
@@ -52,6 +42,12 @@ const userSchema = new mongoose.Schema(
       enum: ["active", "disabled"],
       default: "active"
     },
+    sessionVersion: {
+      type: Number,
+      default: 0,
+      min: 0,
+      select: false
+    },
     lastLoginAt: {
       type: Date
     }
@@ -62,5 +58,6 @@ const userSchema = new mongoose.Schema(
 );
 
 userSchema.index({ tenantId: 1, role: 1 });
+userSchema.index({ phone: 1 }, { sparse: true });
 
 module.exports = mongoose.model("User", userSchema);

@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const path = require("path");
 const express = require("express");
 const compression = require("compression");
@@ -106,4 +107,3 @@ app.use(notFound);
 app.use(errorHandler);
 
 module.exports = app;
-const crypto = require("crypto");

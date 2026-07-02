@@ -28,6 +28,9 @@ function assertValidWhatsappPhone(phone) {
 }
 
 function normalizeContact(input) {
+  const optInStatus = ["true", "yes", "1", true].includes(input.optIn || input.opt_in || input.consent);
+  const optInAtRaw = input.optInAt || input.opt_in_at;
+
   return {
     name: String(input.name || input.customer_name || "").trim(),
     phone: normalizePhone(input.phone || input.mobile || input.whatsapp_number),
@@ -36,9 +39,11 @@ function normalizeContact(input) {
     source: input.source || "",
     tags: normalizeTags(input.tags),
     optIn: {
-      status: ["true", "yes", "1", true].includes(input.optIn || input.opt_in || input.consent),
+      status: optInStatus,
       proof: input.optInProof || input.opt_in_proof || input.proof || "",
-      capturedAt: input.optInAt || input.opt_in_at ? new Date(input.optInAt || input.opt_in_at) : undefined
+      // Timestamp every attested opt-in for the business's audit trail: use the
+      // provided date, otherwise default to now when opt-in is claimed.
+      capturedAt: optInAtRaw ? new Date(optInAtRaw) : (optInStatus ? new Date() : undefined)
     }
   };
 }
@@ -104,15 +109,23 @@ async function importContacts(tenantId, contacts = []) {
     throw new HttpError(400, "At least one contact is required");
   }
 
+  const MAX_IMPORT = 1000;
   const results = {
     imported: 0,
     skipped: 0,
     errors: []
   };
 
+  // Surface rows dropped by the per-upload cap instead of silently discarding them.
+  if (contacts.length > MAX_IMPORT) {
+    const dropped = contacts.length - MAX_IMPORT;
+    results.skipped += dropped;
+    results.errors.push(`${dropped} row(s) beyond the ${MAX_IMPORT}-contact per-upload limit were not imported. Split the file and upload again.`);
+  }
+
   const operations = [];
 
-  for (const row of contacts.slice(0, 1000)) {
+  for (const row of contacts.slice(0, MAX_IMPORT)) {
     try {
       const contact = normalizeContact(row);
       if (!contact.name || !contact.phone) {

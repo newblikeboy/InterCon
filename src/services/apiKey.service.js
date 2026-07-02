@@ -49,6 +49,23 @@ async function createApiKey(tenantId, body = {}) {
     throw new HttpError(400, "API key name is required");
   }
 
+  // A tenant may create any number of keys, but only one is active at a time.
+  // Revoke all currently-active keys and evict their auth cache so the newly
+  // created key becomes the sole working credential immediately.
+  const previousActive = await ApiKey.find({ tenantId, status: "active" }).select("keyHash").lean();
+  if (previousActive.length) {
+    await ApiKey.updateMany(
+      { tenantId, status: "active" },
+      { $set: { status: "revoked", revokedAt: new Date() } }
+    );
+    const redis = getRedisClient();
+    if (redis?.isReady) {
+      await Promise.all(previousActive
+        .filter((key) => key.keyHash)
+        .map((key) => redis.del(`intercon:api-key:${key.keyHash}`)));
+    }
+  }
+
   const plainKey = generateApiKey();
   const apiKey = await ApiKey.create({
     tenantId,
@@ -103,7 +120,7 @@ async function authenticateApiKey(rawKey) {
       const value = JSON.parse(cached);
       return {
         apiKey: { _id: value.apiKeyId },
-        tenant: { _id: value.tenantId, status: "active" }
+        tenant: value.tenant
       };
     }
   }
@@ -127,9 +144,11 @@ async function authenticateApiKey(rawKey) {
     await ApiKey.updateOne({ _id: apiKey._id }, { $set: { lastUsedAt: new Date() } });
   }
   if (redis?.isReady) {
+    // Cache the same tenant shape returned on a cache miss so downstream
+    // handlers see consistent fields (meta/billing/onboardingStatus) either way.
     await redis.set(cacheKey, JSON.stringify({
       apiKeyId: String(apiKey._id),
-      tenantId: String(tenant._id)
+      tenant
     }), { EX: 10 });
   }
 

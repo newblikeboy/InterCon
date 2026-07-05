@@ -72,6 +72,12 @@ function getBodyTextFromComponents(components = []) {
   return String(getBodyComponent(components)?.text || "").trim();
 }
 
+function getBodySampleValues(template) {
+  if (String(template?.category || "").toLowerCase() === "authentication") return ["123456"];
+  const samples = getBodyComponent(template?.components || [])?.example?.body_text?.[0];
+  return Array.isArray(samples) ? samples.map((value) => String(value)) : [];
+}
+
 function getStoredTemplateBody(template) {
   if (String(template?.category || "").toLowerCase() === "authentication") {
     return AUTHENTICATION_TEMPLATE_BODY;
@@ -153,6 +159,7 @@ function buildMetaTemplatePayload(body) {
       localCategory: category,
       body: AUTHENTICATION_TEMPLATE_BODY,
       parameterCount: 1,
+      sampleValues: ["123456"],
       headerType: "none",
       headerMediaId: ""
     };
@@ -181,6 +188,7 @@ function buildMetaTemplatePayload(body) {
     localCategory: category,
     body: text,
     parameterCount: placeholders.length,
+    sampleValues: bodyText ? bodyText[0].map((value) => String(value)) : [],
     headerType,
     headerMediaId
   };
@@ -374,6 +382,7 @@ async function doSyncMetaTemplates(tenantId) {
             language: template.language || "en",
             body,
             parameterCount: placeholders.length,
+            sampleValues: getBodySampleValues(template),
             headerType,
             status: mapMetaTemplateStatus(template.status),
             metaTemplateId: template.id || "",
@@ -452,6 +461,7 @@ async function createTemplateDraft(tenantId, body) {
         language: payload.language,
         body: payload.body,
         parameterCount: payload.parameterCount,
+        sampleValues: payload.sampleValues,
         headerType: payload.headerType,
         headerMediaId: payload.headerMediaId,
         status: "draft"
@@ -524,6 +534,7 @@ async function submitTemplateForMetaReview(tenantId, body) {
         language: payload.language,
         body: payload.body,
         parameterCount: payload.parameterCount,
+        sampleValues: payload.sampleValues,
         headerType: payload.headerType,
         headerMediaId: payload.headerMediaId,
         status: "in_review",

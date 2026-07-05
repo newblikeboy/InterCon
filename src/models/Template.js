@@ -36,6 +36,11 @@ const templateSchema = new mongoose.Schema(
       min: 0,
       max: 100
     },
+    // Example values for {{1}}..{{n}}, shown as fill-in guidance when sending.
+    sampleValues: {
+      type: [String],
+      default: []
+    },
     headerType: {
       type: String,
       enum: ["none", "image", "video"],

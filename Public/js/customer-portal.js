@@ -163,6 +163,7 @@ const sendRecipientState = {
 const sendVariableDataState = {
   templateKey: "",
   parameterCount: 0,
+  sampleValues: [],
   rows: [],
   fileName: ""
 };
@@ -1591,7 +1592,7 @@ function renderApprovedTemplateOptions(templates) {
     ...templates.map((template) => {
       const headerType = template.headerType || "none";
       const formatLabel = headerType === "none" ? "Plain" : `${headerType[0].toUpperCase()}${headerType.slice(1)} header`;
-      return `<option value="${escapeHtml(template.name)}" data-category="${escapeHtml(template.category)}" data-language="${escapeHtml(template.language)}" data-parameter-count="${Number(template.parameterCount || 0)}" data-body="${escapeHtml(template.body || "")}" data-header-type="${escapeHtml(headerType)}" data-header-media-id="${escapeHtml(template.headerMediaId || "")}">${escapeHtml(template.name)} · ${escapeHtml(formatLabel)} · ${escapeHtml(template.category)} (${escapeHtml(template.language)})</option>`;
+      return `<option value="${escapeHtml(template.name)}" data-category="${escapeHtml(template.category)}" data-language="${escapeHtml(template.language)}" data-parameter-count="${Number(template.parameterCount || 0)}" data-body="${escapeHtml(template.body || "")}" data-sample-values="${escapeHtml(JSON.stringify(template.sampleValues || []))}" data-header-type="${escapeHtml(headerType)}" data-header-media-id="${escapeHtml(template.headerMediaId || "")}">${escapeHtml(template.name)} · ${escapeHtml(formatLabel)} · ${escapeHtml(template.category)} (${escapeHtml(template.language)})</option>`;
     })
   ].join("");
 
@@ -1691,6 +1692,14 @@ function updateSendVariableHint() {
   const language = selectedOption?.dataset.language || "";
   const templateKey = `${sendTemplateSelect.value}:${language}:${parameterCount}`;
 
+  let sampleValues = [];
+  try {
+    sampleValues = JSON.parse(selectedOption?.dataset.sampleValues || "[]");
+  } catch (error) {
+    sampleValues = [];
+  }
+  sendVariableDataState.sampleValues = Array.isArray(sampleValues) ? sampleValues.map(String) : [];
+
   if (sendLanguageSelect && language) {
     sendLanguageSelect.value = language;
   }
@@ -1755,7 +1764,20 @@ function renderSendVariableEditor() {
   const knownMatchCount = [...knownSelectedPhones].filter((phone) => loadedPhoneSet.has(phone)).length;
   const previewRows = sendVariableDataState.rows.slice(0, 5);
 
+  const samples = sendVariableDataState.sampleValues || [];
+  const templateBody = sendTemplateSelect?.selectedOptions?.[0]?.dataset.body || "";
+  const guideBody = escapeHtml(templateBody).replace(/\{\{\s*(\d+)\s*\}\}/g, (match, index) => (
+    `<mark class="lib-var">{{${index}}}</mark>`
+  ));
+  const guideItems = Array.from({ length: sendVariableDataState.parameterCount }, (_, index) => (
+    `<li><mark class="lib-var">{{${index + 1}}}</mark> = Variable ${index + 1}${samples[index] ? ` <span>e.g. ${escapeHtml(samples[index])}</span>` : ""}</li>`
+  )).join("");
+
   sendVariableEditor.innerHTML = `
+    <div class="send-variable-guide">
+      <p class="send-variable-guide-body">${guideBody}</p>
+      <ul class="send-variable-guide-list">${guideItems}</ul>
+    </div>
     <div class="send-variable-import">
       <div class="send-variable-actions">
         <button type="button" data-download-variable-csv>Download CSV for selected recipients</button>
@@ -1766,7 +1788,7 @@ function renderSendVariableEditor() {
         ${sendVariableDataState.rows.length ? `<button type="button" class="details" data-see-variable-details>See details</button>` : ""}
         ${sendVariableDataState.rows.length ? `<button type="button" class="clear" data-clear-variable-csv>Clear file</button>` : ""}
       </div>
-      <code>${headers.join(",")}</code>
+      <code>${headers.map((header) => escapeHtml(header)).join(",")}</code>
       <div class="send-variable-file-state${sendVariableDataState.rows.length ? " is-ready" : ""}">
         <strong>${sendVariableDataState.rows.length
           ? `${sendVariableDataState.rows.length} phone row${sendVariableDataState.rows.length === 1 ? "" : "s"} loaded`
@@ -1797,9 +1819,12 @@ function normalizeSendPhone(phone) {
 }
 
 function getRecipientVariableHeaders() {
+  const samples = sendVariableDataState.sampleValues || [];
   return [
     "Phone Number",
-    ...Array.from({ length: sendVariableDataState.parameterCount }, (_, index) => `Variable ${index + 1}`)
+    ...Array.from({ length: sendVariableDataState.parameterCount }, (_, index) => (
+      samples[index] ? `Variable ${index + 1} (e.g. ${samples[index]})` : `Variable ${index + 1}`
+    ))
   ];
 }
 
@@ -1862,13 +1887,16 @@ function parseCsvMatrix(text) {
 
 function parseRecipientVariableCsv(text) {
   const matrix = parseCsvMatrix(text);
-  const expectedHeaders = getRecipientVariableHeaders();
+  const expectedColumnCount = sendVariableDataState.parameterCount + 1;
   const normalizeHeader = (header) => String(header || "").trim().toLowerCase().replace(/[\s_-]+/g, "");
-  const headers = (matrix.shift() || []).map(normalizeHeader);
-  const normalizedExpectedHeaders = expectedHeaders.map(normalizeHeader);
-  if (headers[0] === "phone") headers[0] = "phonenumber";
-  if (headers.length !== expectedHeaders.length || headers.some((header, index) => header !== normalizedExpectedHeaders[index])) {
-    throw new Error(`CSV columns must be exactly: ${expectedHeaders.join(",")}`);
+  const headerRow = matrix.shift() || [];
+  // Only the phone column and the column count matter; variable header text is
+  // free-form guidance (it carries example values) and may vary between files.
+  if (!normalizeHeader(headerRow[0]).startsWith("phone")) {
+    throw new Error("The first CSV column must be the phone number.");
+  }
+  if (headerRow.length !== expectedColumnCount) {
+    throw new Error(`The CSV must have ${expectedColumnCount} columns: the phone number plus ${sendVariableDataState.parameterCount} variable value${sendVariableDataState.parameterCount === 1 ? "" : "s"}.`);
   }
 
   const dataRows = matrix.filter((row) => row.some((value) => String(value).trim()));
@@ -1878,8 +1906,8 @@ function parseRecipientVariableCsv(text) {
   const seenPhones = new Set();
   return dataRows.map((row, index) => {
     const rowNumber = index + 2;
-    if (row.length !== expectedHeaders.length) {
-      throw new Error(`CSV row ${rowNumber} must contain ${expectedHeaders.length} columns.`);
+    if (row.length !== expectedColumnCount) {
+      throw new Error(`CSV row ${rowNumber} must contain ${expectedColumnCount} columns.`);
     }
     if (looksLikeExcelScientific(row[0])) {
       throw new Error(`CSV row ${rowNumber}: Excel converted the phone number to scientific notation ("${String(row[0]).trim()}"), which loses digits. Re-download the CSV and fill it again, or format the phone column as Number (0 decimals) before saving.`);
@@ -1932,7 +1960,7 @@ async function downloadRecipientVariableCsv() {
   const headers = getRecipientVariableHeaders();
   const emptyVariables = Array.from({ length: sendVariableDataState.parameterCount }, () => "");
   const csv = [
-    headers.join(","),
+    headers.map(escapeCsvValue).join(","),
     ...(data.contacts || []).map((contact) => (
       [excelTextCell(contact.phone), ...emptyVariables.map(escapeCsvValue)].join(",")
     ))

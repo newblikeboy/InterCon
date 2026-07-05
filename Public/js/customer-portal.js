@@ -316,6 +316,7 @@ function openTemplateModal() {
 function closeTemplateModal() {
   if (!templateModal) return;
   templateModal.hidden = true;
+  clearTemplateLibrarySource();
   if (!confirmModal || confirmModal.hidden) {
     document.body.classList.remove("modal-open");
   }
@@ -1381,14 +1382,14 @@ function parseCsv(text) {
 function downloadContactCsvTemplate() {
   const headers = ["name", "whatsapp_number", "optIn", "tags"];
   const sampleRow = [
-    "Priya Sharma",
-    "919210699076",
-    "yes",
-    "vip"
+    escapeCsvValue("Priya Sharma"),
+    excelTextCell("919210699076"),
+    escapeCsvValue("yes"),
+    escapeCsvValue("vip")
   ];
   const csv = [
     headers.join(","),
-    sampleRow.map(escapeCsvValue).join(",")
+    sampleRow.join(",")
   ].join("\r\n");
   const blobUrl = URL.createObjectURL(new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");
@@ -1880,6 +1881,9 @@ function parseRecipientVariableCsv(text) {
     if (row.length !== expectedHeaders.length) {
       throw new Error(`CSV row ${rowNumber} must contain ${expectedHeaders.length} columns.`);
     }
+    if (looksLikeExcelScientific(row[0])) {
+      throw new Error(`CSV row ${rowNumber}: Excel converted the phone number to scientific notation ("${String(row[0]).trim()}"), which loses digits. Re-download the CSV and fill it again, or format the phone column as Number (0 decimals) before saving.`);
+    }
     const phone = normalizeSendPhone(row[0]);
     const variables = row.slice(1).map((value) => String(value).trim());
     if (!/^\d{11,15}$/.test(phone)) throw new Error(`CSV row ${rowNumber} has an invalid phone number.`);
@@ -1894,6 +1898,17 @@ function parseRecipientVariableCsv(text) {
 function escapeCsvValue(value) {
   const text = String(value ?? "");
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+// Excel turns 12+ digit numbers into scientific notation (9.19877E+11) and saves
+// that back to the CSV, destroying the phone number. Emitting the cell as ="…"
+// forces Excel to keep it as text; phone normalization strips the wrapper on upload.
+function excelTextCell(value) {
+  return `="${String(value ?? "").replace(/"/g, "")}"`;
+}
+
+function looksLikeExcelScientific(value) {
+  return /^-?\d+(\.\d+)?E[+-]?\d+$/i.test(String(value ?? "").trim());
 }
 
 async function downloadRecipientVariableCsv() {
@@ -1919,7 +1934,7 @@ async function downloadRecipientVariableCsv() {
   const csv = [
     headers.join(","),
     ...(data.contacts || []).map((contact) => (
-      [contact.phone, ...emptyVariables].map(escapeCsvValue).join(",")
+      [excelTextCell(contact.phone), ...emptyVariables.map(escapeCsvValue)].join(",")
     ))
   ].join("\r\n");
   const blobUrl = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }));
@@ -2397,6 +2412,7 @@ function applyTemplatePreset(presetId) {
   const preset = templatePresets[presetId];
   if (!preset) return;
 
+  clearTemplateLibrarySource();
   if (templateNameInput) templateNameInput.value = preset.name;
   if (templateCategorySelect) templateCategorySelect.value = preset.category;
   if (templateLanguageSelect) templateLanguageSelect.value = preset.language;
@@ -2407,134 +2423,253 @@ function applyTemplatePreset(presetId) {
   setTemplateMessage("");
 }
 
-// Curated catalogue modelled on Meta's WhatsApp Template Library. Meta does not
-// expose a public list API, so this is a maintained starter set. "Use template"
-// prefills the builder so the user reviews and submits it for Meta approval.
-const META_TEMPLATE_LIBRARY = [
-  {
-    id: "order_confirmation",
-    title: "Order Confirmation",
-    category: "utility",
-    language: "en_US",
-    body: "Hi {{1}}, thank you for your order {{2}}. Your total is {{3}} and it will be delivered by {{4}}.",
-    samples: "{{1}} = Name, {{2}} = ORD1234, {{3}} = Rs 1,499, {{4}} = 12 Jun"
-  },
-  {
-    id: "delivery_update",
-    title: "Delivery Update",
-    category: "utility",
-    language: "en_US",
-    body: "Hi {{1}}, your order {{2}} is out for delivery and will arrive today by {{3}}.",
-    samples: "{{1}} = Name, {{2}} = ORD1234, {{3}} = 6 PM"
-  },
-  {
-    id: "payment_reminder_lib",
-    title: "Payment Reminder",
-    category: "utility",
-    language: "en_US",
-    body: "Hi {{1}}, a payment of {{2}} for invoice {{3}} is due on {{4}}. Please pay on time to avoid late fees.",
-    samples: "{{1}} = Name, {{2}} = Rs 2,000, {{3}} = INV-88, {{4}} = 15 Jun"
-  },
-  {
-    id: "appointment_reminder_lib",
-    title: "Appointment Reminder",
-    category: "utility",
-    language: "en_US",
-    body: "Hi {{1}}, reminder: your appointment is on {{2}} at {{3}}. Reply RESCHEDULE to change it.",
-    samples: "{{1}} = Name, {{2}} = 12 Jun, {{3}} = 10:00 AM"
-  },
-  {
-    id: "account_update",
-    title: "Account Update",
-    category: "utility",
-    language: "en_US",
-    body: "Hi {{1}}, your account was updated on {{2}}. If you didn't make this change, contact our support team immediately.",
-    samples: "{{1}} = Name, {{2}} = 10 Jun 2026"
-  },
-  {
-    id: "feedback_request",
-    title: "Feedback Request",
-    category: "utility",
-    language: "en_US",
-    body: "Hi {{1}}, how was your experience with {{2}}? Reply with a number from 1 to 5 to rate us.",
-    samples: "{{1}} = Name, {{2}} = order ORD1234"
-  },
-  {
-    id: "otp_verification",
-    title: "OTP Verification",
-    category: "authentication",
-    language: "en_US",
-    body: "{{1}} is your verification code. For your security, do not share this code with anyone.",
-    samples: "{{1}} = 123456"
-  },
-  {
-    id: "welcome_message",
-    title: "Welcome Message",
-    category: "marketing",
-    language: "en_US",
-    body: "Hi {{1}}, welcome to {{2}}! Explore our latest products and enjoy {{3}} off your first order. Reply STOP to opt out.",
-    samples: "{{1}} = Name, {{2}} = InterCon Store, {{3}} = 10%"
-  },
-  {
-    id: "special_offer",
-    title: "Special Offer",
-    category: "marketing",
-    language: "en_US",
-    body: "Hi {{1}}, enjoy {{2}} off everything until {{3}}. Use code {{4}} at checkout. Reply STOP to opt out.",
-    samples: "{{1}} = Name, {{2}} = 25%, {{3}} = 20 Jun, {{4}} = SAVE25"
-  },
-  {
-    id: "abandoned_cart",
-    title: "Abandoned Cart",
-    category: "marketing",
-    language: "en_US",
-    body: "Hi {{1}}, you left {{2}} in your cart. Complete your purchase now and get {{3}} off. Reply STOP to opt out.",
-    samples: "{{1}} = Name, {{2}} = 2 items, {{3}} = 5%"
-  }
-];
-
+// Template Library: browses Meta's library of pre-approved utility and
+// authentication templates (GET /message_template_library). Adopting one
+// creates it in the connected WABA via library_template_name, so unchanged
+// templates are usually approved instantly and synced into Manage Template.
 const LIB_CATEGORY_LABEL = { utility: "Utility", marketing: "Marketing", authentication: "Authentication" };
 
-function renderTemplateLibrary(filter = "all") {
+const templateLibraryState = {
+  items: [],
+  nextCursor: "",
+  topic: "",
+  loading: false,
+  loaded: false,
+  builderSource: null
+};
+
+const LIB_BUTTON_ICONS = {
+  URL: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5h-2V8.4l-6.3 6.3-1.4-1.4L15.6 7H14V5Z"/><path d="M5 7h6v2H7v8h8v-4h2v6H5V7Z"/></svg>',
+  PHONE_NUMBER: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3h3l1.5 4.2-2 1.5a12.5 12.5 0 0 0 5.7 5.7l1.5-2L21 13.9v3.4A2.7 2.7 0 0 1 18.3 20 15.3 15.3 0 0 1 4 5.7 2.7 2.7 0 0 1 6.6 3Z"/></svg>',
+  OTP: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h10v14h-2V5H8V3Z"/><path d="M6 7h10v14H6V7Zm2 2v10h6V9H8Z"/></svg>',
+  QUICK_REPLY: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5v4c6 0 9 3 10 9-2.5-3.5-5.5-5-10-5v4l-7-6 7-6Z"/></svg>'
+};
+
+const LIB_BUTTON_LABEL = {
+  URL: "Visit website",
+  PHONE_NUMBER: "Call us",
+  OTP: "Copy code",
+  QUICK_REPLY: "Quick reply"
+};
+
+function setLibraryMessage(message, isError = false) {
+  const host = document.querySelector("[data-lib-message]");
+  if (!host) return;
+  host.textContent = message;
+  host.classList.toggle("error", isError);
+}
+
+function formatLibraryLabel(value) {
+  const text = String(value || "").replace(/[_-]+/g, " ").trim().toLowerCase();
+  return text ? text[0].toUpperCase() + text.slice(1) : "";
+}
+
+// Renders the body as a WhatsApp-style bubble, substituting {{n}} placeholders
+// with Meta's sample values highlighted as chips.
+function renderLibraryBodyHtml(tpl) {
+  const samples = Array.isArray(tpl.bodyParams) ? tpl.bodyParams : [];
+  return escapeText(tpl.body).replace(/\{\{\s*(\d+)\s*\}\}/g, (match, index) => (
+    `<mark class="lib-var">${escapeText(samples[Number(index) - 1] || match)}</mark>`
+  ));
+}
+
+function renderTemplateLibraryItems() {
   const host = document.querySelector("[data-template-library]");
   if (!host) return;
+  const moreHost = document.querySelector("[data-lib-more-host]");
+  if (moreHost) moreHost.hidden = !templateLibraryState.nextCursor;
 
-  const items = META_TEMPLATE_LIBRARY.filter((tpl) => filter === "all" || tpl.category === filter);
-  if (!items.length) {
-    host.innerHTML = '<div class="empty-row">No templates in this category.</div>';
+  if (!templateLibraryState.items.length) {
+    host.innerHTML = '<div class="empty-row">No library templates matched. Try a different search or topic.</div>';
     return;
   }
 
-  host.innerHTML = items.map((tpl) => `
+  host.innerHTML = templateLibraryState.items.map((tpl, index) => {
+    const buttons = (tpl.buttons || []).map((button) => {
+      const type = button.type === "COPY_CODE" ? "OTP" : button.type;
+      const icon = LIB_BUTTON_ICONS[type] || LIB_BUTTON_ICONS.QUICK_REPLY;
+      const label = button.text || LIB_BUTTON_LABEL[type] || formatLibraryLabel(button.type);
+      return `<span class="lib-cta">${icon}${escapeText(label)}</span>`;
+    }).join("");
+    const meta = [formatLibraryLabel(tpl.topic), formatLibraryLabel(tpl.usecase)].filter(Boolean).join(" · ");
+    return `
     <article class="lib-card">
-      <div class="lib-card-head">
-        <span class="lib-badge cat-${tpl.category}">${LIB_CATEGORY_LABEL[tpl.category] || tpl.category}</span>
-        <span class="lib-lang">${escapeText(tpl.language)}</span>
+      <div class="lib-preview">
+        <div class="lib-bubble">
+          <p>${renderLibraryBodyHtml(tpl)}</p>
+          <span class="lib-bubble-time">11:45</span>
+        </div>
+        ${buttons ? `<div class="lib-ctas">${buttons}</div>` : ""}
       </div>
-      <h3>${escapeText(tpl.title)}</h3>
-      <p class="lib-body">${escapeText(tpl.body)}</p>
-      <button class="btn btn-small" type="button" data-use-template="${tpl.id}">Use template</button>
-    </article>`).join("");
+      <div class="lib-card-info">
+        <div class="lib-card-title">
+          <h3>${escapeText(formatLibraryLabel(tpl.name))}</h3>
+          <span class="lib-badge cat-${escapeText(tpl.category)}">${LIB_CATEGORY_LABEL[tpl.category] || escapeText(tpl.category)}</span>
+        </div>
+        <p class="lib-meta">${escapeText(meta || "General")} · ${escapeText(tpl.language)}</p>
+        <button class="btn btn-small" type="button" data-use-library-template="${index}">Use template</button>
+      </div>
+    </article>`;
+  }).join("");
 }
 
-function useLibraryTemplate(id) {
-  const tpl = META_TEMPLATE_LIBRARY.find((item) => item.id === id);
-  if (!tpl) return;
+async function loadTemplateLibrary({ append = false } = {}) {
+  const host = document.querySelector("[data-template-library]");
+  if (!host || templateLibraryState.loading) return;
+  templateLibraryState.loading = true;
+  if (!append) {
+    templateLibraryState.nextCursor = "";
+    host.innerHTML = '<div class="empty-row">Loading Meta\'s template library...</div>';
+  }
+  setLibraryMessage("");
 
-  if (templateNameInput) templateNameInput.value = tpl.id;
+  try {
+    const params = new URLSearchParams();
+    const search = document.querySelector("[data-lib-search]")?.value.trim();
+    const language = document.querySelector("[data-lib-language]")?.value || "";
+    if (search) params.set("search", search);
+    if (templateLibraryState.topic) params.set("topic", templateLibraryState.topic);
+    if (language) params.set("language", language);
+    if (append && templateLibraryState.nextCursor) params.set("after", templateLibraryState.nextCursor);
+
+    const data = await requestJson(`/api/templates/library?${params}`);
+    templateLibraryState.items = append
+      ? [...templateLibraryState.items, ...(data.items || [])]
+      : (data.items || []);
+    templateLibraryState.nextCursor = data.nextCursor || "";
+    templateLibraryState.loaded = true;
+    renderTemplateLibraryItems();
+  } catch (error) {
+    if (!append) host.innerHTML = `<div class="empty-row">${escapeText(error.message)}</div>`;
+    setLibraryMessage(error.message, true);
+  } finally {
+    templateLibraryState.loading = false;
+  }
+}
+
+function libraryButtonLabel(button) {
+  const type = button.type === "COPY_CODE" ? "OTP" : button.type;
+  return button.text || LIB_BUTTON_LABEL[type] || formatLibraryLabel(button.type);
+}
+
+// Resets the Create Template modal back to its normal (non-library) state.
+function clearTemplateLibrarySource() {
+  templateLibraryState.builderSource = null;
+  const note = templateModal?.querySelector("[data-template-library-note]");
+  if (note) note.hidden = true;
+  const presetField = templateModal?.querySelector("[data-template-preset-field]");
+  if (presetField) presetField.hidden = false;
+  const urlField = templateModal?.querySelector("[data-template-library-url-field]");
+  if (urlField) urlField.hidden = true;
+  const phoneField = templateModal?.querySelector("[data-template-library-phone-field]");
+  if (phoneField) phoneField.hidden = true;
+  const submitButton = templateModal?.querySelector("[data-submit-template]");
+  if (submitButton) submitButton.textContent = "Send for Meta review";
+}
+
+// "Use template" opens the Create Template modal prefilled with the library
+// template so the user can review or edit before sending. Kept unchanged, it
+// submits through the instant-approval library path; edited, it goes through
+// normal Meta review as a custom template.
+function useLibraryTemplateInBuilder(tpl) {
+  if (!tpl || !templateModal) return;
+  templateLibraryState.builderSource = tpl;
+
+  if (templateNameInput) templateNameInput.value = tpl.name;
   if (templateCategorySelect) templateCategorySelect.value = tpl.category;
-  if (templateLanguageSelect) templateLanguageSelect.value = tpl.language;
+  if (templateLanguageSelect) {
+    if (![...templateLanguageSelect.options].some((option) => option.value === tpl.language)) {
+      const option = document.createElement("option");
+      option.value = tpl.language;
+      option.textContent = tpl.language;
+      templateLanguageSelect.appendChild(option);
+    }
+    templateLanguageSelect.value = tpl.language;
+  }
   if (templateBodyInput) templateBodyInput.value = tpl.body;
-  if (templateSamplesInput) templateSamplesInput.value = tpl.samples;
+  if (templateSamplesInput) {
+    templateSamplesInput.value = (tpl.bodyParams || [])
+      .map((value, index) => `{{${index + 1}}} = ${String(value).trim()}`)
+      .join(", ");
+  }
   if (templateHeaderTypeSelect) templateHeaderTypeSelect.value = "none";
   updateTemplateHeaderControls();
+
+  const presetField = templateModal.querySelector("[data-template-preset-field]");
+  if (presetField) presetField.hidden = true;
+
+  const needsUrl = (tpl.buttons || []).some((button) => button.type === "URL");
+  const needsPhone = (tpl.buttons || []).some((button) => button.type === "PHONE_NUMBER");
+  const urlField = templateModal.querySelector("[data-template-library-url-field]");
+  const urlInput = templateModal.querySelector("[data-template-library-url]");
+  if (urlField) urlField.hidden = !needsUrl;
+  if (urlInput) urlInput.value = needsUrl ? (localStorage.getItem("intercon_lib_button_url") || "") : "";
+  const phoneField = templateModal.querySelector("[data-template-library-phone-field]");
+  const phoneInput = templateModal.querySelector("[data-template-library-phone]");
+  if (phoneField) phoneField.hidden = !needsPhone;
+  if (phoneInput) {
+    phoneInput.value = needsPhone
+      ? (localStorage.getItem("intercon_lib_button_phone") || setupState.tenant?.meta?.displayPhoneNumber || "")
+      : "";
+  }
+
+  const note = templateModal.querySelector("[data-template-library-note]");
+  if (note) {
+    const buttonSummary = (tpl.buttons || []).map(libraryButtonLabel).join(", ");
+    note.textContent = `From Meta's Template Library: "${formatLibraryLabel(tpl.name)}" (${tpl.language})${buttonSummary ? ` · Buttons: ${buttonSummary}` : ""}. Keep the message text unchanged and it is usually approved instantly. Editing the text sends it through normal Meta review${buttonSummary ? " without the library buttons" : ""}.`;
+    note.hidden = false;
+  }
+
+  const submitButton = templateModal.querySelector("[data-submit-template]");
+  if (submitButton) submitButton.textContent = "Add template";
+
   window.location.hash = "#templates";
   openTemplateModal();
-  setTemplateMessage(`Loaded "${tpl.title}" from the library. Review and submit it for Meta approval.`);
+  setTemplateMessage(`Loaded "${formatLibraryLabel(tpl.name)}" from Meta's library. Review it, then send.`);
+}
+
+// Submits an unchanged library template through the instant-approval path.
+async function submitLibraryTemplate(source) {
+  setTemplateMessage("Adding the pre-approved template from Meta's library...");
+  const websiteUrl = (templateModal?.querySelector("[data-template-library-url]")?.value || "").trim();
+  const phoneNumber = (templateModal?.querySelector("[data-template-library-phone]")?.value || "").trim();
+
+  const data = await requestJson("/api/templates/library", {
+    method: "POST",
+    body: JSON.stringify({
+      libraryTemplateName: source.name,
+      name: templateNameInput?.value || source.name,
+      language: source.language,
+      category: source.category,
+      buttonTypes: (source.buttons || []).map((button) => button.type),
+      websiteUrl,
+      phoneNumber
+    })
+  });
+  // Remember the business's button details so the next adoption is prefilled.
+  if (websiteUrl) localStorage.setItem("intercon_lib_button_url", websiteUrl);
+  if (phoneNumber) localStorage.setItem("intercon_lib_button_phone", phoneNumber);
+  setTemplateMessage(data.message || "Template added from Meta's library.");
+  setLibraryMessage(data.message || "Template added from Meta's library.");
+  await Promise.all([loadApprovedTemplates(), loadTemplates()]);
 }
 
 async function submitTemplateForReview() {
   if (!requirePaidPlanBeforeAction(setTemplateMessage)) return;
+
+  // Unchanged library templates keep their pre-approved fast path; any edit
+  // to the body, category, or language turns this into a normal submission.
+  const source = templateLibraryState.builderSource;
+  if (
+    source
+    && (templateBodyInput?.value || "").trim() === String(source.body || "").trim()
+    && (templateCategorySelect?.value || "") === source.category
+    && (templateLanguageSelect?.value || "") === source.language
+    && (templateHeaderTypeSelect?.value || "none") === "none"
+  ) {
+    await submitLibraryTemplate(source);
+    return;
+  }
 
   setTemplateMessage("Submitting template to Meta...");
   const data = await requestJson("/api/templates", {
@@ -2549,8 +2684,8 @@ async function deleteTemplate(templateId, button) {
   if (!templateId) return;
   const confirmed = await showConfirmModal({
     eyebrow: "Template",
-    title: "Delete this template from InterCon?",
-    message: "This removes the local template record from InterCon. If the template still exists in Meta, it can appear again after template sync.",
+    title: "Delete this template?",
+    message: "This permanently deletes the template from InterCon and from your WhatsApp Business Account in Meta, including templates still pending approval. Meta blocks reusing a deleted template's name for 4 weeks.",
     confirmText: "Delete template"
   });
   if (!confirmed) return;
@@ -2560,10 +2695,10 @@ async function deleteTemplate(templateId, button) {
   button.textContent = "Deleting...";
 
   try {
-    await requestJson(`/api/templates/${encodeURIComponent(templateId)}`, {
+    const data = await requestJson(`/api/templates/${encodeURIComponent(templateId)}`, {
       method: "DELETE"
     });
-    setTemplateMessage("Template deleted.");
+    setTemplateMessage(data.message || "Template deleted.");
     await Promise.all([loadTemplates(), loadApprovedTemplates()]);
   } catch (error) {
     setTemplateMessage(error.message, true);
@@ -2825,6 +2960,12 @@ if (contactFileInput) {
     try {
       setContactMessage("Importing contacts...");
       const contacts = parseCsv(await file.text());
+      contacts.forEach((row, index) => {
+        const phone = row.whatsapp_number ?? row.phone ?? row.mobile;
+        if (looksLikeExcelScientific(phone)) {
+          throw new Error(`CSV row ${index + 2}: Excel converted the phone number to scientific notation ("${String(phone).trim()}"), which loses digits. Re-enter the numbers, or format the phone column as Number (0 decimals) before saving.`);
+        }
+      });
       const data = await requestJson("/api/contacts/import", {
         method: "POST",
         body: JSON.stringify({ contacts })
@@ -3146,19 +3287,38 @@ if (templatePresetSelect) {
 templateHeaderTypeSelect?.addEventListener("change", updateTemplateHeaderControls);
 templateCategorySelect?.addEventListener("change", updateTemplateHeaderControls);
 
-// Template Library: render catalogue, filter by category, adopt a template.
-const libFilter = document.querySelector("[data-lib-filter]");
-if (libFilter) {
-  libFilter.addEventListener("change", () => renderTemplateLibrary(libFilter.value));
-}
+// Template Library: search/filter Meta's library and adopt templates into the WABA.
+document.querySelector("[data-lib-refresh]")?.addEventListener("click", () => loadTemplateLibrary());
+document.querySelector("[data-lib-language]")?.addEventListener("change", () => loadTemplateLibrary());
+document.querySelector("[data-lib-more]")?.addEventListener("click", () => loadTemplateLibrary({ append: true }));
 
-document.addEventListener("click", (event) => {
-  const useButton = event.target.closest("[data-use-template]");
-  if (!useButton) return;
-  useLibraryTemplate(useButton.dataset.useTemplate);
+document.querySelector("[data-lib-topics]")?.addEventListener("click", (event) => {
+  const option = event.target.closest("[data-lib-topic-option]");
+  if (!option) return;
+  templateLibraryState.topic = option.dataset.libTopicOption || "";
+  document.querySelectorAll("[data-lib-topic-option]").forEach((button) => {
+    button.classList.toggle("is-active", button === option);
+  });
+  loadTemplateLibrary();
 });
 
-renderTemplateLibrary();
+let libSearchDebounce = null;
+document.querySelector("[data-lib-search]")?.addEventListener("input", () => {
+  clearTimeout(libSearchDebounce);
+  libSearchDebounce = setTimeout(() => loadTemplateLibrary(), 450);
+});
+document.querySelector("[data-lib-search]")?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  clearTimeout(libSearchDebounce);
+  loadTemplateLibrary();
+});
+
+document.addEventListener("click", (event) => {
+  const useButton = event.target.closest("[data-use-library-template]");
+  if (!useButton) return;
+  useLibraryTemplateInBuilder(templateLibraryState.items[Number(useButton.dataset.useLibraryTemplate)]);
+});
 
 // Manage Template: status filter chips (All / Pending / Approved / Rejected).
 const tplFilter = document.querySelector("[data-tpl-filter]");
@@ -3990,6 +4150,9 @@ function onPortalViewShown(viewId) {
   }
   if (viewId === "templates") {
     loadTemplates().catch((error) => setTemplateMessage(error.message, true));
+  }
+  if (viewId === "template-library" && !templateLibraryState.loaded) {
+    loadTemplateLibrary();
   }
   if (viewId === "contacts") {
     Promise.all([loadContacts(), loadGroups()]).catch((error) => setContactMessage(error.message, true));

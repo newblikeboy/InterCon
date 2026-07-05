@@ -4,7 +4,7 @@ const helmet = require("helmet");
 const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 const { RedisStore } = require("rate-limit-redis");
 const env = require("../config/env");
-const { getRedisClient } = require("../config/redis");
+const { getRedisClient, connectRedis } = require("../config/redis");
 const HttpError = require("../utils/httpError");
 
 function getAllowedOrigins() {
@@ -41,7 +41,12 @@ function createStore(prefix) {
   if (!redis) return undefined;
   return new RedisStore({
     prefix: `intercon:rate:${prefix}:`,
-    sendCommand: (...args) => redis.sendCommand(args)
+    // The store is constructed at require time, before server.js has awaited
+    // connectRedis(), and node-redis rejects commands on a closed client.
+    sendCommand: async (...args) => {
+      if (!redis.isReady) await connectRedis();
+      return redis.sendCommand(args);
+    }
   });
 }
 

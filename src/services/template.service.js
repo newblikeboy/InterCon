@@ -540,23 +540,205 @@ async function submitTemplateForMetaReview(tenantId, body) {
   };
 }
 
+const TEMPLATE_LIBRARY_TOPICS = ["ORDER_MANAGEMENT", "PAYMENTS", "ACCOUNT_UPDATE", "CUSTOMER_FEEDBACK"];
+
+async function getConnectedTenant(tenantId) {
+  const tenant = await Tenant.findById(tenantId).select("+meta.accessToken");
+  const accessToken = tenant?.getMetaAccessToken();
+  if (!tenant?.meta?.wabaId || !accessToken) {
+    throw new HttpError(409, "Connect WhatsApp first. Meta's Template Library requires a connected WhatsApp Business Account.");
+  }
+  return { tenant, accessToken };
+}
+
+async function browseMetaTemplateLibrary(tenantId, filters = {}) {
+  const { accessToken } = await getConnectedTenant(tenantId);
+
+  const params = new URLSearchParams({ limit: "50" });
+  const search = String(filters.search || "").trim();
+  const topic = String(filters.topic || "").trim().toUpperCase();
+  const language = String(filters.language || "").trim();
+  const after = String(filters.after || "").trim();
+  if (search) params.set("search", search);
+  if (TEMPLATE_LIBRARY_TOPICS.includes(topic)) params.set("topic", topic);
+  if (language) params.set("language", language);
+  if (after) params.set("after", after);
+
+  const response = await fetchWithPolicy(
+    `https://graph.facebook.com/${env.metaGraphApiVersion}/message_template_library?${params}`,
+    {
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      }
+    }
+  );
+  const metaResponse = await response.json().catch(() => ({}));
+  if (!response.ok || metaResponse.error) {
+    throw new HttpError(response.status || 502, metaResponse.error?.message || "Unable to load Meta's Template Library", metaResponse.error || metaResponse);
+  }
+
+  const items = (Array.isArray(metaResponse.data) ? metaResponse.data : []).map((item) => ({
+    id: item.id || item.name,
+    name: item.name || "",
+    language: item.language || "en_US",
+    category: String(item.category || "utility").toLowerCase(),
+    topic: item.topic || "",
+    usecase: item.usecase || "",
+    industry: [].concat(item.industry || []),
+    header: item.header || "",
+    body: item.body || "",
+    bodyParams: Array.isArray(item.body_params) ? item.body_params : [],
+    buttons: (Array.isArray(item.buttons) ? item.buttons : []).map((button) => ({
+      type: String(button.type || "").toUpperCase(),
+      text: button.text || "",
+      url: typeof button.url === "string" ? button.url : (button.url?.base_url || ""),
+      phoneNumber: button.phone_number || ""
+    }))
+  }));
+
+  return {
+    items,
+    nextCursor: metaResponse.paging?.next ? (metaResponse.paging?.cursors?.after || "") : ""
+  };
+}
+
+function buildLibraryButtonInputs(body) {
+  const buttonTypes = [].concat(body.buttonTypes || []).map((type) => String(type || "").toUpperCase());
+  const websiteUrl = String(body.websiteUrl || body.website_url || "").trim();
+  const phoneNumber = String(body.phoneNumber || body.phone_number || "").trim();
+  const inputs = [];
+
+  buttonTypes.forEach((type) => {
+    if (type === "URL") {
+      if (!websiteUrl) {
+        throw new HttpError(400, "This library template has a website button. Enter your website URL.");
+      }
+      if (!/^https:\/\/\S+$/i.test(websiteUrl)) {
+        throw new HttpError(400, "The website button URL must start with https:// and contain no spaces.");
+      }
+      if (websiteUrl.includes("{{")) {
+        throw new HttpError(400, "Dynamic URL variables are not supported. Enter a fixed website URL.");
+      }
+      inputs.push({ type: "URL", url: { base_url: websiteUrl } });
+    } else if (type === "PHONE_NUMBER") {
+      const digits = phoneNumber.replace(/[^\d+]/g, "");
+      if (!/^\+?\d{11,15}$/.test(digits)) {
+        throw new HttpError(400, "This library template has a call button. Enter a valid phone number with country code.");
+      }
+      inputs.push({ type: "PHONE_NUMBER", phone_number: digits.startsWith("+") ? digits : `+${digits}` });
+    }
+    // Other button types (OTP, QUICK_REPLY) use Meta's library defaults and need no input.
+  });
+
+  return inputs;
+}
+
+async function createTemplateFromLibrary(tenantId, body) {
+  await requireActivePaidPlan(tenantId);
+
+  const libraryTemplateName = String(body.libraryTemplateName || body.library_template_name || "").trim().toLowerCase();
+  if (!libraryTemplateName) {
+    throw new HttpError(400, "Choose a template from Meta's Template Library first");
+  }
+  const name = normalizeTemplateName(body.name || libraryTemplateName);
+  const language = String(body.language || "en_US").trim();
+  const category = String(body.category || "utility").toLowerCase();
+  if (!["utility", "authentication"].includes(category)) {
+    throw new HttpError(400, "Meta's Template Library provides utility and authentication templates only");
+  }
+  const buttonInputs = buildLibraryButtonInputs(body);
+
+  const { tenant, accessToken } = await getConnectedTenant(tenantId);
+
+  const response = await fetchWithPolicy(`https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.wabaId}/message_templates`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      name,
+      language,
+      category: category.toUpperCase(),
+      library_template_name: libraryTemplateName,
+      ...(buttonInputs.length ? { library_template_button_inputs: buttonInputs } : {})
+    })
+  });
+  const metaResponse = await response.json().catch(() => ({}));
+
+  if (!response.ok || metaResponse.error) {
+    const metaError = metaResponse.error || metaResponse;
+    throw new HttpError(response.status || 502, getMetaTemplateSubmissionError(metaError, category), metaError);
+  }
+
+  // Pull the authoritative record (body text, parameters, status) into the local library.
+  invalidateTemplateSync(tenantId);
+  await syncMetaTemplates(tenantId).catch(() => {});
+  const template = await Template.findOne({ tenantId, name, language }).lean();
+
+  return {
+    template,
+    status: mapMetaTemplateStatus(metaResponse.status),
+    meta: metaResponse
+  };
+}
+
+// Deletes the template in Meta. Passing hsm_id restricts the delete to this
+// exact template; a name-only delete would remove every language version.
+async function deleteMetaTemplate(tenant, accessToken, template) {
+  const params = new URLSearchParams({ name: template.name });
+  if (template.metaTemplateId) params.set("hsm_id", template.metaTemplateId);
+
+  const response = await fetchWithPolicy(
+    `https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.wabaId}/message_templates?${params}`,
+    {
+      method: "DELETE",
+      headers: { "Authorization": `Bearer ${accessToken}` }
+    }
+  );
+  const metaResponse = await response.json().catch(() => ({}));
+  if (response.ok && metaResponse.success !== false) return true;
+
+  const metaError = metaResponse.error || {};
+  const combined = `${metaError.message || ""} ${metaError.error_user_msg || ""} ${metaError.error_data?.details || ""}`;
+  // Already gone in Meta — carry on and remove the local record.
+  if (response.status === 404 || /not exist|not found|no message template/i.test(combined)) return false;
+
+  throw new HttpError(
+    response.status || 502,
+    metaError.message
+      ? `Meta could not delete the template: ${metaError.error_user_msg || metaError.message}`
+      : "Meta could not delete the template",
+    metaError
+  );
+}
+
 async function deleteTemplate(tenantId, templateId) {
   if (!mongoose.Types.ObjectId.isValid(templateId)) {
     throw new HttpError(400, "Invalid template id");
   }
 
-  const template = await Template.findOneAndDelete({
-    _id: templateId,
-    tenantId
-  });
-
+  const template = await Template.findOne({ _id: templateId, tenantId });
   if (!template) {
     throw new HttpError(404, "Template not found");
   }
 
+  // Drafts only exist locally. Everything else (approved, in_review, paused,
+  // rejected, disabled) is deleted in Meta too, when a connection exists.
+  let deletedFromMeta = false;
+  if (template.status !== "draft") {
+    const tenant = await Tenant.findById(tenantId).select("+meta.accessToken");
+    const accessToken = tenant?.getMetaAccessToken();
+    if (tenant?.meta?.wabaId && accessToken) {
+      deletedFromMeta = await deleteMetaTemplate(tenant, accessToken, template);
+    }
+  }
+
+  await template.deleteOne();
   invalidateTemplateSync(tenantId);
 
-  return template;
+  return { template, deletedFromMeta };
 }
 
 module.exports = {
@@ -566,6 +748,8 @@ module.exports = {
   listApprovedTemplates,
   createTemplateDraft,
   submitTemplateForMetaReview,
+  browseMetaTemplateLibrary,
+  createTemplateFromLibrary,
   deleteTemplate,
   invalidateTemplateSync,
   isMetaSampleTemplate

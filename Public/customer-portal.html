@@ -704,17 +704,46 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
       </section>
 
       <section class="portal-view" id="template-library" data-portal-view hidden>
-        <div class="template-actions page-actions">
-          <select class="lib-filter" data-lib-filter aria-label="Filter by category">
-            <option value="all">All categories</option>
-            <option value="utility">Utility</option>
-            <option value="marketing">Marketing</option>
-            <option value="authentication">Authentication</option>
-          </select>
+        <div class="lib-head">
+          <div class="lib-search-wrap">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 3a7.5 7.5 0 1 0 4.55 13.46l4.24 4.25a1 1 0 0 0 1.42-1.42l-4.25-4.24A7.5 7.5 0 0 0 10.5 3Zm-5.5 7.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0Z"/></svg>
+            <input class="lib-search" type="search" maxlength="100" placeholder="Search payment reminders, delivery updates, OTP..." aria-label="Search Meta's template library" data-lib-search>
+            <button class="btn btn-small" type="button" data-lib-refresh>Search</button>
+          </div>
+          <p class="lib-hint">Pre-approved templates from Meta's Template Library. Add one unchanged and it is usually ready to send instantly — no review wait.</p>
+          <p class="contact-message" data-lib-message></p>
         </div>
 
-        <div class="lib-grid" data-template-library>
-          <div class="empty-row">Loading template library...</div>
+        <div class="lib-layout">
+          <aside class="lib-sidebar" aria-label="Template library filters">
+            <p class="lib-sidebar-title">Topics</p>
+            <div class="lib-topics" data-lib-topics>
+              <button type="button" class="lib-topic is-active" data-lib-topic-option="">All templates</button>
+              <button type="button" class="lib-topic" data-lib-topic-option="ORDER_MANAGEMENT">Order management</button>
+              <button type="button" class="lib-topic" data-lib-topic-option="PAYMENTS">Payments</button>
+              <button type="button" class="lib-topic" data-lib-topic-option="ACCOUNT_UPDATE">Account updates</button>
+              <button type="button" class="lib-topic" data-lib-topic-option="CUSTOMER_FEEDBACK">Customer feedback</button>
+            </div>
+            <p class="lib-sidebar-title">Language</p>
+            <select class="lib-filter" data-lib-language aria-label="Filter by language">
+              <option value="">All languages</option>
+              <option value="en_US">English (US)</option>
+              <option value="en_GB">English (UK)</option>
+              <option value="hi">Hindi</option>
+              <option value="es">Spanish</option>
+              <option value="pt_BR">Portuguese (BR)</option>
+              <option value="ar">Arabic</option>
+            </select>
+          </aside>
+
+          <div class="lib-main">
+            <div class="lib-grid" data-template-library>
+              <div class="empty-row">Loading template library...</div>
+            </div>
+            <div class="lib-more" data-lib-more-host hidden>
+              <button class="btn btn-outline btn-small" type="button" data-lib-more>Load more templates</button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -817,7 +846,8 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
           </div>
 
           <div class="template-form-panel">
-            <label>
+            <p class="form-note" hidden data-template-library-note></p>
+            <label data-template-preset-field>
               Template type
               <select data-template-preset>
                 <option value="order_update">Order update</option>
@@ -879,6 +909,15 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
             <label>
               Variable samples
               <input type="text" name="variableSamples" placeholder="{{1}} = Priya, {{2}} = ORD1234, {{3}} = 12 May" data-template-samples>
+            </label>
+
+            <label hidden data-template-library-url-field>
+              Website URL for the template button
+              <input type="url" maxlength="300" placeholder="https://yourstore.com" data-template-library-url>
+            </label>
+            <label hidden data-template-library-phone-field>
+              Phone number for the call button
+              <input type="tel" maxlength="20" placeholder="+919876543210" data-template-library-phone>
             </label>
 
             <div class="template-actions">

@@ -222,6 +222,15 @@ async function verifyEmail(rawToken) {
   user.emailVerificationExpires = undefined;
   await user.save();
 
+  // The welcome guide is a nice-to-have; a mail failure must never turn a
+  // successful verification into an "invalid link" page for the user.
+  try {
+    const tenant = await Tenant.findById(user.tenantId);
+    await emailService.sendWelcomeEmail(user, tenant);
+  } catch (error) {
+    console.error("[auth] Failed to send welcome email:", error.message);
+  }
+
   return { user };
 }
 

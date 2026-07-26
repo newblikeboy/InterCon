@@ -177,7 +177,7 @@ authForms.forEach((form) => {
       }
     } finally {
       submitButton.disabled = false;
-      submitButton.textContent = isSignup ? "Request solution plan" : "Login";
+      submitButton.textContent = isSignup ? "Signup" : "Login";
     }
   });
 });

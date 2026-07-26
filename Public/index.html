@@ -507,33 +507,28 @@
             <input type="text" name="business_name" autocomplete="organization" required placeholder="Your company">
           </label>
           <label>
-            Contact person
+            Contact person name
             <input type="text" name="contact_person" autocomplete="name" required placeholder="Owner name">
           </label>
         </div>
         <label>
-          Business email
+          Email ID
           <input type="email" name="email" autocomplete="email" required placeholder="business@example.com">
         </label>
         <label>
-          WhatsApp number or preferred business number
-          <input type="tel" name="whatsapp_number" autocomplete="tel" required placeholder="+91 98765 43210">
+          Mobile number
+          <input type="tel" name="mobile_number" autocomplete="tel" required pattern="^\+?[0-9\s-]{7,16}$" placeholder="+91 98765 43210">
         </label>
-        <label>
-          What do you need?
-          <select name="business_size" required>
-            <option value="">Select your goal</option>
-            <option>WhatsApp Business Platform setup</option>
-            <option>Cloud API integration</option>
-            <option>Chatbot and automation</option>
-            <option>Campaigns and templates</option>
-            <option>Managed enterprise rollout</option>
-          </select>
-        </label>
-        <label>
-          Create password
-          <input type="password" name="password" autocomplete="new-password" required minlength="8" placeholder="Minimum 8 characters">
-        </label>
+        <div class="form-grid">
+          <label>
+            Password
+            <input type="password" name="password" autocomplete="new-password" required minlength="8" placeholder="Minimum 8 characters" data-signup-password>
+          </label>
+          <label>
+            Confirm password
+            <input type="password" name="confirm_password" autocomplete="new-password" required minlength="8" placeholder="Re-enter password" data-signup-confirm-password>
+          </label>
+        </div>
         <button class="btn" type="submit">Request solution plan</button>
         <p class="form-note" data-form-message></p>
       </form>

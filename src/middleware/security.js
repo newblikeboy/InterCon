@@ -131,6 +131,14 @@ function securityMiddleware(app) {
     windowMs: 60 * 60 * 1000,
     max: env.authSignupRateLimitMax
   }));
+  app.use("/api/auth/verify-email", limiter("auth-verify-email", {
+    windowMs: 60 * 60 * 1000,
+    max: 20
+  }));
+  app.use("/api/auth/resend-verification", limiter("auth-resend-verification", {
+    windowMs: 60 * 60 * 1000,
+    max: env.resendVerificationRateLimitMax
+  }));
   app.use("/api/v1", limiter("public-api", {
     windowMs: env.rateLimitWindowMs,
     max: env.publicApiRateLimitMax

@@ -42,6 +42,18 @@ const userSchema = new mongoose.Schema(
       enum: ["active", "disabled"],
       default: "active"
     },
+    isVerified: {
+      type: Boolean,
+      default: false
+    },
+    emailVerificationTokenHash: {
+      type: String,
+      select: false
+    },
+    emailVerificationExpires: {
+      type: Date,
+      select: false
+    },
     sessionVersion: {
       type: Number,
       default: 0,

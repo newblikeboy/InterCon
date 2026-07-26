@@ -2027,6 +2027,24 @@ address {
   color: #b42318;
 }
 
+.btn-link {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--brand-dark);
+  font-size: 14px;
+  font-weight: 750;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.btn-link:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

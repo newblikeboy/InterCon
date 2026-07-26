@@ -3393,7 +3393,7 @@ if (logoutButton) {
       });
     } finally {
       localStorage.removeItem("intercon_customer_portal_view");
-      window.location.href = "/";
+      window.location.replace("/");
       logoutButton.disabled = false;
       logoutButton.textContent = originalText;
     }
@@ -4666,7 +4666,18 @@ document.addEventListener("keydown", (event) => {
 
 showPortalView(getInitialViewId(), true);
 renderApiBaseUrl();
-loadAuthenticatedProfile().catch(() => renderAuthenticatedProfile());
+loadAuthenticatedProfile().catch(() => {
+  window.location.replace("/");
+});
+
+// Covers browsers where the portal gets restored from back/forward cache
+// despite the no-store header (e.g. after logout) — re-check the session
+// instead of leaving stale account data on screen.
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) {
+    loadAuthenticatedProfile().catch(() => window.location.replace("/"));
+  }
+});
 
 // Preload the Facebook SDK at startup so the Meta onboarding popup can open
 // synchronously inside the click gesture (required by Safari's popup blocker).

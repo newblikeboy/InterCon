@@ -12,6 +12,9 @@ function assertProductionEnvironment() {
   if (!env.metricsToken || env.metricsToken.length < 32) missing.push("METRICS_TOKEN (32+ characters)");
   if (!env.facebookAppSecret && !env.metaAppSecret) missing.push("FB_APP_SECRET or META_APP_SECRET");
   if (!env.metaWebhookVerifyToken) missing.push("META_WEBHOOK_VERIFY_TOKEN");
+  if (!env.smtpHost) missing.push("SMTP_HOST");
+  if (!env.smtpUser) missing.push("SMTP_USER");
+  if (!env.smtpPass) missing.push("SMTP_PASS");
 
   if (env.jwtSecret && env.dataEncryptionKey && env.jwtSecret === env.dataEncryptionKey) {
     throw new Error("JWT_SECRET and DATA_ENCRYPTION_KEY must be different in production");

@@ -57,6 +57,43 @@ function setFormMessage(form, message, isError = false) {
   messageNode.classList.toggle("error", isError);
 }
 
+function removeResendButton(form) {
+  const button = form.querySelector("[data-resend-verification]");
+  if (button) button.remove();
+}
+
+function showResendButton(form, identifier) {
+  removeResendButton(form);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "btn-link";
+  button.dataset.resendVerification = "";
+  button.textContent = "Resend verification email";
+
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    button.textContent = "Sending...";
+    try {
+      const response = await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: identifier })
+      });
+      const data = await response.json();
+      setFormMessage(form, data.message || "If an account matches, a verification email has been sent.");
+      removeResendButton(form);
+    } catch (error) {
+      setFormMessage(form, "Could not resend the verification email. Try again later.", true);
+      button.disabled = false;
+      button.textContent = "Resend verification email";
+    }
+  });
+
+  const messageNode = form.querySelector("[data-form-message]");
+  messageNode.insertAdjacentElement("afterend", button);
+}
+
 navToggle.addEventListener("click", () => {
   const isOpen = header.classList.toggle("menu-open");
   document.body.classList.toggle("nav-open", isOpen);
@@ -99,6 +136,13 @@ authForms.forEach((form) => {
     const formData = Object.fromEntries(new FormData(form).entries());
 
     setFormMessage(form, "");
+    removeResendButton(form);
+
+    if (isSignup && formData.password !== formData.confirm_password) {
+      setFormMessage(form, "Password and confirm password do not match", true);
+      return;
+    }
+
     submitButton.disabled = true;
     submitButton.textContent = isSignup ? "Creating account..." : "Logging in...";
 
@@ -117,16 +161,63 @@ authForms.forEach((form) => {
         throw new Error(data.message || "Something went wrong");
       }
 
-      setFormMessage(form, data.message || "Success");
-      window.location.href = "/customer";
+      if (isSignup) {
+        setFormMessage(form, data.message || "Account created. Check your email to verify your account.");
+        form.reset();
+      } else {
+        setFormMessage(form, data.message || "Success");
+        // replace(), not href=, so the landing/login page isn't left in
+        // history — pressing back from the portal won't land back here.
+        window.location.replace("/customer");
+      }
     } catch (error) {
       setFormMessage(form, error.message, true);
+      if (/verify/i.test(error.message)) {
+        showResendButton(form, isSignup ? formData.email : formData.login_id);
+      }
     } finally {
       submitButton.disabled = false;
       submitButton.textContent = isSignup ? "Request solution plan" : "Login";
     }
   });
 });
+
+// If a signed-in user lands back on "/" (typed URL, bookmark, or a
+// back/forward-cache restore of a page rendered before login), send them
+// straight to the portal instead of showing the logged-out landing page.
+(function redirectIfAlreadyAuthenticated() {
+  if (window.location.pathname !== "/") return;
+
+  async function checkAndRedirect() {
+    try {
+      const response = await fetch("/api/auth/me", { credentials: "include" });
+      if (response.ok) {
+        window.location.replace("/customer");
+      }
+    } catch (error) {
+      // Not authenticated (or offline) — stay on the landing page.
+    }
+  }
+
+  checkAndRedirect();
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) checkAndRedirect();
+  });
+})();
+
+(function handleVerificationRedirect() {
+  const params = new URLSearchParams(window.location.search);
+  const loginForm = document.querySelector('[data-auth-form="login"]');
+  if (!loginForm) return;
+
+  if (params.has("verified")) {
+    openAuth("login");
+    setFormMessage(loginForm, "Email verified! You can now log in.");
+  } else if (params.get("verify") === "invalid") {
+    openAuth("login");
+    setFormMessage(loginForm, "This verification link is invalid or has expired. Log in with your email to request a new one.", true);
+  }
+})();
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !authModal.hidden) {

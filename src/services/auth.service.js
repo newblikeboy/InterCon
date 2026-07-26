@@ -1,22 +1,41 @@
+const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const mongoose = require("mongoose");
 const Tenant = require("../models/Tenant");
 const User = require("../models/User");
 const HttpError = require("../utils/httpError");
+const env = require("../config/env");
+const emailService = require("./email.service");
+
+function generateVerificationToken() {
+  const token = crypto.randomBytes(32).toString("hex");
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  const expires = new Date(Date.now() + env.emailVerificationTokenTtlMs);
+  return { token, tokenHash, expires };
+}
 
 function normalizeSignupBody(body) {
   return {
     businessName: body.businessName || body.business_name,
     contactPerson: body.contactPerson || body.contact_person,
     email: body.email || body.businessEmail,
-    whatsappNumber: body.whatsappNumber || body.whatsapp_number,
+    whatsappNumber: body.mobileNumber || body.mobile_number || body.whatsappNumber || body.whatsapp_number,
     businessGoal: body.businessGoal || body.business_size || body.goal,
-    password: body.password
+    password: body.password,
+    confirmPassword: body.confirmPassword || body.confirm_password
   };
 }
 
 function validateEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  return typeof email === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function validateMobileNumber(number) {
+  return typeof number === "string" && /^\+?[0-9\s-]{7,16}$/.test(number);
+}
+
+function validatePasswordStrength(password) {
+  return /[A-Za-z]/.test(password) && /[0-9]/.test(password);
 }
 
 function publicUser(user, tenant = null) {
@@ -58,19 +77,29 @@ function publicUser(user, tenant = null) {
 async function signupCustomer(body) {
   const payload = normalizeSignupBody(body);
 
-  if (!payload.businessName || !payload.contactPerson || !payload.email || !payload.whatsappNumber || !payload.password) {
-    throw new HttpError(400, "Business name, contact person, email, WhatsApp number, and password are required");
+  if (!payload.businessName || !payload.contactPerson || !payload.email || !payload.whatsappNumber || !payload.password || !payload.confirmPassword) {
+    throw new HttpError(400, "Business name, contact person name, email, mobile number, password, and confirm password are required");
   }
 
   if (!validateEmail(payload.email)) {
-    throw new HttpError(400, "Enter a valid business email");
+    throw new HttpError(400, "Enter a valid email address");
   }
 
-  if (payload.password.length < 8) {
+  if (!validateMobileNumber(payload.whatsappNumber)) {
+    throw new HttpError(400, "Enter a valid mobile number");
+  }
+
+  if (typeof payload.password !== "string" || payload.password.length < 8) {
     throw new HttpError(400, "Password must be at least 8 characters");
   }
   if (payload.password.length > 128) {
     throw new HttpError(400, "Password must be 128 characters or fewer");
+  }
+  if (!validatePasswordStrength(payload.password)) {
+    throw new HttpError(400, "Password must include at least one letter and one number");
+  }
+  if (payload.password !== payload.confirmPassword) {
+    throw new HttpError(400, "Password and confirm password do not match");
   }
 
   const normalizedEmail = payload.email.toLowerCase().trim();
@@ -80,6 +109,7 @@ async function signupCustomer(body) {
   }
 
   const passwordHash = await bcrypt.hash(payload.password, 12);
+  const { token, tokenHash, expires } = generateVerificationToken();
 
   const session = await mongoose.startSession();
   let tenant;
@@ -100,7 +130,10 @@ async function signupCustomer(body) {
         email: normalizedEmail,
         phone: payload.whatsappNumber,
         passwordHash,
-        role: "owner"
+        role: "owner",
+        isVerified: false,
+        emailVerificationTokenHash: tokenHash,
+        emailVerificationExpires: expires
       }], { session });
     });
   } catch (error) {
@@ -110,6 +143,12 @@ async function signupCustomer(body) {
     throw error;
   } finally {
     await session.endSession();
+  }
+
+  try {
+    await emailService.sendVerificationEmail(user, token);
+  } catch (error) {
+    console.error("[auth] Failed to send verification email:", error.message);
   }
 
   return {
@@ -148,6 +187,10 @@ async function loginCustomer(body) {
     throw new HttpError(403, "This account is disabled");
   }
 
+  if (!user.isVerified) {
+    throw new HttpError(403, "Please verify your email before logging in. Check your inbox or resend the verification email.");
+  }
+
   user.lastLoginAt = new Date();
   await user.save();
 
@@ -157,6 +200,59 @@ async function loginCustomer(body) {
     user,
     tenant
   };
+}
+
+async function verifyEmail(rawToken) {
+  if (!rawToken || typeof rawToken !== "string") {
+    throw new HttpError(400, "Verification token is required");
+  }
+
+  const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+  const user = await User.findOne({
+    emailVerificationTokenHash: tokenHash,
+    emailVerificationExpires: { $gt: new Date() }
+  }).select("+emailVerificationTokenHash +emailVerificationExpires");
+
+  if (!user) {
+    throw new HttpError(400, "This verification link is invalid or has expired");
+  }
+
+  user.isVerified = true;
+  user.emailVerificationTokenHash = undefined;
+  user.emailVerificationExpires = undefined;
+  await user.save();
+
+  return { user };
+}
+
+async function resendVerificationEmail(identifier) {
+  const generic = { message: "If an account matches, a verification email has been sent." };
+  if (!identifier) return generic;
+
+  const normalizedIdentifier = String(identifier).toLowerCase().trim();
+  const user = await User.findOne({
+    $or: [
+      { email: normalizedIdentifier },
+      { phone: String(identifier).trim() }
+    ]
+  });
+
+  if (!user || user.isVerified) {
+    return generic;
+  }
+
+  const { token, tokenHash, expires } = generateVerificationToken();
+  user.emailVerificationTokenHash = tokenHash;
+  user.emailVerificationExpires = expires;
+  await user.save();
+
+  try {
+    await emailService.sendVerificationEmail(user, token);
+  } catch (error) {
+    console.error("[auth] Failed to resend verification email:", error.message);
+  }
+
+  return generic;
 }
 
 async function getAuthenticatedProfile(user) {
@@ -171,6 +267,8 @@ async function getAuthenticatedProfile(user) {
 module.exports = {
   signupCustomer,
   loginCustomer,
+  verifyEmail,
+  resendVerificationEmail,
   getAuthenticatedProfile,
   publicUser
 };

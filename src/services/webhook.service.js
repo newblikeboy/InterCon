@@ -235,15 +235,40 @@ function describeIncomingMessage(message = {}) {
 
   // Meta labels a message `type: "unsupported"` (error 131051) when the
   // customer sent something the Cloud API cannot forward (polls, view-once,
-  // newer client features, etc.). Surface Meta's own reason where available
-  // instead of a bare "[unsupported]".
+  // newer client features, etc.). Meta strips the content entirely — there is
+  // no text or media id to recover — and usually reports the subtype as
+  // literally "unknown", so its own error title ("Message type unknown") tells
+  // an inbox agent nothing actionable. Show them what to do instead; the
+  // machine-readable code is preserved separately via describeMessageError().
   if (type === "unsupported") {
-    const err = Array.isArray(message.errors) ? message.errors[0] : null;
-    const reason = err?.title || err?.error_data?.details || err?.message || "";
-    return { type, text: "", caption: reason ? `Unsupported message — ${reason}` : "Unsupported message" };
+    const subtype = String(message.unsupported?.type || "").trim().toLowerCase();
+    const namedSubtype = subtype && subtype !== "unknown" ? ` (${subtype})` : "";
+    return {
+      type,
+      text: "",
+      caption: `Unsupported message${namedSubtype} — WhatsApp could not forward this content. Ask the customer to resend it as text or media.`
+    };
   }
 
   return { type, text: message.text?.body || "", caption: `[${type}]` };
+}
+
+// Meta attaches an `errors` array to any message it could not fully deliver.
+// Keep the machine-readable detail (code + Meta's own wording + the unsupported
+// subtype) so these can be aggregated and triaged later — the inbox bubble only
+// ever shows the human sentence, so without this the code is lost.
+function describeMessageError(message = {}) {
+  const err = Array.isArray(message.errors) ? message.errors[0] : null;
+  if (!err) return "";
+
+  const parts = [];
+  if (err.code) parts.push(`code ${err.code}`);
+  const detail = err.error_data?.details || err.message || err.title || "";
+  if (detail) parts.push(detail);
+  const subtype = message.unsupported?.type;
+  if (subtype) parts.push(`unsupported.type=${subtype}`);
+
+  return parts.join(" | ").slice(0, 1000);
 }
 
 function buildPreviewText(summary) {
@@ -334,6 +359,7 @@ async function processInboundMessages(tenantId, value = {}, wabaId, phoneNumberI
       type: summary.type,
       text: summary.text,
       mediaCaption: summary.caption,
+      error: describeMessageError(message),
       metaMessageId,
       status: "received",
       sentAt
@@ -440,6 +466,7 @@ async function processMessageEchoes(tenantId, value = {}, wabaId, phoneNumberId)
       type: summary.type,
       text: summary.text,
       mediaCaption: summary.caption,
+      error: describeMessageError(echo),
       metaMessageId,
       status: "sent",
       sentAt

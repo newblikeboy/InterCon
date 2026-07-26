@@ -26,6 +26,7 @@ function setAuthMode(mode) {
       message.textContent = "";
       message.classList.remove("error");
     }
+    removeResendButton(form);
   });
 }
 
@@ -57,20 +58,48 @@ function setFormMessage(form, message, isError = false) {
   messageNode.classList.toggle("error", isError);
 }
 
+// Matches EMAIL_VERIFICATION_RESEND_COOLDOWN_MS on the server. The countdown
+// here is only UX polish — the real limit is enforced server-side, since a
+// client timer is trivially bypassed.
+const RESEND_COOLDOWN_SECONDS = 30;
+const RESEND_LABEL = "Resend verification email";
+
 function removeResendButton(form) {
   const button = form.querySelector("[data-resend-verification]");
-  if (button) button.remove();
+  if (!button) return;
+  if (button.cooldownTimer) clearInterval(button.cooldownTimer);
+  button.remove();
 }
 
-function showResendButton(form, identifier) {
+function startResendCooldown(button) {
+  let remaining = RESEND_COOLDOWN_SECONDS;
+  button.disabled = true;
+  button.textContent = `${RESEND_LABEL} in ${remaining}s`;
+
+  if (button.cooldownTimer) clearInterval(button.cooldownTimer);
+  button.cooldownTimer = setInterval(() => {
+    remaining -= 1;
+    if (remaining <= 0) {
+      clearInterval(button.cooldownTimer);
+      button.cooldownTimer = null;
+      button.disabled = false;
+      button.textContent = RESEND_LABEL;
+      return;
+    }
+    button.textContent = `${RESEND_LABEL} in ${remaining}s`;
+  }, 1000);
+}
+
+function showResendButton(form, identifier, { startCooldown = false } = {}) {
   removeResendButton(form);
   const button = document.createElement("button");
   button.type = "button";
   button.className = "btn-link";
   button.dataset.resendVerification = "";
-  button.textContent = "Resend verification email";
+  button.textContent = RESEND_LABEL;
 
   button.addEventListener("click", async () => {
+    if (button.disabled) return;
     button.disabled = true;
     button.textContent = "Sending...";
     try {
@@ -82,16 +111,22 @@ function showResendButton(form, identifier) {
       });
       const data = await response.json();
       setFormMessage(form, data.message || "If an account matches, a verification email has been sent.");
-      removeResendButton(form);
+      // Keep the button available for another try, behind the cooldown.
+      startResendCooldown(button);
     } catch (error) {
       setFormMessage(form, "Could not resend the verification email. Try again later.", true);
       button.disabled = false;
-      button.textContent = "Resend verification email";
+      button.textContent = RESEND_LABEL;
     }
   });
 
   const messageNode = form.querySelector("[data-form-message]");
   messageNode.insertAdjacentElement("afterend", button);
+
+  // Signup just sent an email, so the cooldown starts already running.
+  if (startCooldown) startResendCooldown(button);
+
+  return button;
 }
 
 navToggle.addEventListener("click", () => {
@@ -163,6 +198,10 @@ authForms.forEach((form) => {
 
       if (isSignup) {
         setFormMessage(form, data.message || "Account created. Check your email to verify your account.");
+        // Surface the resend control straight away (already counting down),
+        // so a user whose email never arrives doesn't have to fail a login
+        // first to discover it.
+        showResendButton(form, formData.email, { startCooldown: true });
         form.reset();
       } else {
         setFormMessage(form, data.message || "Success");

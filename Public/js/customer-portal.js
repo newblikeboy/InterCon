@@ -3867,6 +3867,19 @@ function renderInboxMessages(messages) {
       `;
     }
 
+    // Meta strips the content of an unsupported message, so this is a system
+    // notice rather than something the customer actually said — render it like
+    // a revoked message, with Meta's error code on hover for support triage.
+    if (message.type === "unsupported") {
+      const errorTitle = message.error ? ` title="${escapeHtml(message.error)}"` : "";
+      return `
+        <div class="inbox-bubble ${outbound ? "is-out" : "is-in"} is-revoked"${errorTitle}>
+          <p><em>⚠️ ${escapeHtml(caption || "Unsupported message")}</em></p>
+          <span class="inbox-bubble-meta">${escapeHtml(formatClockTime(message.sentAt))}${ticks}</span>
+        </div>
+      `;
+    }
+
     const body = message.text || caption || "";
     const editedTag = message.edited ? `<span class="inbox-edited">edited</span>` : "";
     return `

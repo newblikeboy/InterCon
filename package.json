@@ -13,6 +13,7 @@
     "audit:prod": "npm audit --omit=dev",
     "load:smoke": "node src/scripts/loadSmoke.js",
     "encrypt:tenant-tokens": "node src/scripts/encryptTenantTokens.js",
+    "backfill:unsupported-messages": "node src/scripts/backfillUnsupportedMessages.js",
     "billing:activate": "node src/scripts/activateTenantPlan.js"
   },
   "repository": {

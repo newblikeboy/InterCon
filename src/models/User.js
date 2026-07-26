@@ -54,6 +54,10 @@ const userSchema = new mongoose.Schema(
       type: Date,
       select: false
     },
+    emailVerificationSentAt: {
+      type: Date,
+      select: false
+    },
     sessionVersion: {
       type: Number,
       default: 0,

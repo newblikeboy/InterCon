@@ -133,7 +133,8 @@ async function signupCustomer(body) {
         role: "owner",
         isVerified: false,
         emailVerificationTokenHash: tokenHash,
-        emailVerificationExpires: expires
+        emailVerificationExpires: expires,
+        emailVerificationSentAt: new Date()
       }], { session });
     });
   } catch (error) {
@@ -244,15 +245,25 @@ async function resendVerificationEmail(identifier) {
       { email: normalizedIdentifier },
       { phone: String(identifier).trim() }
     ]
-  });
+  }).select("+emailVerificationSentAt");
 
   if (!user || user.isVerified) {
+    return generic;
+  }
+
+  // Enforce the resend cooldown server-side, but keep the response identical
+  // either way: a distinct "wait 30 seconds" reply would reveal that this
+  // email belongs to a real unverified account, which is exactly what the
+  // generic message exists to hide.
+  const lastSentAt = user.emailVerificationSentAt?.getTime();
+  if (lastSentAt && Date.now() - lastSentAt < env.emailVerificationResendCooldownMs) {
     return generic;
   }
 
   const { token, tokenHash, expires } = generateVerificationToken();
   user.emailVerificationTokenHash = tokenHash;
   user.emailVerificationExpires = expires;
+  user.emailVerificationSentAt = new Date();
   await user.save();
 
   try {

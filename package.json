@@ -8,6 +8,7 @@
     "dev": "nodemon src/server.js",
     "worker:messages": "node src/workers/messageQueue.worker.js",
     "worker:webhooks": "node src/workers/webhookQueue.worker.js",
+    "worker:messages:autoscale": "node src/scripts/scaleMessageWorkers.js",
     "check": "node src/scripts/checkSyntax.js",
     "test": "node --test",
     "audit:prod": "npm audit --omit=dev",

@@ -43,13 +43,37 @@ const templateSchema = new mongoose.Schema(
     },
     headerType: {
       type: String,
-      enum: ["none", "image", "video"],
+      enum: ["none", "image", "video", "document"],
       default: "none"
     },
     headerMediaId: {
       type: String,
       trim: true,
       maxlength: 80
+    },
+    buttons: {
+      type: [{
+        type: {
+          type: String,
+          enum: ["URL", "PHONE_NUMBER", "QUICK_REPLY"]
+        },
+        text: {
+          type: String,
+          trim: true,
+          maxlength: 25
+        },
+        url: {
+          type: String,
+          trim: true,
+          maxlength: 300
+        },
+        phoneNumber: {
+          type: String,
+          trim: true,
+          maxlength: 20
+        }
+      }],
+      default: []
     },
     status: {
       type: String,

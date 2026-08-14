@@ -30,8 +30,8 @@ function normalizeLanguage(language) {
 
 function normalizeHeaderType(headerType) {
   const normalized = String(headerType || "none").toLowerCase().trim();
-  if (!["none", "image", "video"].includes(normalized)) {
-    throw new HttpError(400, "Template header must be none, image, or video");
+  if (!["none", "image", "video", "document"].includes(normalized)) {
+    throw new HttpError(400, "Template header must be none, image, video, or document");
   }
   return normalized;
 }
@@ -65,7 +65,17 @@ function getBodyComponent(components = []) {
 function getHeaderTypeFromComponents(components = []) {
   const header = components.find((component) => String(component.type || "").toUpperCase() === "HEADER");
   const format = String(header?.format || "").toLowerCase();
-  return ["image", "video"].includes(format) ? format : "none";
+  return ["image", "video", "document"].includes(format) ? format : "none";
+}
+
+function getButtonsFromComponents(components = []) {
+  const buttonComponent = components.find((component) => String(component.type || "").toUpperCase() === "BUTTONS");
+  return (buttonComponent?.buttons || []).map((button) => ({
+    type: String(button.type || "").toUpperCase(),
+    text: String(button.text || "").trim(),
+    url: String(button.url || "").trim(),
+    phoneNumber: String(button.phone_number || "").trim()
+  })).filter((button) => ["URL", "PHONE_NUMBER", "QUICK_REPLY"].includes(button.type));
 }
 
 function getBodyTextFromComponents(components = []) {
@@ -115,6 +125,46 @@ function parseBodyExamples(variableSamples, expectedCount = 0) {
   return [values.slice(0, expectedCount)];
 }
 
+function normalizeTemplateButtons(input, category) {
+  if (category === "authentication") return [];
+  const rawButtons = Array.isArray(input) ? input : [];
+  const buttons = [];
+
+  rawButtons.forEach((button) => {
+    const type = String(button?.type || "").toUpperCase();
+    const text = String(button?.text || "").trim().slice(0, 25);
+    if (!text) return;
+
+    if (type === "URL") {
+      const url = String(button.url || "").trim();
+      if (!/^https:\/\/\S+\.\S+/.test(url)) {
+        throw new HttpError(400, "Website CTA URL must start with https:// and contain no spaces");
+      }
+      buttons.push({ type: "URL", text, url });
+      return;
+    }
+
+    if (type === "PHONE_NUMBER") {
+      const phoneNumber = String(button.phoneNumber || button.phone_number || "").trim();
+      if (!/^\+?\d{8,15}$/.test(phoneNumber)) {
+        throw new HttpError(400, "Call CTA needs a valid phone number with country code");
+      }
+      buttons.push({ type: "PHONE_NUMBER", text, phone_number: phoneNumber });
+      return;
+    }
+
+    if (type === "QUICK_REPLY") {
+      buttons.push({ type: "QUICK_REPLY", text });
+    }
+  });
+
+  if (buttons.length > 3) {
+    throw new HttpError(400, "A template can include up to 3 CTA buttons");
+  }
+
+  return buttons;
+}
+
 function buildMetaTemplatePayload(body) {
   const name = normalizeTemplateName(body.name || body.templateName || body.template_name);
   const category = normalizeCategory(body.category);
@@ -129,7 +179,7 @@ function buildMetaTemplatePayload(body) {
 
   if (category === "authentication") {
     if (headerType !== "none") {
-      throw new HttpError(400, "Authentication templates cannot use an image or video header");
+      throw new HttpError(400, "Authentication templates cannot use a media header");
     }
     return {
       name,
@@ -161,7 +211,8 @@ function buildMetaTemplatePayload(body) {
       parameterCount: 1,
       sampleValues: ["123456"],
       headerType: "none",
-      headerMediaId: ""
+      headerMediaId: "",
+      buttons: []
     };
   }
 
@@ -179,18 +230,32 @@ function buildMetaTemplatePayload(body) {
       body_text: bodyText
     };
   }
+  const buttons = normalizeTemplateButtons(body.buttons || body.ctaButtons || body.cta_buttons, category);
+  const components = [bodyComponent];
+  if (buttons.length) {
+    components.push({
+      type: "BUTTONS",
+      buttons
+    });
+  }
 
   return {
     name,
     category: category.toUpperCase(),
     language,
-    components: [bodyComponent],
+    components,
     localCategory: category,
     body: text,
     parameterCount: placeholders.length,
     sampleValues: bodyText ? bodyText[0].map((value) => String(value)) : [],
     headerType,
-    headerMediaId
+    headerMediaId,
+    buttons: buttons.map((button) => ({
+      type: button.type,
+      text: button.text,
+      ...(button.url ? { url: button.url } : {}),
+      ...(button.phone_number ? { phoneNumber: button.phone_number } : {})
+    }))
   };
 }
 
@@ -201,16 +266,20 @@ function assertTemplateMediaCompatible(asset, headerType) {
 
   const allowedMimeTypes = headerType === "image"
     ? ["image/jpeg", "image/png"]
-    : ["video/mp4"];
-  const maximumBytes = headerType === "image" ? 5 * 1024 * 1024 : 16 * 1024 * 1024;
+    : headerType === "document"
+      ? ["application/pdf"]
+      : ["video/mp4"];
+  const maximumBytes = headerType === "image" ? 5 * 1024 * 1024 : headerType === "document" ? 100 * 1024 * 1024 : 16 * 1024 * 1024;
 
   if (!allowedMimeTypes.includes(asset.mimeType)) {
     throw new HttpError(400, headerType === "image"
       ? "Meta template image headers require a JPG or PNG asset"
-      : "Meta template video headers require an MP4 asset");
+      : headerType === "document"
+        ? "Meta template document headers require a PDF asset"
+        : "Meta template video headers require an MP4 asset");
   }
   if (asset.bytes > maximumBytes) {
-    throw new HttpError(400, `Meta template ${headerType} samples must be ${headerType === "image" ? "5" : "16"} MB or smaller`);
+    throw new HttpError(400, `Meta template ${headerType} samples must be ${headerType === "image" ? "5" : headerType === "document" ? "100" : "16"} MB or smaller`);
   }
 }
 
@@ -224,9 +293,9 @@ async function createMetaHeaderHandle(accessToken, asset) {
     throw new HttpError(502, "Unable to download the selected Cloudinary media");
   }
   const buffer = Buffer.from(await sourceResponse.arrayBuffer());
-  const maximumBytes = asset.mediaType === "image" ? 5 * 1024 * 1024 : 16 * 1024 * 1024;
+  const maximumBytes = asset.mediaType === "image" ? 5 * 1024 * 1024 : asset.mediaType === "document" ? 100 * 1024 * 1024 : 16 * 1024 * 1024;
   if (buffer.length > maximumBytes) {
-    throw new HttpError(400, `Meta template ${asset.mediaType} samples must be ${asset.mediaType === "image" ? "5" : "16"} MB or smaller`);
+    throw new HttpError(400, `Meta template ${asset.mediaType} samples must be ${asset.mediaType === "image" ? "5" : asset.mediaType === "document" ? "100" : "16"} MB or smaller`);
   }
   const params = new URLSearchParams({
     file_name: asset.originalName || `${asset.mediaId}.${asset.format}`,
@@ -384,6 +453,7 @@ async function doSyncMetaTemplates(tenantId) {
             parameterCount: placeholders.length,
             sampleValues: getBodySampleValues(template),
             headerType,
+            buttons: getButtonsFromComponents(template.components || []),
             status: mapMetaTemplateStatus(template.status),
             metaTemplateId: template.id || "",
             rejectedReason: template.rejected_reason || "",
@@ -464,6 +534,7 @@ async function createTemplateDraft(tenantId, body) {
         sampleValues: payload.sampleValues,
         headerType: payload.headerType,
         headerMediaId: payload.headerMediaId,
+        buttons: payload.buttons,
         status: "draft"
       }
     },
@@ -537,6 +608,7 @@ async function submitTemplateForMetaReview(tenantId, body) {
         sampleValues: payload.sampleValues,
         headerType: payload.headerType,
         headerMediaId: payload.headerMediaId,
+        buttons: payload.buttons,
         status: "in_review",
         metaTemplateId: metaResponse.id || metaResponse.message_template_id || ""
       }

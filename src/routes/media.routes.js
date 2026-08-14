@@ -20,8 +20,8 @@ const upload = multer({
   }),
   limits: { fileSize: 50 * 1024 * 1024, files: 1 },
   fileFilter(req, file, callback) {
-    if (!/^(image|video)\//.test(file.mimetype)) {
-      callback(new HttpError(400, "Only photo and video files are supported"));
+    if (!/^(image|video)\//.test(file.mimetype) && file.mimetype !== "application/pdf") {
+      callback(new HttpError(400, "Only photo, video, and PDF files are supported"));
       return;
     }
     callback(null, true);

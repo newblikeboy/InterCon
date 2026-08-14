@@ -10,7 +10,7 @@ const plans = [
   {
     id: "monthly",
     name: "Monthly",
-    amount: 3000,
+    amount: 1000,
     currency: "INR",
     interval: "month",
     months: 1
@@ -18,7 +18,7 @@ const plans = [
   {
     id: "quarterly",
     name: "Quarterly",
-    amount: 7500,
+    amount: 2500,
     currency: "INR",
     interval: "quarter",
     months: 3
@@ -26,7 +26,7 @@ const plans = [
   {
     id: "yearly",
     name: "Yearly",
-    amount: 24000,
+    amount: 9000,
     currency: "INR",
     interval: "year",
     months: 12

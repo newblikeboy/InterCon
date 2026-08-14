@@ -8,6 +8,7 @@ const Conversation = require("../models/Conversation");
 const InboxMessage = require("../models/InboxMessage");
 const env = require("../config/env");
 const HttpError = require("../utils/httpError");
+const { publishInboxUpdated } = require("./realtime.service");
 
 function getWebhookAppSecret() {
   return env.facebookAppSecret || env.metaAppSecret;
@@ -350,7 +351,7 @@ async function processInboundMessages(tenantId, value = {}, wabaId, phoneNumberI
       { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
     );
 
-    await InboxMessage.create({
+    const inboxMessage = await InboxMessage.create({
       tenantId,
       conversationId: conversation._id,
       contactId: contact?._id,
@@ -363,6 +364,14 @@ async function processInboundMessages(tenantId, value = {}, wabaId, phoneNumberI
       metaMessageId,
       status: "received",
       sentAt
+    });
+
+    publishInboxUpdated(tenantId, {
+      action: "message_received",
+      conversationId: String(conversation._id),
+      messageId: String(inboxMessage._id),
+      customerPhone: fromPhone,
+      lastMessageAt: sentAt
     });
   }
 }

@@ -212,15 +212,63 @@
             <div class="portal-section-head compact">
               <div>
                 <p class="eyebrow">Message history</p>
-                <h2>Recent sends</h2>
+                <h2>Message reports</h2>
               </div>
-              <button class="btn btn-outline btn-small" type="button" data-refresh-send-data>Refresh</button>
             </div>
+            <form class="report-filter-form" data-report-form>
+              <label>
+                From
+                <input type="date" data-report-from>
+              </label>
+              <label>
+                To
+                <input type="date" data-report-to>
+              </label>
+              <label>
+                Status
+                <select data-report-status>
+                  <option value="">All statuses</option>
+                  <option value="queued">Queued</option>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="processing">Processing</option>
+                  <option value="accepted">Accepted</option>
+                  <option value="sent">Sent</option>
+                  <option value="delivered">Delivered / read</option>
+                  <option value="read">Read</option>
+                  <option value="failed">Failed</option>
+                  <option value="uncertain">Uncertain</option>
+                </select>
+              </label>
+              <label>
+                Mobile number
+                <input type="tel" inputmode="numeric" placeholder="919876543210" data-report-phone>
+              </label>
+              <label>
+                Rows
+                <select data-report-limit>
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+              </label>
+              <button class="btn" type="submit">Search</button>
+            </form>
+            <p class="contact-message" data-report-message></p>
             <div class="table-panel">
-              <div class="table-row send-table-row table-head">
-                <span>To</span><span>Template</span><span>Status</span><span>Sent at</span>
+              <div class="table-row report-table-row table-head">
+                <span>To</span><span>Template</span><span>Status</span><span>Sent at</span><span>Last update</span><span>Batch</span><span>Error</span>
               </div>
-              <div data-send-history></div>
+              <div data-report-history>
+                <div class="empty-row">Choose filters and click Search to fetch reports.</div>
+              </div>
+            </div>
+            <div class="report-pagination" data-report-pagination hidden>
+              <span data-report-range>Showing 0 reports</span>
+              <div>
+                <button class="btn btn-outline btn-small" type="button" data-report-previous>Previous</button>
+                <span data-report-page>Page 1 of 1</span>
+                <button class="btn btn-outline btn-small" type="button" data-report-next>Next</button>
+              </div>
             </div>
           </div>
         </section>
@@ -617,12 +665,12 @@ Authorization: Bearer API_KEY
   "mediaId": "MED-550e8400-e29b-41d4-a716-446655440000",
   "variables": ["Name", "ORD1234", "12 Jun"]
 }</code></pre>
-            <small>Include <code>mediaId</code> only when the approved template has an image or video header.</small>
+            <small>Include <code>mediaId</code> only when the approved template has an image, video, or PDF header.</small>
           </article>
           <article>
             <span>3</span>
             <strong>View reports</strong>
-            <pre><code>GET /api/v1/reports?from=2026-06-01&amp;status=delivered
+            <pre><code>GET /api/v1/reports?from=2026-06-01&amp;to_date=2026-06-30&amp;status=delivered&amp;page=1&amp;limit=25
 Authorization: Bearer API_KEY
 
 GET /api/v1/messages/MESSAGE_ID</code></pre>
@@ -752,13 +800,14 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
           <div>
             <p class="eyebrow">Cloudinary assets</p>
             <h2>Media library</h2>
-            <p>Upload photos and videos once, then reuse their unique media IDs.</p>
+            <p>Upload photos, videos, and PDFs once, then reuse their unique media IDs.</p>
           </div>
           <div class="media-library-actions">
             <select data-media-filter aria-label="Filter media">
               <option value="all">All media</option>
               <option value="image">Photos</option>
               <option value="video">Videos</option>
+              <option value="document">PDFs</option>
             </select>
             <button class="btn btn-outline btn-small" type="button" data-refresh-media>Refresh</button>
             <button class="btn" type="button" data-open-media-modal>Add media</button>
@@ -833,9 +882,8 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
         </div>
       </section>
 
-      <div class="template-modal" role="dialog" aria-modal="true" aria-labelledby="template-modal-title" hidden data-template-modal>
-        <div class="modal-backdrop" data-close-template-modal></div>
-        <section class="template-modal-card">
+      <div class="template-builder-inline" role="region" aria-labelledby="template-modal-title" hidden data-template-modal>
+        <section class="template-modal-card template-create-card">
           <button class="modal-close" type="button" aria-label="Close template form" data-close-template-modal>&times;</button>
           <div class="portal-section-head compact">
             <div>
@@ -845,16 +893,16 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
             </div>
           </div>
 
+          <div class="template-builder-layout">
           <div class="template-form-panel">
             <p class="form-note" hidden data-template-library-note></p>
-            <label data-template-preset-field>
-              Template type
-              <select data-template-preset>
-                <option value="order_update">Order update</option>
-                <option value="appointment_reminder">Appointment reminder</option>
-                <option value="payment_reminder">Payment reminder</option>
-                <option value="offer_update">Offer update</option>
-                <option value="otp_code">OTP code</option>
+            <label>
+              Category
+              <select name="category" data-template-category>
+                <option value="">Select template category</option>
+                <option value="utility">Utility - order, account, payment, appointment, service update</option>
+                <option value="marketing">Marketing - offers, promotions, re-engagement, recommendations</option>
+                <option value="authentication">Authentication - OTP, login code, account verification</option>
               </select>
             </label>
 
@@ -866,6 +914,7 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
               <label>
                 Language
                 <select name="language" data-template-language>
+                  <option value="">Select language</option>
                   <option value="en_US">English (US)</option>
                   <option value="en">English</option>
                   <option value="hi">Hindi</option>
@@ -874,15 +923,6 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
               </label>
             </div>
 
-            <label>
-              Category
-              <select name="category" data-template-category>
-                <option value="utility">Utility - order, account, payment, appointment, service update</option>
-                <option value="marketing">Marketing - offers, promotions, re-engagement, recommendations</option>
-                <option value="authentication">Authentication - OTP, login code, account verification</option>
-              </select>
-            </label>
-
             <div class="template-header-fields">
               <label>
                 Media header
@@ -890,10 +930,11 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
                   <option value="none">No media header</option>
                   <option value="image">Image header</option>
                   <option value="video">Video header</option>
+                  <option value="document">PDF header</option>
                 </select>
               </label>
               <label data-template-header-media-field hidden>
-                Review sample
+                Choose media
                 <select data-template-header-media>
                   <option value="">Choose from Media Library</option>
                 </select>
@@ -908,22 +949,77 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
 
             <label>
               Variable samples
-              <input type="text" name="variableSamples" placeholder="{{1}} = Priya, {{2}} = ORD1234, {{3}} = 12 May" data-template-samples>
+              <input type="hidden" name="variableSamples" data-template-samples>
+              <div class="template-variable-samples" data-template-variable-samples>
+                <div class="empty-row">Add variables like {{1}} in the message body to enter sample values.</div>
+              </div>
             </label>
 
-            <label hidden data-template-library-url-field>
-              Website URL for the template button
-              <input type="url" maxlength="300" placeholder="https://yourstore.com" data-template-library-url>
-            </label>
-            <label hidden data-template-library-phone-field>
-              Phone number for the call button
-              <input type="tel" maxlength="20" placeholder="+919876543210" data-template-library-phone>
-            </label>
+            <div class="template-cta-builder" data-template-cta-builder>
+              <div class="template-cta-head">
+                <span>CTA buttons</span>
+                <button class="template-add-cta" type="button" aria-label="Add CTA" title="Add CTA" data-template-add-cta>+</button>
+              </div>
+              <div class="template-cta-menu" hidden data-template-cta-menu>
+                <button type="button" data-template-cta-type="call">Call</button>
+                <button type="button" data-template-cta-type="visit">Visit website</button>
+                <button type="button" data-template-cta-type="quick_reply">Quick reply</button>
+              </div>
+              <div class="template-cta-list" data-template-cta-list></div>
+            </div>
 
             <div class="template-actions">
               <button class="btn" type="button" data-submit-template>Send for Meta review</button>
             </div>
             <p class="contact-message" data-template-message></p>
+          </div>
+          <aside class="template-builder-preview" aria-label="Template draft preview">
+            <div class="preview-panel-head">
+              <span>Live preview</span>
+              <strong>Customer view</strong>
+            </div>
+            <div class="phone-shell template-preview-shell">
+              <div class="phone-screen">
+                <div class="phone-statusbar" aria-hidden="true">
+                  <span data-template-preview-time>Now</span>
+                  <div><i></i><i></i><i></i></div>
+                </div>
+                <div class="wa-preview-topbar">
+                  <span class="wa-back" aria-hidden="true"></span>
+                  <span class="wa-avatar">IC</span>
+                  <div class="wa-contact-copy">
+                    <strong>Customer</strong>
+                    <small>Business Account</small>
+                  </div>
+                  <span class="wa-menu-dots" aria-hidden="true"></span>
+                </div>
+                <div class="wa-chat-area">
+                  <div class="wa-encryption-note">
+                    Messages are end-to-end encrypted. This preview shows how the template may appear.
+                  </div>
+                  <div class="wa-date-chip">Today</div>
+                  <div class="wa-template-meta">
+                    <span data-template-preview-name>Template draft</span>
+                    <strong data-template-preview-category>Select category</strong>
+                  </div>
+                  <div class="template-preview-message-group">
+                    <div class="wa-message-bubble">
+                      <div class="wa-preview-media" data-template-preview-media hidden></div>
+                      <p data-template-preview-body>Start writing the message body to preview the template.</p>
+                      <span data-template-preview-bubble-time>Now</span>
+                      <em aria-hidden="true"></em>
+                    </div>
+                    <div class="template-preview-ctas" data-template-preview-ctas hidden></div>
+                  </div>
+                </div>
+                <div class="wa-composer" aria-hidden="true">
+                  <span></span>
+                  <strong>Message</strong>
+                  <i></i>
+                </div>
+              </div>
+            </div>
+          </aside>
           </div>
         </section>
       </div>
@@ -994,17 +1090,17 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
             <div>
               <p class="eyebrow">Cloudinary upload</p>
               <h2 id="media-modal-title">Add media</h2>
-              <p>Upload one photo or video, up to 50 MB.</p>
+              <p>Upload one photo, video, or PDF, up to 50 MB.</p>
             </div>
           </div>
           <form class="media-upload-form" data-media-upload-form>
             <label class="media-dropzone" data-media-dropzone>
-              <input type="file" name="file" accept="image/*,video/*" required data-media-file>
+              <input type="file" name="file" accept="image/*,video/*,application/pdf,.pdf" required data-media-file>
               <span class="media-dropzone-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0-4 4m4-4 4 4M5 14v5h14v-5"/></svg>
               </span>
-              <strong data-media-file-label>Choose a photo or video</strong>
-              <small>JPG, PNG, WEBP, GIF, MP4, MOV or WEBM</small>
+              <strong data-media-file-label>Choose a photo, video, or PDF</strong>
+              <small>JPG, PNG, WEBP, GIF, MP4, MOV, WEBM or PDF</small>
             </label>
             <label>
               Media title

@@ -8,6 +8,7 @@ const env = require("../config/env");
 const HttpError = require("../utils/httpError");
 const { requireActivePaidPlan } = require("./billing.service");
 const { fetchWithPolicy } = require("../utils/httpClient");
+const { publishInboxUpdated } = require("./realtime.service");
 
 // Meta's customer-service window: free-form (non-template) replies are only
 // permitted within 24 hours of the customer's most recent inbound message.
@@ -256,6 +257,14 @@ async function sendReply(tenantId, conversationId, body = {}) {
   conversation.lastDirection = "out";
   conversation.unreadCount = 0;
   await conversation.save();
+
+  publishInboxUpdated(tenantId, {
+    action: "message_sent",
+    conversationId: String(conversation._id),
+    messageId: String(message._id),
+    customerPhone: conversation.customerPhone,
+    lastMessageAt: sentAt
+  });
 
   return {
     conversation: publicConversation(conversation),

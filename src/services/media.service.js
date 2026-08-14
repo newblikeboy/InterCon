@@ -49,6 +49,9 @@ async function detectMediaType(filePath) {
     if (head.length >= 3 && head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) {
       return { mediaType: "image", mimeType: "image/jpeg" };
     }
+    if (head.subarray(0, 5).toString("ascii") === "%PDF-") {
+      return { mediaType: "document", mimeType: "application/pdf" };
+    }
     if (head.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
       return { mediaType: "image", mimeType: "image/png" };
     }
@@ -76,7 +79,7 @@ async function detectMediaType(filePath) {
 
 async function listMedia(tenantId, query = {}) {
   const filter = { tenantId };
-  if (["image", "video"].includes(query.type)) filter.mediaType = query.type;
+  if (["image", "video", "document"].includes(query.type)) filter.mediaType = query.type;
 
   const assets = await MediaAsset.find(filter)
     .sort({ createdAt: -1 })
@@ -88,12 +91,12 @@ async function listMedia(tenantId, query = {}) {
 
 async function createMedia(tenantId, file, body = {}) {
   assertCloudinaryConfigured();
-  if (!file?.path) throw new HttpError(400, "Choose a photo or video to upload");
+  if (!file?.path) throw new HttpError(400, "Choose a photo, video, or PDF to upload");
 
   const detected = await detectMediaType(file.path);
   if (!detected) {
     await fs.promises.unlink(file.path).catch(() => {});
-    throw new HttpError(400, "The uploaded file is not a supported photo or video");
+    throw new HttpError(400, "The uploaded file is not a supported photo, video, or PDF");
   }
   const mediaType = detected.mediaType;
   const title = String(body.title || path.parse(file.originalname).name || "Untitled media").trim();
@@ -131,7 +134,7 @@ async function createMedia(tenantId, file, body = {}) {
 
   try {
     uploaded = await cloudinary.uploader.upload(file.path, {
-      resource_type: mediaType,
+      resource_type: mediaType === "document" ? "raw" : mediaType,
       folder,
       public_id: draft.mediaId,
       overwrite: false,
@@ -151,7 +154,7 @@ async function createMedia(tenantId, file, body = {}) {
   } catch (error) {
     if (uploaded?.public_id) {
       await cloudinary.uploader.destroy(uploaded.public_id, {
-        resource_type: mediaType,
+        resource_type: mediaType === "document" ? "raw" : mediaType,
         invalidate: true
       }).catch(() => null);
     }
@@ -179,7 +182,7 @@ async function deleteMedia(tenantId, mediaId) {
   }
 
   const result = await cloudinary.uploader.destroy(asset.cloudinaryPublicId, {
-    resource_type: asset.mediaType,
+    resource_type: asset.mediaType === "document" ? "raw" : asset.mediaType,
     invalidate: true
   });
   if (!["ok", "not found"].includes(result.result)) {

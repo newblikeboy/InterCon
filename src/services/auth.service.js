@@ -14,15 +14,25 @@ function generateVerificationToken() {
   return { token, tokenHash, expires };
 }
 
-function normalizeSignupBody(body) {
+function firstDefined(...values) {
+  return values.find((value) => value !== undefined && value !== null);
+}
+
+function normalizeText(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeSignupBody(body = {}) {
+  const confirmPassword = firstDefined(body.confirmPassword, body.confirm_password);
+
   return {
-    businessName: body.businessName || body.business_name,
-    contactPerson: body.contactPerson || body.contact_person,
-    email: body.email || body.businessEmail,
-    whatsappNumber: body.mobileNumber || body.mobile_number || body.whatsappNumber || body.whatsapp_number,
-    businessGoal: body.businessGoal || body.business_size || body.goal,
-    password: body.password,
-    confirmPassword: body.confirmPassword || body.confirm_password
+    businessName: normalizeText(firstDefined(body.businessName, body.business_name)),
+    contactPerson: normalizeText(firstDefined(body.contactPerson, body.contact_person)),
+    email: normalizeText(firstDefined(body.email, body.businessEmail)),
+    whatsappNumber: normalizeText(firstDefined(body.mobileNumber, body.mobile_number, body.whatsappNumber, body.whatsapp_number)),
+    businessGoal: normalizeText(firstDefined(body.businessGoal, body.business_size, body.goal)),
+    password: typeof body.password === "string" ? body.password : "",
+    confirmPassword: typeof confirmPassword === "string" ? confirmPassword : ""
   };
 }
 
@@ -31,7 +41,7 @@ function validateEmail(email) {
 }
 
 function validateMobileNumber(number) {
-  return typeof number === "string" && /^\+?[0-9\s-]{7,16}$/.test(number);
+  return typeof number === "string" && /^\d{10}$/.test(number);
 }
 
 function validatePasswordStrength(password) {
@@ -50,6 +60,7 @@ function publicUser(user, tenant = null) {
       ? {
           id: tenant._id,
           businessName: tenant.businessName,
+          whatsappNumber: tenant.whatsappNumber,
           onboardingStatus: tenant.onboardingStatus,
           status: tenant.status,
           meta: {
@@ -86,7 +97,7 @@ async function signupCustomer(body) {
   }
 
   if (!validateMobileNumber(payload.whatsappNumber)) {
-    throw new HttpError(400, "Enter a valid mobile number");
+    throw new HttpError(400, "Enter a 10-digit mobile number using numbers only");
   }
 
   if (typeof payload.password !== "string" || payload.password.length < 8) {

@@ -6,6 +6,7 @@ const authTabs = document.querySelectorAll("[data-auth-tab]");
 const authForms = document.querySelectorAll("[data-auth-form]");
 const openAuthButtons = document.querySelectorAll("[data-open-auth]");
 const closeAuthButtons = document.querySelectorAll("[data-close-auth]");
+const signupMobileInput = document.querySelector("[data-signup-mobile]");
 const yearNode = document.querySelector("[data-year]");
 
 function updateHeader() {
@@ -129,6 +130,49 @@ function showResendButton(form, identifier, { startCooldown = false } = {}) {
   return button;
 }
 
+function sanitizeSignupMobileInput(input) {
+  input.value = input.value.replace(/\D/g, "").slice(0, 10);
+  input.setCustomValidity("");
+}
+
+function normalizeAuthFormData(formData, isSignup) {
+  const normalized = { ...formData };
+  Object.keys(normalized).forEach((key) => {
+    if (typeof normalized[key] !== "string" || /password/i.test(key)) return;
+    normalized[key] = normalized[key].trim();
+  });
+
+  return normalized;
+}
+
+function validateSignupForm(form, formData) {
+  const mobileInput = form.querySelector("[data-signup-mobile]");
+  const mobileNumber = formData.mobile_number || "";
+
+  if (!/^\d{10}$/.test(mobileNumber)) {
+    if (mobileInput) {
+      mobileInput.setCustomValidity("Enter a 10-digit mobile number using numbers only");
+      mobileInput.reportValidity();
+    }
+    setFormMessage(form, "Enter a 10-digit mobile number using numbers only", true);
+    return false;
+  }
+
+  if (mobileInput) mobileInput.setCustomValidity("");
+
+  if (!/[A-Za-z]/.test(formData.password || "") || !/[0-9]/.test(formData.password || "")) {
+    setFormMessage(form, "Password must include at least one letter and one number", true);
+    return false;
+  }
+
+  if (formData.password !== formData.confirm_password) {
+    setFormMessage(form, "Password and confirm password do not match", true);
+    return false;
+  }
+
+  return true;
+}
+
 navToggle.addEventListener("click", () => {
   const isOpen = header.classList.toggle("menu-open");
   document.body.classList.toggle("nav-open", isOpen);
@@ -163,18 +207,21 @@ authTabs.forEach((tab) => {
   tab.addEventListener("click", () => setAuthMode(tab.dataset.authTab));
 });
 
+if (signupMobileInput) {
+  signupMobileInput.addEventListener("input", () => sanitizeSignupMobileInput(signupMobileInput));
+}
+
 authForms.forEach((form) => {
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const isSignup = form.dataset.authForm === "signup";
     const submitButton = form.querySelector("button[type='submit']");
-    const formData = Object.fromEntries(new FormData(form).entries());
+    const formData = normalizeAuthFormData(Object.fromEntries(new FormData(form).entries()), isSignup);
 
     setFormMessage(form, "");
     removeResendButton(form);
 
-    if (isSignup && formData.password !== formData.confirm_password) {
-      setFormMessage(form, "Password and confirm password do not match", true);
+    if (isSignup && !validateSignupForm(form, formData)) {
       return;
     }
 

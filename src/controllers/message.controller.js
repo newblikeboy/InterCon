@@ -2,11 +2,11 @@ const asyncHandler = require("../utils/asyncHandler");
 const messageService = require("../services/message.service");
 
 const listMessages = asyncHandler(async (req, res) => {
-  const messages = await messageService.listMessages(req.tenantId);
+  const result = await messageService.listMessagesPage(req.tenantId, req.query);
 
   res.json({
     success: true,
-    messages
+    ...result
   });
 });
 

@@ -342,45 +342,45 @@
 
     <section class="section pricing-section" id="pricing">
       <div class="section-heading center">
-        <p class="eyebrow">Service packages</p>
-        <h2>Plans that scale with you</h2>
-        <p>Start with a guided launch and grow into automation, integrations, and enterprise rollout.</p>
+        <p class="eyebrow">InterCon plans</p>
+        <h2>Choose the plan that fits your billing cycle</h2>
+        <p>All plans unlock the InterCon workspace for WhatsApp onboarding, templates, campaigns, automation, and team inbox access.</p>
       </div>
 
       <div class="pricing-grid">
         <article class="price-card">
-          <h3>Launch</h3>
-          <p>For small businesses that need WhatsApp Business Platform activation and a professional first setup.</p>
-          <strong class="price-tag">Contact sales</strong>
+          <h3>Monthly</h3>
+          <p>For businesses that want flexible month-to-month access while they start using InterCon.</p>
+          <strong class="price-tag">Rs 1,000/month</strong>
           <ul>
-            <li>Business and number onboarding</li>
-            <li>Cloud API readiness guidance</li>
-            <li>Starter templates and inbox setup</li>
+            <li>Monthly platform access</li>
+            <li>WhatsApp onboarding workspace</li>
+            <li>Templates, campaigns, and inbox tools</li>
           </ul>
-          <button class="btn btn-outline" type="button" data-open-auth="signup">Choose Launch</button>
+          <button class="btn btn-outline" type="button" data-open-auth="signup">Choose Monthly</button>
         </article>
         <article class="price-card featured">
           <span class="badge">Most popular</span>
-          <h3>Scale</h3>
-          <p>For growing teams that want automation, campaigns, integrations, and measurable engagement.</p>
-          <strong class="price-tag">Contact sales</strong>
+          <h3>Quarterly</h3>
+          <p>For teams that want three months of access with better value than the monthly plan.</p>
+          <strong class="price-tag">Rs 2,500/quarter</strong>
           <ul>
-            <li>Chatbot and workflow automation</li>
-            <li>CRM, website, and ecommerce integration</li>
-            <li>Campaign templates and analytics</li>
+            <li>3-month platform access</li>
+            <li>Lower effective monthly cost</li>
+            <li>Templates, campaigns, and inbox tools</li>
           </ul>
-          <button class="btn" type="button" data-open-auth="signup">Choose Scale</button>
+          <button class="btn" type="button" data-open-auth="signup">Choose Quarterly</button>
         </article>
         <article class="price-card">
-          <h3>Enterprise</h3>
-          <p>For large businesses that need multi-team rollout, custom integration, controls, and dedicated support.</p>
-          <strong class="price-tag">Custom</strong>
+          <h3>Yearly</h3>
+          <p>For businesses ready to run InterCon long term at the best annual value.</p>
+          <strong class="price-tag">Rs 9,000/year</strong>
           <ul>
-            <li>Custom API architecture and webhooks</li>
-            <li>Multi-location support workflows</li>
-            <li>Dedicated success and optimization</li>
+            <li>12-month platform access</li>
+            <li>Best annual value</li>
+            <li>Templates, campaigns, and inbox tools</li>
           </ul>
-          <button class="btn btn-outline" type="button" data-open-auth="signup">Talk to us</button>
+          <button class="btn btn-outline" type="button" data-open-auth="signup">Choose Yearly</button>
         </article>
       </div>
     </section>
@@ -517,7 +517,7 @@
         </label>
         <label>
           Mobile number
-          <input type="tel" name="mobile_number" autocomplete="tel" required pattern="^\+?[0-9\s-]{7,16}$" placeholder="+91 98765 43210">
+          <input type="tel" name="mobile_number" autocomplete="tel" inputmode="numeric" required minlength="10" maxlength="10" pattern="[0-9]{10}" title="Enter a 10-digit mobile number using numbers only" placeholder="9876543210" data-signup-mobile>
         </label>
         <div class="form-grid">
           <label>

@@ -53,10 +53,20 @@ const templateLanguageSelect = document.querySelector("[data-template-language]"
 const templateCategorySelect = document.querySelector("[data-template-category]");
 const templateBodyInput = document.querySelector("[data-template-body]");
 const templateSamplesInput = document.querySelector("[data-template-samples]");
-const templatePresetSelect = document.querySelector("[data-template-preset]");
+const templateVariableSamplesHost = document.querySelector("[data-template-variable-samples]");
 const templateHeaderTypeSelect = document.querySelector("[data-template-header-type]");
 const templateHeaderMediaField = document.querySelector("[data-template-header-media-field]");
 const templateHeaderMediaSelect = document.querySelector("[data-template-header-media]");
+const templateAddCtaButton = document.querySelector("[data-template-add-cta]");
+const templateCtaMenu = document.querySelector("[data-template-cta-menu]");
+const templateCtaList = document.querySelector("[data-template-cta-list]");
+const templatePreviewName = document.querySelector("[data-template-preview-name]");
+const templatePreviewCategory = document.querySelector("[data-template-preview-category]");
+const templatePreviewBody = document.querySelector("[data-template-preview-body]");
+const templatePreviewMedia = document.querySelector("[data-template-preview-media]");
+const templatePreviewCtas = document.querySelector("[data-template-preview-ctas]");
+const templatePreviewTime = document.querySelector("[data-template-preview-time]");
+const templatePreviewBubbleTime = document.querySelector("[data-template-preview-bubble-time]");
 const templateMessages = document.querySelectorAll("[data-template-message]");
 const templateStatusList = document.querySelector("[data-template-status-list]");
 const submitTemplateButtons = document.querySelectorAll("[data-submit-template]");
@@ -87,6 +97,20 @@ const sendMessageStatus = document.querySelector("[data-send-message-status]");
 const sendSubmitButton = document.querySelector("[data-send-submit]");
 const sendHistory = document.querySelector("[data-send-history]");
 const refreshSendDataButtons = document.querySelectorAll("[data-refresh-send-data]");
+const reportForm = document.querySelector("[data-report-form]");
+const reportSearchButton = reportForm?.querySelector("button[type=\"submit\"]");
+const reportFromInput = document.querySelector("[data-report-from]");
+const reportToInput = document.querySelector("[data-report-to]");
+const reportStatusSelect = document.querySelector("[data-report-status]");
+const reportPhoneInput = document.querySelector("[data-report-phone]");
+const reportLimitSelect = document.querySelector("[data-report-limit]");
+const reportHistory = document.querySelector("[data-report-history]");
+const reportMessage = document.querySelector("[data-report-message]");
+const reportPagination = document.querySelector("[data-report-pagination]");
+const reportPreviousButton = document.querySelector("[data-report-previous]");
+const reportNextButton = document.querySelector("[data-report-next]");
+const reportPageLabel = document.querySelector("[data-report-page]");
+const reportRange = document.querySelector("[data-report-range]");
 const previewContact = document.querySelector("[data-preview-contact]");
 const previewMessage = document.querySelector("[data-preview-message]");
 const previewTime = document.querySelector("[data-preview-time]");
@@ -141,6 +165,7 @@ let embeddedSignupSessionInfo = null;
 let embeddedSignupSessionResolvers = [];
 let embeddedSignupSessionRejecters = [];
 const setupState = {
+  user: null,
   tenant: null,
   contacts: [],
   groups: [],
@@ -175,6 +200,19 @@ const bulkPreviewState = {
   page: 1,
   pageSize: 25
 };
+const reportState = {
+  searched: false,
+  loading: false,
+  page: 1,
+  limit: 25,
+  total: 0,
+  totalPages: 1,
+  filters: {}
+};
+
+if (templateModal) {
+  document.querySelector("#templates .portal-section-head")?.insertAdjacentElement("afterend", templateModal);
+}
 
 function closePortalMenu() {
   document.body.classList.remove("portal-menu-open");
@@ -303,14 +341,15 @@ function setTemplateMessage(message, isError = false) {
   });
 }
 
-function openTemplateModal() {
+function openTemplateModal({ reset = false } = {}) {
   if (!templateModal) return;
+  if (reset) resetTemplateBuilder();
   templateModal.hidden = false;
-  document.body.classList.add("modal-open");
   setTemplateMessage("");
   loadMediaLibrary().then(updateTemplateHeaderControls).catch(() => updateTemplateHeaderControls());
+  templateModal.scrollIntoView({ behavior: "smooth", block: "start" });
   setTimeout(() => {
-    templateModal.querySelector("[data-template-preset]")?.focus();
+    templateModal.querySelector("[data-template-category]")?.focus();
   }, 50);
 }
 
@@ -318,9 +357,6 @@ function closeTemplateModal() {
   if (!templateModal) return;
   templateModal.hidden = true;
   clearTemplateLibrarySource();
-  if (!confirmModal || confirmModal.hidden) {
-    document.body.classList.remove("modal-open");
-  }
 }
 
 let confirmModalResolve = null;
@@ -416,7 +452,18 @@ function escapeHtml(value) {
 }
 
 function renderAuthenticatedProfile(user = {}) {
+  setupState.user = user || null;
   const tenant = user.tenant || {};
+  if (tenant.id) {
+    setupState.tenant = {
+      ...(setupState.tenant || {}),
+      ...tenant,
+      meta: {
+        ...(setupState.tenant?.meta || {}),
+        ...(tenant.meta || {})
+      }
+    };
+  }
   const displayName = tenant.businessName || user.name || user.email || "InterCon workspace";
   if (tenant.billing) {
     setupState.billing = {
@@ -1346,6 +1393,11 @@ async function deleteConnectedWaba() {
   setupState.messages = [];
   renderTemplateStatusRows([]);
   renderSendHistory([]);
+  reportState.searched = false;
+  reportState.total = 0;
+  reportState.totalPages = 1;
+  renderReportHistory([]);
+  updateReportPagination();
   await Promise.all([
     loadTemplates().catch(() => null),
     loadApprovedTemplates().catch(() => null)
@@ -1630,10 +1682,13 @@ async function loadApprovedTemplates() {
 function isCompatibleWhatsAppMedia(asset, type, approvalSample = false) {
   if (!asset || asset.mediaType !== type) return false;
   const mimeType = String(asset.mimeType || "").toLowerCase();
-  const maximumBytes = type === "image" ? 5 * 1024 * 1024 : 16 * 1024 * 1024;
+  const maximumBytes = type === "image" ? 5 * 1024 * 1024 : type === "document" ? 100 * 1024 * 1024 : 16 * 1024 * 1024;
   const withinSizeLimit = Number(asset.bytes || 0) <= maximumBytes;
   if (type === "image") {
     return ["image/jpeg", "image/png"].includes(mimeType) && withinSizeLimit;
+  }
+  if (type === "document") {
+    return mimeType === "application/pdf" && withinSizeLimit;
   }
   return (approvalSample ? ["video/mp4"] : ["video/mp4", "video/3gpp"]).includes(mimeType)
     && withinSizeLimit;
@@ -2132,7 +2187,9 @@ function updateWhatsAppPreview() {
       ? ""
       : mediaType === "video"
         ? `<video src="${escapeHtml(mediaUrl)}" muted playsinline controls></video>`
-        : `<img src="${escapeHtml(mediaUrl)}" alt="Template header preview">`;
+        : mediaType === "document"
+          ? `<a href="${escapeHtml(mediaUrl)}" target="_blank" rel="noopener">PDF document</a>`
+          : `<img src="${escapeHtml(mediaUrl)}" alt="Template header preview">`;
   }
 
   if (previewTemplate) {
@@ -2251,6 +2308,156 @@ function renderSendHistory(messages) {
   `).join("");
 }
 
+function setReportMessage(message, isError = false) {
+  if (!reportMessage) return;
+  reportMessage.textContent = message || "";
+  reportMessage.classList.toggle("error", Boolean(isError));
+}
+
+function formatReportDate(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString();
+}
+
+function getReportStatusClass(status) {
+  if (status === "failed" || status === "uncertain") return "rejected";
+  if (status === "queued" || status === "scheduled" || status === "processing") return "pending";
+  return "approved";
+}
+
+function getReportErrorText(message) {
+  const details = [message.metaErrorCode, message.error].filter(Boolean).join(" - ");
+  return details || "-";
+}
+
+function renderReportHistory(messages) {
+  if (!reportHistory) return;
+
+  if (!reportState.searched) {
+    reportHistory.innerHTML = `<div class="empty-row">Choose filters and click Search to fetch reports.</div>`;
+    return;
+  }
+
+  if (!messages.length) {
+    reportHistory.innerHTML = `<div class="empty-row">No reports matched the selected filters.</div>`;
+    return;
+  }
+
+  reportHistory.innerHTML = messages.map((message) => {
+    const errorText = getReportErrorText(message);
+    return `
+      <div class="table-row report-table-row">
+        <strong>${escapeHtml(message.to || "")}</strong>
+        <span data-label="Template" class="send-template-cell">
+          <span>${escapeHtml(message.templateName || "")}</span>
+          ${message.mediaId ? `<small>${escapeHtml(`${message.mediaType || "media"} - ${message.mediaId}`)}</small>` : ""}
+        </span>
+        <span data-label="Status"><em class="${getReportStatusClass(message.status)}">${escapeHtml(message.status || "")}</em></span>
+        <span data-label="Sent at">${escapeHtml(formatReportDate(message.createdAt))}</span>
+        <span data-label="Last update">${escapeHtml(formatReportDate(message.updatedAt || message.acceptedAt || message.createdAt))}</span>
+        <span data-label="Batch" class="report-muted-cell">${escapeHtml(message.batchId || "-")}</span>
+        <span data-label="Error" class="report-error-cell" title="${escapeHtml(errorText)}">${escapeHtml(errorText)}</span>
+      </div>
+    `;
+  }).join("");
+}
+
+function updateReportPagination() {
+  if (!reportPagination) return;
+  const shouldShow = reportState.searched && reportState.total > 0;
+  reportPagination.hidden = !shouldShow;
+  if (!shouldShow) return;
+
+  const start = (reportState.page - 1) * reportState.limit + 1;
+  const end = Math.min(reportState.page * reportState.limit, reportState.total);
+  if (reportRange) reportRange.textContent = `Showing ${start}-${end} of ${reportState.total} reports`;
+  if (reportPageLabel) reportPageLabel.textContent = `Page ${reportState.page} of ${reportState.totalPages}`;
+  if (reportPreviousButton) reportPreviousButton.disabled = reportState.page <= 1 || reportState.loading;
+  if (reportNextButton) reportNextButton.disabled = reportState.page >= reportState.totalPages || reportState.loading;
+}
+
+function getReportFiltersFromForm() {
+  const from = reportFromInput?.value || "";
+  const to = reportToInput?.value || "";
+
+  if (from && to && from > to) {
+    throw new Error("From date must be before or equal to To date.");
+  }
+
+  return {
+    from,
+    to_date: to,
+    status: reportStatusSelect?.value || "",
+    phone: reportPhoneInput?.value || "",
+    limit: reportLimitSelect?.value || "25"
+  };
+}
+
+function buildReportQuery(filters, page) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    const normalized = String(value || "").trim();
+    if (normalized) params.set(key, normalized);
+  });
+  params.set("page", String(page));
+  return params.toString();
+}
+
+function reportHasActiveFilters() {
+  return Boolean(
+    reportState.filters.from
+    || reportState.filters.to_date
+    || reportState.filters.status
+    || reportState.filters.phone
+  );
+}
+
+async function loadReports({ page = reportState.page, resetFilters = false } = {}) {
+  if (!reportHistory || reportState.loading) return;
+
+  try {
+    if (resetFilters) {
+      reportState.filters = getReportFiltersFromForm();
+      reportState.limit = Number(reportState.filters.limit) || 25;
+      page = 1;
+    }
+
+    reportState.loading = true;
+    reportState.searched = true;
+    reportState.page = page;
+    if (reportSearchButton) reportSearchButton.disabled = true;
+    setReportMessage("Fetching reports...");
+    updateReportPagination();
+
+    const data = await requestJson(`/api/messages?${buildReportQuery(reportState.filters, reportState.page)}`);
+    const messages = data.messages || [];
+    const pagination = data.pagination || {};
+    reportState.page = Number(pagination.page) || reportState.page;
+    reportState.limit = Number(pagination.limit) || reportState.limit;
+    reportState.total = Number.isFinite(Number(pagination.total)) ? Number(pagination.total) : messages.length;
+    reportState.totalPages = Math.max(1, Number(pagination.totalPages) || Math.ceil(reportState.total / reportState.limit) || 1);
+    renderReportHistory(messages);
+    setReportMessage(
+      messages.length
+        ? ""
+        : reportHasActiveFilters()
+          ? "No reports found for the selected filters."
+          : "No report records found yet."
+    );
+  } catch (error) {
+    reportState.total = 0;
+    reportState.totalPages = 1;
+    renderReportHistory([]);
+    setReportMessage(error.message, true);
+  } finally {
+    reportState.loading = false;
+    if (reportSearchButton) reportSearchButton.disabled = false;
+    updateReportPagination();
+  }
+}
+
 function isMetaProvided555Number(value) {
   return /^\+?1\s*555[\s-]?/i.test(String(value || ""));
 }
@@ -2282,10 +2489,9 @@ function getSendFailureMessage(error) {
 }
 
 async function loadSendHistory() {
-  if (!sendHistory) return;
-  const data = await requestJson("/api/messages");
+  const data = await requestJson("/api/messages?limit=25");
   setupState.messages = data.messages || [];
-  renderSendHistory(data.messages || []);
+  if (sendHistory) renderSendHistory(data.messages || []);
   renderOverviewStats();
 }
 
@@ -2350,15 +2556,257 @@ async function revokeApiKey(apiKeyId) {
   await loadApiKeys();
 }
 
+function getTemplateVariableIndexes() {
+  const indexes = new Set();
+  const body = templateBodyInput?.value || "";
+  body.replace(/\{\{\s*(\d+)\s*\}\}/g, (match, indexText) => {
+    indexes.add(Number(indexText));
+    return match;
+  });
+  return [...indexes].filter(Boolean).sort((left, right) => left - right);
+}
+
+function updateTemplateSamplesValue() {
+  if (!templateSamplesInput) return;
+  const pairs = [...(templateVariableSamplesHost?.querySelectorAll("[data-template-sample-input]") || [])]
+    .map((input) => `{{${input.dataset.templateSampleInput}}} = ${input.value.trim()}`);
+  templateSamplesInput.value = pairs.join(", ");
+  updateTemplateDraftPreview();
+}
+
+function renderTemplateVariableSamples() {
+  if (!templateVariableSamplesHost) return;
+  const indexes = getTemplateVariableIndexes();
+  const previous = new Map(
+    [...templateVariableSamplesHost.querySelectorAll("[data-template-sample-input]")]
+      .map((input) => [Number(input.dataset.templateSampleInput), input.value])
+  );
+
+  if (!indexes.length) {
+    templateVariableSamplesHost.innerHTML = '<div class="empty-row">Add variables like {{1}} in the message body to enter sample values.</div>';
+    updateTemplateSamplesValue();
+    return;
+  }
+
+  templateVariableSamplesHost.innerHTML = indexes.map((index) => `
+    <label class="template-variable-sample-row">
+      <span>{{${index}}}</span>
+      <input type="text" maxlength="120" placeholder="Sample value for {{${index}}}" value="${escapeHtml(previous.get(index) || "")}" data-template-sample-input="${index}">
+    </label>
+  `).join("");
+  updateTemplateSamplesValue();
+}
+
+function setTemplateVariableSampleValues(values = []) {
+  renderTemplateVariableSamples();
+  [...(templateVariableSamplesHost?.querySelectorAll("[data-template-sample-input]") || [])].forEach((input) => {
+    const index = Number(input.dataset.templateSampleInput) - 1;
+    input.value = values[index] || "";
+  });
+  updateTemplateSamplesValue();
+}
+
+function getDefaultTemplateCallNumber() {
+  const raw = setupState.tenant?.meta?.displayPhoneNumber
+    || setupState.tenant?.whatsappNumber
+    || setupState.user?.phone
+    || "";
+  const digits = String(raw).replace(/\D/g, "");
+  if (/^[6-9]\d{9}$/.test(digits)) return `+91${digits}`;
+  return digits.length >= 8 ? `+${digits}` : "";
+}
+
+function closeTemplateCtaMenu() {
+  if (templateCtaMenu) templateCtaMenu.hidden = true;
+}
+
+function addTemplateCta(type, values = {}) {
+  if (!templateCtaList) return;
+  closeTemplateCtaMenu();
+  const id = `cta-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const callNumber = values.phoneNumber || getDefaultTemplateCallNumber();
+  const label = values.text || "";
+  const row = document.createElement("div");
+  row.className = "template-cta-row";
+  row.dataset.templateCtaRow = type;
+
+  if (type === "call") {
+    row.innerHTML = `
+      <div>
+        <strong>Call</strong>
+        <small>${callNumber ? `Uses ${escapeHtml(callNumber)}` : "Connect or refresh your WhatsApp number before submitting."}</small>
+      </div>
+      <label for="${id}-label">
+        Button text
+        <input id="${id}-label" type="text" maxlength="25" value="${escapeHtml(label || "Call us")}" data-template-cta-label>
+      </label>
+      <input type="hidden" value="${escapeHtml(callNumber)}" data-template-cta-phone>
+      <button type="button" aria-label="Remove CTA" title="Remove CTA" data-template-remove-cta>&times;</button>
+    `;
+  } else if (type === "visit") {
+    row.innerHTML = `
+      <div>
+        <strong>Visit website</strong>
+        <small>Requires an https:// link.</small>
+      </div>
+      <label for="${id}-label">
+        Button text
+        <input id="${id}-label" type="text" maxlength="25" value="${escapeHtml(label || "Visit website")}" data-template-cta-label>
+      </label>
+      <label for="${id}-url">
+        Link
+        <input id="${id}-url" type="url" maxlength="300" placeholder="https://example.com" value="${escapeHtml(values.url || "")}" data-template-cta-url>
+      </label>
+      <button type="button" aria-label="Remove CTA" title="Remove CTA" data-template-remove-cta>&times;</button>
+    `;
+  } else {
+    row.innerHTML = `
+      <div>
+        <strong>Quick reply</strong>
+        <small>Shows a simple reply button.</small>
+      </div>
+      <label for="${id}-label">
+        Button text
+        <input id="${id}-label" type="text" maxlength="25" value="${escapeHtml(label || "Reply")}" data-template-cta-label>
+      </label>
+      <button type="button" aria-label="Remove CTA" title="Remove CTA" data-template-remove-cta>&times;</button>
+    `;
+  }
+
+  templateCtaList.appendChild(row);
+  updateTemplateDraftPreview();
+}
+
+function getTemplateCtas() {
+  return [...(templateCtaList?.querySelectorAll("[data-template-cta-row]") || [])].map((row) => {
+    const type = row.dataset.templateCtaRow;
+    const text = row.querySelector("[data-template-cta-label]")?.value.trim() || "";
+    if (type === "call") {
+      return {
+        type: "PHONE_NUMBER",
+        text,
+        phoneNumber: row.querySelector("[data-template-cta-phone]")?.value.trim() || getDefaultTemplateCallNumber()
+      };
+    }
+    if (type === "visit") {
+      return {
+        type: "URL",
+        text,
+        url: row.querySelector("[data-template-cta-url]")?.value.trim() || ""
+      };
+    }
+    return { type: "QUICK_REPLY", text };
+  });
+}
+
+function getTemplateSampleValues() {
+  const values = [];
+  [...(templateVariableSamplesHost?.querySelectorAll("[data-template-sample-input]") || [])].forEach((input) => {
+    values[Number(input.dataset.templateSampleInput) - 1] = input.value.trim();
+  });
+  return values;
+}
+
+function formatTemplatePreviewCategory(value) {
+  const labels = {
+    utility: "Utility template",
+    marketing: "Marketing template",
+    authentication: "Authentication template"
+  };
+  return labels[value] || "Select category";
+}
+
+function getTemplatePreviewMediaAsset() {
+  const mediaId = templateHeaderMediaSelect?.value || "";
+  if (!mediaId) return null;
+  return mediaState.assets.find((asset) => asset.mediaId === mediaId) || null;
+}
+
+function fillDraftTemplateBody(body, samples) {
+  const text = String(body || "").trim() || "Start writing the message body to preview the template.";
+  return text.replace(/\{\{\s*(\d+)\s*\}\}/g, (match, indexText) => {
+    const value = samples[Number(indexText) - 1];
+    return value || match;
+  });
+}
+
+function renderTemplatePreviewMedia(asset) {
+  if (!templatePreviewMedia) return;
+  if (!asset) {
+    templatePreviewMedia.hidden = true;
+    templatePreviewMedia.innerHTML = "";
+    return;
+  }
+
+  templatePreviewMedia.hidden = false;
+  if (asset.mediaType === "video") {
+    templatePreviewMedia.innerHTML = `<video src="${escapeHtml(asset.url)}" muted playsinline controls></video>`;
+  } else if (asset.mediaType === "document") {
+    templatePreviewMedia.innerHTML = `<a href="${escapeHtml(asset.url)}" target="_blank" rel="noopener">PDF document</a>`;
+  } else {
+    templatePreviewMedia.innerHTML = `<img src="${escapeHtml(asset.url)}" alt="Template header preview">`;
+  }
+}
+
+function renderTemplatePreviewCtas(buttons) {
+  if (!templatePreviewCtas) return;
+  const visibleButtons = buttons.filter((button) => button.text);
+  templatePreviewCtas.hidden = !visibleButtons.length;
+  templatePreviewCtas.innerHTML = visibleButtons.map((button) => {
+    const action = button.type === "PHONE_NUMBER" ? "call" : button.type === "URL" ? "url" : "reply";
+    return `
+      <span class="template-preview-cta is-${action}">
+        <i aria-hidden="true"></i>
+        <b>${escapeHtml(button.text)}</b>
+      </span>
+    `;
+  }).join("");
+}
+
+function updateTemplateDraftPreview() {
+  const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const templateName = (templateNameInput?.value || "").trim() || "Template draft";
+  const category = templateCategorySelect?.value || "";
+  const body = templateBodyInput?.value || "";
+  const samples = getTemplateSampleValues();
+  const headerType = templateHeaderTypeSelect?.value || "none";
+  const mediaAsset = headerType === "none" ? null : getTemplatePreviewMediaAsset();
+
+  if (templatePreviewName) templatePreviewName.textContent = templateName;
+  if (templatePreviewCategory) templatePreviewCategory.textContent = formatTemplatePreviewCategory(category);
+  if (templatePreviewBody) templatePreviewBody.textContent = fillDraftTemplateBody(body, samples);
+  if (templatePreviewTime) templatePreviewTime.textContent = now;
+  if (templatePreviewBubbleTime) templatePreviewBubbleTime.textContent = now;
+  renderTemplatePreviewMedia(mediaAsset);
+  renderTemplatePreviewCtas(getTemplateCtas());
+}
+
+function resetTemplateBuilder() {
+  clearTemplateLibrarySource();
+  if (templateCategorySelect) templateCategorySelect.value = "";
+  if (templateNameInput) templateNameInput.value = "";
+  if (templateLanguageSelect) templateLanguageSelect.value = "";
+  if (templateBodyInput) templateBodyInput.value = "";
+  if (templateSamplesInput) templateSamplesInput.value = "";
+  if (templateHeaderTypeSelect) templateHeaderTypeSelect.value = "none";
+  if (templateHeaderMediaSelect) templateHeaderMediaSelect.value = "";
+  if (templateCtaList) templateCtaList.innerHTML = "";
+  closeTemplateCtaMenu();
+  renderTemplateVariableSamples();
+  updateTemplateHeaderControls();
+  updateTemplateDraftPreview();
+}
+
 function getTemplatePayload() {
   return {
     name: templateNameInput?.value || "",
-    language: templateLanguageSelect?.value || "en",
+    language: templateLanguageSelect?.value || "",
     category: templateCategorySelect?.value || "",
     body: templateBodyInput?.value || "",
     variableSamples: templateSamplesInput?.value || "",
     headerType: templateHeaderTypeSelect?.value || "none",
-    headerMediaId: templateHeaderMediaSelect?.value || ""
+    headerMediaId: templateHeaderMediaSelect?.value || "",
+    buttons: getTemplateCtas()
   };
 }
 
@@ -2385,6 +2833,9 @@ function updateTemplateHeaderControls() {
   const isAuthentication = templateCategorySelect?.value === "authentication";
   if (isAuthentication) templateHeaderTypeSelect.value = "none";
   templateHeaderTypeSelect.disabled = isAuthentication;
+  const ctaBuilder = document.querySelector("[data-template-cta-builder]");
+  if (ctaBuilder) ctaBuilder.hidden = isAuthentication;
+  if (isAuthentication && templateCtaList) templateCtaList.innerHTML = "";
   const headerType = templateHeaderTypeSelect.value || "none";
   templateHeaderMediaField.hidden = headerType === "none";
   if (headerType === "none") {
@@ -2392,63 +2843,12 @@ function updateTemplateHeaderControls() {
       templateHeaderMediaSelect.required = false;
       templateHeaderMediaSelect.value = "";
     }
+    updateTemplateDraftPreview();
     return;
   }
   renderTemplateHeaderMediaOptions();
   if (templateHeaderMediaSelect) templateHeaderMediaSelect.required = true;
-}
-
-const templatePresets = {
-  order_update: {
-    name: "order_update",
-    category: "utility",
-    language: "en_US",
-    body: "Hi {{1}}, your order {{2}} has been shipped and will arrive by {{3}}.",
-    samples: "{{1}} = Name, {{2}} = ORD1234, {{3}} = 12 Jun"
-  },
-  appointment_reminder: {
-    name: "appointment_reminder",
-    category: "utility",
-    language: "en_US",
-    body: "Hi {{1}}, this is a reminder for your appointment on {{2}} at {{3}}.",
-    samples: "{{1}} = Name, {{2}} = 12 Jun, {{3}} = 10:00 AM"
-  },
-  payment_reminder: {
-    name: "payment_reminder",
-    category: "utility",
-    language: "en_US",
-    body: "Hi {{1}}, your payment of {{2}} is due on {{3}}.",
-    samples: "{{1}} = Name, {{2}} = Rs 100, {{3}} = 12 Jun"
-  },
-  offer_update: {
-    name: "offer_update",
-    category: "marketing",
-    language: "en_US",
-    body: "Hi {{1}}, your exclusive offer is active until {{2}}. Reply STOP to opt out.",
-    samples: "{{1}} = Name, {{2}} = 12 Jun"
-  },
-  otp_code: {
-    name: "otp_code",
-    category: "authentication",
-    language: "en_US",
-    body: "{{1}} is your verification code.",
-    samples: "{{1}} = 123456"
-  }
-};
-
-function applyTemplatePreset(presetId) {
-  const preset = templatePresets[presetId];
-  if (!preset) return;
-
-  clearTemplateLibrarySource();
-  if (templateNameInput) templateNameInput.value = preset.name;
-  if (templateCategorySelect) templateCategorySelect.value = preset.category;
-  if (templateLanguageSelect) templateLanguageSelect.value = preset.language;
-  if (templateBodyInput) templateBodyInput.value = preset.body;
-  if (templateSamplesInput) templateSamplesInput.value = preset.samples;
-  if (templateHeaderTypeSelect) templateHeaderTypeSelect.value = "none";
-  updateTemplateHeaderControls();
-  setTemplateMessage("");
+  updateTemplateDraftPreview();
 }
 
 // Template Library: browses Meta's library of pre-approved utility and
@@ -2580,17 +2980,51 @@ function libraryButtonLabel(button) {
   return button.text || LIB_BUTTON_LABEL[type] || formatLibraryLabel(button.type);
 }
 
+function normalizedLibraryButtonTypes(source = {}) {
+  return (source.buttons || [])
+    .map((button) => button.type === "COPY_CODE" ? "OTP" : String(button.type || "").toUpperCase())
+    .filter((type) => ["URL", "PHONE_NUMBER", "QUICK_REPLY"].includes(type));
+}
+
+function normalizedBuilderButtonTypes() {
+  return getTemplateCtas().map((button) => button.type);
+}
+
+function templateLibraryButtonsAreUnchanged(source) {
+  const sourceTypes = normalizedLibraryButtonTypes(source);
+  const builderTypes = normalizedBuilderButtonTypes();
+  return sourceTypes.length === builderTypes.length
+    && sourceTypes.every((type, index) => type === builderTypes[index]);
+}
+
+function addLibraryButtonsToCtaBuilder(tpl) {
+  if (!templateCtaList) return;
+  templateCtaList.innerHTML = "";
+  (tpl.buttons || []).forEach((button) => {
+    const type = button.type === "COPY_CODE" ? "OTP" : String(button.type || "").toUpperCase();
+    if (type === "URL") {
+      addTemplateCta("visit", {
+        text: button.text || "Visit website",
+        url: localStorage.getItem("intercon_lib_button_url") || button.url || ""
+      });
+    } else if (type === "PHONE_NUMBER") {
+      addTemplateCta("call", {
+        text: button.text || "Call us",
+        phoneNumber: localStorage.getItem("intercon_lib_button_phone") || button.phoneNumber || getDefaultTemplateCallNumber()
+      });
+    } else if (type === "QUICK_REPLY") {
+      addTemplateCta("quick_reply", {
+        text: button.text || "Reply"
+      });
+    }
+  });
+}
+
 // Resets the Create Template modal back to its normal (non-library) state.
 function clearTemplateLibrarySource() {
   templateLibraryState.builderSource = null;
   const note = templateModal?.querySelector("[data-template-library-note]");
   if (note) note.hidden = true;
-  const presetField = templateModal?.querySelector("[data-template-preset-field]");
-  if (presetField) presetField.hidden = false;
-  const urlField = templateModal?.querySelector("[data-template-library-url-field]");
-  if (urlField) urlField.hidden = true;
-  const phoneField = templateModal?.querySelector("[data-template-library-phone-field]");
-  if (phoneField) phoneField.hidden = true;
   const submitButton = templateModal?.querySelector("[data-submit-template]");
   if (submitButton) submitButton.textContent = "Send for Meta review";
 }
@@ -2615,36 +3049,16 @@ function useLibraryTemplateInBuilder(tpl) {
     templateLanguageSelect.value = tpl.language;
   }
   if (templateBodyInput) templateBodyInput.value = tpl.body;
-  if (templateSamplesInput) {
-    templateSamplesInput.value = (tpl.bodyParams || [])
-      .map((value, index) => `{{${index + 1}}} = ${String(value).trim()}`)
-      .join(", ");
-  }
+  setTemplateVariableSampleValues((tpl.bodyParams || []).map((value) => String(value).trim()));
   if (templateHeaderTypeSelect) templateHeaderTypeSelect.value = "none";
   updateTemplateHeaderControls();
-
-  const presetField = templateModal.querySelector("[data-template-preset-field]");
-  if (presetField) presetField.hidden = true;
-
-  const needsUrl = (tpl.buttons || []).some((button) => button.type === "URL");
-  const needsPhone = (tpl.buttons || []).some((button) => button.type === "PHONE_NUMBER");
-  const urlField = templateModal.querySelector("[data-template-library-url-field]");
-  const urlInput = templateModal.querySelector("[data-template-library-url]");
-  if (urlField) urlField.hidden = !needsUrl;
-  if (urlInput) urlInput.value = needsUrl ? (localStorage.getItem("intercon_lib_button_url") || "") : "";
-  const phoneField = templateModal.querySelector("[data-template-library-phone-field]");
-  const phoneInput = templateModal.querySelector("[data-template-library-phone]");
-  if (phoneField) phoneField.hidden = !needsPhone;
-  if (phoneInput) {
-    phoneInput.value = needsPhone
-      ? (localStorage.getItem("intercon_lib_button_phone") || setupState.tenant?.meta?.displayPhoneNumber || "")
-      : "";
-  }
+  addLibraryButtonsToCtaBuilder(tpl);
 
   const note = templateModal.querySelector("[data-template-library-note]");
   if (note) {
     const buttonSummary = (tpl.buttons || []).map(libraryButtonLabel).join(", ");
     note.textContent = `From Meta's Template Library: "${formatLibraryLabel(tpl.name)}" (${tpl.language})${buttonSummary ? ` · Buttons: ${buttonSummary}` : ""}. Keep the message text unchanged and it is usually approved instantly. Editing the text sends it through normal Meta review${buttonSummary ? " without the library buttons" : ""}.`;
+    note.textContent = `From Meta's Template Library: "${formatLibraryLabel(tpl.name)}" (${tpl.language})${buttonSummary ? ` - Buttons: ${buttonSummary}` : ""}. Keep the message text and CTA button types unchanged and it is usually approved instantly. Editing content or adding another CTA sends it through normal Meta review.`;
     note.hidden = false;
   }
 
@@ -2659,8 +3073,9 @@ function useLibraryTemplateInBuilder(tpl) {
 // Submits an unchanged library template through the instant-approval path.
 async function submitLibraryTemplate(source) {
   setTemplateMessage("Adding the pre-approved template from Meta's library...");
-  const websiteUrl = (templateModal?.querySelector("[data-template-library-url]")?.value || "").trim();
-  const phoneNumber = (templateModal?.querySelector("[data-template-library-phone]")?.value || "").trim();
+  const ctas = getTemplateCtas();
+  const websiteUrl = ctas.find((button) => button.type === "URL")?.url || "";
+  const phoneNumber = ctas.find((button) => button.type === "PHONE_NUMBER")?.phoneNumber || "";
 
   const data = await requestJson("/api/templates/library", {
     method: "POST",
@@ -2682,8 +3097,56 @@ async function submitLibraryTemplate(source) {
   await Promise.all([loadApprovedTemplates(), loadTemplates()]);
 }
 
+function validateTemplateBuilder() {
+  const payload = getTemplatePayload();
+  if (!payload.category) {
+    setTemplateMessage("Select the template category.", true);
+    templateCategorySelect?.focus();
+    return false;
+  }
+  if (!payload.name.trim()) {
+    setTemplateMessage("Template name is required.", true);
+    templateNameInput?.focus();
+    return false;
+  }
+  if (!payload.language) {
+    setTemplateMessage("Select the template language.", true);
+    templateLanguageSelect?.focus();
+    return false;
+  }
+  if (payload.category !== "authentication" && !payload.body.trim()) {
+    setTemplateMessage("Message body is required.", true);
+    templateBodyInput?.focus();
+    return false;
+  }
+  const missingSample = [...(templateVariableSamplesHost?.querySelectorAll("[data-template-sample-input]") || [])]
+    .find((input) => !input.value.trim());
+  if (missingSample) {
+    setTemplateMessage(`Enter a sample value for {{${missingSample.dataset.templateSampleInput}}}.`, true);
+    missingSample.focus();
+    return false;
+  }
+  if (payload.headerType !== "none" && !payload.headerMediaId) {
+    setTemplateMessage(`Choose a ${payload.headerType === "document" ? "PDF" : payload.headerType} from the Media Library.`, true);
+    templateHeaderMediaSelect?.focus();
+    return false;
+  }
+  const invalidButton = payload.buttons.find((button) => {
+    if (!button.text) return true;
+    if (button.type === "URL") return !/^https:\/\/\S+\.\S+/.test(button.url || "");
+    if (button.type === "PHONE_NUMBER") return !/^\+?\d{8,15}$/.test(button.phoneNumber || "");
+    return false;
+  });
+  if (invalidButton) {
+    setTemplateMessage("Complete the CTA button text and required URL or call number.", true);
+    return false;
+  }
+  return true;
+}
+
 async function submitTemplateForReview() {
-  if (!requirePaidPlanBeforeAction(setTemplateMessage)) return;
+  if (!requirePaidPlanBeforeAction(setTemplateMessage)) return false;
+  updateTemplateSamplesValue();
 
   // Unchanged library templates keep their pre-approved fast path; any edit
   // to the body, category, or language turns this into a normal submission.
@@ -2694,10 +3157,14 @@ async function submitTemplateForReview() {
     && (templateCategorySelect?.value || "") === source.category
     && (templateLanguageSelect?.value || "") === source.language
     && (templateHeaderTypeSelect?.value || "none") === "none"
+    && templateLibraryButtonsAreUnchanged(source)
   ) {
+    if (!validateTemplateBuilder()) return false;
     await submitLibraryTemplate(source);
-    return;
+    return true;
   }
+
+  if (!validateTemplateBuilder()) return false;
 
   setTemplateMessage("Submitting template to Meta...");
   const data = await requestJson("/api/templates", {
@@ -2706,6 +3173,7 @@ async function submitTemplateForReview() {
   });
   setTemplateMessage(data.message || "Template submitted to Meta for review.");
   await Promise.all([loadApprovedTemplates(), loadTemplates()]);
+  return true;
 }
 
 async function deleteTemplate(templateId, button) {
@@ -3217,6 +3685,25 @@ refreshSendDataButtons.forEach((button) => {
   });
 });
 
+reportPhoneInput?.addEventListener("input", () => {
+  reportPhoneInput.value = reportPhoneInput.value.replace(/\D/g, "").slice(0, 15);
+});
+
+reportForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  loadReports({ page: 1, resetFilters: true });
+});
+
+reportPreviousButton?.addEventListener("click", () => {
+  if (reportState.page <= 1) return;
+  loadReports({ page: reportState.page - 1 });
+});
+
+reportNextButton?.addEventListener("click", () => {
+  if (reportState.page >= reportState.totalPages) return;
+  loadReports({ page: reportState.page + 1 });
+});
+
 if (apiKeyForm) {
   apiKeyForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -3257,7 +3744,7 @@ if (copyApiKeyButton) {
 }
 
 if (openTemplateModalButton) {
-  openTemplateModalButton.addEventListener("click", openTemplateModal);
+  openTemplateModalButton.addEventListener("click", () => openTemplateModal({ reset: true }));
 }
 
 closeTemplateModalButtons.forEach((button) => {
@@ -3295,8 +3782,8 @@ submitTemplateButtons.forEach((button) => {
   button.addEventListener("click", async () => {
     button.disabled = true;
     try {
-      await submitTemplateForReview();
-      closeTemplateModal();
+      const submitted = await submitTemplateForReview();
+      if (submitted) closeTemplateModal();
     } catch (error) {
       setTemplateMessage(error.message, true);
     } finally {
@@ -3305,15 +3792,43 @@ submitTemplateButtons.forEach((button) => {
   });
 });
 
-if (templatePresetSelect) {
-  templatePresetSelect.addEventListener("change", () => {
-    applyTemplatePreset(templatePresetSelect.value);
-  });
-  applyTemplatePreset(templatePresetSelect.value || "order_update");
-}
-
 templateHeaderTypeSelect?.addEventListener("change", updateTemplateHeaderControls);
-templateCategorySelect?.addEventListener("change", updateTemplateHeaderControls);
+templateHeaderMediaSelect?.addEventListener("change", updateTemplateDraftPreview);
+templateNameInput?.addEventListener("input", updateTemplateDraftPreview);
+templateLanguageSelect?.addEventListener("change", updateTemplateDraftPreview);
+templateCategorySelect?.addEventListener("change", () => {
+  updateTemplateHeaderControls();
+  if (templateCategorySelect.value === "authentication") {
+    if (templateCtaList) templateCtaList.innerHTML = "";
+    closeTemplateCtaMenu();
+  }
+  updateTemplateDraftPreview();
+});
+templateBodyInput?.addEventListener("input", () => {
+  renderTemplateVariableSamples();
+  updateTemplateDraftPreview();
+});
+templateVariableSamplesHost?.addEventListener("input", (event) => {
+  if (event.target.closest("[data-template-sample-input]")) updateTemplateSamplesValue();
+});
+templateAddCtaButton?.addEventListener("click", () => {
+  if (!templateCtaMenu) return;
+  templateCtaMenu.hidden = !templateCtaMenu.hidden;
+});
+templateCtaMenu?.addEventListener("click", (event) => {
+  const option = event.target.closest("[data-template-cta-type]");
+  if (!option) return;
+  addTemplateCta(option.dataset.templateCtaType);
+});
+templateCtaList?.addEventListener("click", (event) => {
+  const removeButton = event.target.closest("[data-template-remove-cta]");
+  if (!removeButton) return;
+  removeButton.closest("[data-template-cta-row]")?.remove();
+  updateTemplateDraftPreview();
+});
+templateCtaList?.addEventListener("input", (event) => {
+  if (event.target.closest("[data-template-cta-label], [data-template-cta-url]")) updateTemplateDraftPreview();
+});
 
 // Template Library: search/filter Meta's library and adopt templates into the WABA.
 document.querySelector("[data-lib-refresh]")?.addEventListener("click", () => loadTemplateLibrary());
@@ -3419,7 +3934,7 @@ portalViews.forEach((view) => {
 });
 
 // ============================================================
-// Media Library: tenant-scoped Cloudinary photos and videos.
+// Media Library: tenant-scoped Cloudinary photos, videos, and PDFs.
 // ============================================================
 function setMediaStatus(message, isError = false) {
   if (!mediaStatus) return;
@@ -3458,7 +3973,7 @@ function renderMediaLibrary() {
       <div class="media-library-empty">
         <span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM7 15l3-3 2 2 2-2 3 3M9 9h.01"/></svg></span>
         <strong>${mediaState.assets.length ? "No media matches this filter" : "Your media library is empty"}</strong>
-        <small>${mediaState.assets.length ? "Choose another media type." : "Add a photo or video to create your first reusable asset."}</small>
+        <small>${mediaState.assets.length ? "Choose another media type." : "Add a photo, video, or PDF to create your first reusable asset."}</small>
       </div>`;
     return;
   }
@@ -3471,13 +3986,16 @@ function renderMediaLibrary() {
       .join(" · ");
     const preview = asset.mediaType === "video"
       ? `<video src="${escapeHtml(asset.url)}" preload="metadata" controls playsinline></video>`
-      : `<img src="${escapeHtml(asset.url)}" alt="${escapeHtml(asset.title)}" loading="lazy">`;
+      : asset.mediaType === "document"
+        ? `<a class="media-document-preview" href="${escapeHtml(asset.url)}" target="_blank" rel="noopener">PDF</a>`
+        : `<img src="${escapeHtml(asset.url)}" alt="${escapeHtml(asset.title)}" loading="lazy">`;
+    const mediaLabel = asset.mediaType === "video" ? "Video" : asset.mediaType === "document" ? "PDF" : "Photo";
 
     return `
       <article class="media-card">
         <div class="media-card-preview">
           ${preview}
-          <span class="media-type-badge">${asset.mediaType === "video" ? "Video" : "Photo"}</span>
+          <span class="media-type-badge">${mediaLabel}</span>
           <button class="media-card-delete" type="button" data-delete-media="${escapeHtml(asset.mediaId)}" data-media-title="${escapeHtml(asset.title)}" aria-label="Delete ${escapeHtml(asset.title)}" title="Delete media">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5"/></svg>
           </button>
@@ -3526,7 +4044,7 @@ async function loadMediaLibrary(force = false) {
 function openMediaModal() {
   if (!mediaModal) return;
   mediaUploadForm?.reset();
-  if (mediaFileLabel) mediaFileLabel.textContent = "Choose a photo or video";
+  if (mediaFileLabel) mediaFileLabel.textContent = "Choose a photo, video, or PDF";
   setMediaUploadStatus("");
   mediaModal.hidden = false;
   document.body.classList.add("modal-open");
@@ -3629,9 +4147,9 @@ mediaGrid?.addEventListener("click", (event) => {
 });
 
 // ============================================================
-// Inbox: two-way WhatsApp conversations (WhatsApp-Web style on
-// desktop, single-pane chat on mobile). Inbound replies arrive via
-// the Meta webhook; the browser polls to surface them.
+// Inbox: two-way WhatsApp conversations (WhatsApp-Web style on desktop,
+// single-pane chat on mobile). Inbound replies arrive via Meta webhook;
+// WebSocket events refresh the browser, with polling kept as a fallback.
 // ============================================================
 const inboxApp = document.querySelector("[data-inbox-app]");
 const inboxListPane = document.querySelector("[data-inbox-list-pane]");
@@ -3656,6 +4174,7 @@ const inboxPhoneMedia = window.matchMedia("(max-width: 560px)");
 const INBOX_POLL_MS = 15000;
 const INBOX_UNREAD_POLL_MS = 30000;
 const INBOX_STATUS_REFRESH_MS = 60000;
+const INBOX_WS_RECONNECT_MAX_MS = 30000;
 
 const inboxState = {
   conversations: [],
@@ -3668,6 +4187,10 @@ const inboxState = {
   search: "",
   pollTimer: null,
   unreadTimer: null,
+  realtimeSocket: null,
+  realtimeReconnectTimer: null,
+  realtimeReconnectDelay: 1000,
+  realtimeStarted: false,
   loadingActive: false,
   polling: false
 };
@@ -4158,6 +4681,69 @@ async function pollInboxView() {
   }
 }
 
+function getInboxRealtimeUrl() {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.host}/ws`;
+}
+
+function scheduleInboxRealtimeReconnect() {
+  if (!inboxState.realtimeStarted || inboxState.realtimeReconnectTimer) return;
+  const delay = inboxState.realtimeReconnectDelay;
+  inboxState.realtimeReconnectDelay = Math.min(
+    INBOX_WS_RECONNECT_MAX_MS,
+    Math.round(inboxState.realtimeReconnectDelay * 1.7)
+  );
+  inboxState.realtimeReconnectTimer = setTimeout(() => {
+    inboxState.realtimeReconnectTimer = null;
+    connectInboxRealtime();
+  }, delay);
+}
+
+function handleInboxRealtimeEvent(event) {
+  if (event?.type !== "inbox:updated") return;
+  if (isInboxViewVisible()) {
+    pollInboxView();
+  } else {
+    pollInboxUnread();
+  }
+}
+
+function connectInboxRealtime() {
+  if (!("WebSocket" in window) || inboxState.realtimeSocket) return;
+
+  const socket = new WebSocket(getInboxRealtimeUrl());
+  inboxState.realtimeSocket = socket;
+
+  socket.addEventListener("open", () => {
+    inboxState.realtimeReconnectDelay = 1000;
+  });
+
+  socket.addEventListener("message", (message) => {
+    let event;
+    try {
+      event = JSON.parse(message.data);
+    } catch (error) {
+      return;
+    }
+    handleInboxRealtimeEvent(event);
+  });
+
+  socket.addEventListener("close", () => {
+    if (inboxState.realtimeSocket === socket) inboxState.realtimeSocket = null;
+    scheduleInboxRealtimeReconnect();
+  });
+
+  socket.addEventListener("error", () => {
+    socket.close();
+  });
+}
+
+function startInboxRealtime() {
+  if (inboxState.realtimeStarted) return;
+  inboxState.realtimeStarted = true;
+  connectInboxRealtime();
+}
+
 function startInboxView() {
   loadInboxConversations();
   if (inboxState.activeId) refreshActiveConversation();
@@ -4218,9 +4804,6 @@ function onPortalViewShown(viewId) {
   }
   if (viewId === "developer-api" || viewId === "api") {
     loadApiKeys().catch((error) => setApiMessage(error.message, true));
-  }
-  if (viewId === "reports") {
-    loadSendHistory().catch((error) => setSendMessage(error.message, true));
   }
   if (viewId === "home" || viewId === "setup") {
     Promise.allSettled([
@@ -4296,6 +4879,7 @@ document.addEventListener("visibilitychange", () => {
     pollInboxView();
   } else if (document.visibilityState === "visible") {
     pollInboxUnread();
+    if (inboxState.realtimeStarted && !inboxState.realtimeSocket) connectInboxRealtime();
   }
 });
 
@@ -4679,16 +5263,20 @@ document.addEventListener("keydown", (event) => {
 
 showPortalView(getInitialViewId(), true);
 renderApiBaseUrl();
-loadAuthenticatedProfile().catch(() => {
-  window.location.replace("/");
-});
+loadAuthenticatedProfile()
+  .then(startInboxRealtime)
+  .catch(() => {
+    window.location.replace("/");
+  });
 
 // Covers browsers where the portal gets restored from back/forward cache
 // despite the no-store header (e.g. after logout) — re-check the session
 // instead of leaving stale account data on screen.
 window.addEventListener("pageshow", (event) => {
   if (event.persisted) {
-    loadAuthenticatedProfile().catch(() => window.location.replace("/"));
+    loadAuthenticatedProfile()
+      .then(startInboxRealtime)
+      .catch(() => window.location.replace("/"));
   }
 });
 

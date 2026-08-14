@@ -17,6 +17,7 @@ const { fetchWithPolicy } = require("../utils/httpClient");
 const wabaSendHealthCache = new Map();
 const WABA_SEND_HEALTH_TTL_MS = 30 * 1000;
 let lastStaleRecoveryAt = 0;
+const MESSAGE_REPORT_STATUSES = new Set(["queued", "scheduled", "processing", "accepted", "sent", "delivered", "read", "failed", "uncertain"]);
 
 function normalizeVariables(variables) {
   if (Array.isArray(variables)) {
@@ -111,15 +112,19 @@ function assertSendMediaCompatible(asset, headerType) {
   }
   const valid = headerType === "image"
     ? ["image/jpeg", "image/png"].includes(asset.mimeType)
-    : ["video/mp4", "video/3gpp"].includes(asset.mimeType);
+    : headerType === "document"
+      ? asset.mimeType === "application/pdf"
+      : ["video/mp4", "video/3gpp"].includes(asset.mimeType);
   if (!valid) {
     throw new HttpError(400, headerType === "image"
       ? "WhatsApp image headers require a JPG or PNG asset"
-      : "WhatsApp video headers require an MP4 or 3GP asset");
+      : headerType === "document"
+        ? "WhatsApp document headers require a PDF asset"
+        : "WhatsApp video headers require an MP4 or 3GP asset");
   }
-  const maximumBytes = headerType === "image" ? 5 * 1024 * 1024 : 16 * 1024 * 1024;
+  const maximumBytes = headerType === "image" ? 5 * 1024 * 1024 : headerType === "document" ? 100 * 1024 * 1024 : 16 * 1024 * 1024;
   if (Number(asset.bytes || 0) > maximumBytes) {
-    throw new HttpError(400, `WhatsApp ${headerType} headers must be ${headerType === "image" ? "5" : "16"} MB or smaller`);
+    throw new HttpError(400, `WhatsApp ${headerType} headers must be ${headerType === "image" ? "5" : headerType === "document" ? "100" : "16"} MB or smaller`);
   }
 }
 
@@ -461,11 +466,39 @@ async function fetchWabaCanSendTemplates(tenant, accessToken) {
   }
 }
 
+function parseMessageReportDate(value, fieldName, endOfDay = false) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+    ? `${raw}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`
+    : raw;
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) {
+    throw new HttpError(400, `${fieldName} must be a valid date`);
+  }
+  return date;
+}
+
+function parseMessagePagination(query = {}) {
+  const page = Math.max(1, Number.parseInt(query.page, 10) || 1);
+  const limit = Math.min(Math.max(1, Number.parseInt(query.limit, 10) || 25), 100);
+  return {
+    page,
+    limit,
+    skip: (page - 1) * limit
+  };
+}
+
 function buildMessageFilter(tenantId, query = {}) {
   const filter = { tenantId };
 
-  if (query.status) {
-    filter.status = String(query.status).trim();
+  const status = String(query.status || "").trim().toLowerCase();
+  if (status && status !== "all") {
+    if (!MESSAGE_REPORT_STATUSES.has(status)) {
+      throw new HttpError(400, "Message status filter is invalid");
+    }
+    filter.status = status === "delivered" ? { $in: ["delivered", "read"] } : status;
   }
 
   if (query.to || query.phone || query.mobile) {
@@ -474,8 +507,13 @@ function buildMessageFilter(tenantId, query = {}) {
 
   if (query.from || query.to_date || query.until) {
     filter.createdAt = {};
-    if (query.from) filter.createdAt.$gte = new Date(query.from);
-    if (query.to_date || query.until) filter.createdAt.$lte = new Date(query.to_date || query.until);
+    const from = parseMessageReportDate(query.from, "From date");
+    const to = parseMessageReportDate(query.to_date || query.until, "To date", true);
+    if (from) filter.createdAt.$gte = from;
+    if (to) filter.createdAt.$lte = to;
+    if (from && to && from > to) {
+      throw new HttpError(400, "From date must be before or equal to To date");
+    }
   }
 
   return filter;
@@ -484,6 +522,28 @@ function buildMessageFilter(tenantId, query = {}) {
 async function listMessages(tenantId, query = {}) {
   const limit = Math.min(Number(query.limit) || 100, 500);
   return Message.find(buildMessageFilter(tenantId, query)).sort({ createdAt: -1 }).limit(limit).lean();
+}
+
+async function listMessagesPage(tenantId, query = {}) {
+  const filter = buildMessageFilter(tenantId, query);
+  const { page, limit, skip } = parseMessagePagination(query);
+  const [messages, total] = await Promise.all([
+    Message.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    Message.countDocuments(filter)
+  ]);
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+
+  return {
+    messages,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages,
+      hasPrevious: page > 1,
+      hasNext: page < totalPages
+    }
+  };
 }
 
 async function getMessage(tenantId, messageId) {
@@ -1064,6 +1124,7 @@ module.exports = {
   getMessage,
   listBulkRecipients,
   listMessages,
+  listMessagesPage,
   previewBulkTemplateMessages,
   processNextQueuedMessage,
   summarizeMessages,

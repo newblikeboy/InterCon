@@ -6,6 +6,7 @@ process.env.JWT_SECRET = "test-jwt-secret-with-at-least-thirty-two-characters";
 process.env.DATA_ENCRYPTION_KEY = "test-data-key-that-is-distinct-and-at-least-thirty-two";
 
 const authorize = require("../src/middleware/authorize");
+const billingService = require("../src/services/billing.service");
 const { signAuthToken, verifyAuthToken } = require("../src/services/authToken.service");
 const { encryptSecret, decryptSecret } = require("../src/utils/crypto");
 
@@ -40,4 +41,11 @@ test("stored secrets use authenticated encryption", () => {
 
   const tampered = `${encrypted.slice(0, -1)}${encrypted.endsWith("a") ? "b" : "a"}`;
   assert.throws(() => decryptSecret(tampered));
+});
+
+test("billing plans expose the configured public prices", () => {
+  const plans = billingService.getPlans();
+  assert.equal(plans.find((plan) => plan.id === "monthly")?.amount, 1000);
+  assert.equal(plans.find((plan) => plan.id === "quarterly")?.amount, 2500);
+  assert.equal(plans.find((plan) => plan.id === "yearly")?.amount, 9000);
 });

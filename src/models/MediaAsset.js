@@ -30,7 +30,7 @@ const mediaAssetSchema = new mongoose.Schema(
     },
     mediaType: {
       type: String,
-      enum: ["image", "video"],
+      enum: ["image", "video", "document"],
       required: true,
       index: true
     },

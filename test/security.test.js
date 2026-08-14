@@ -38,6 +38,23 @@ test("unsafe browser requests require a trusted origin", async () => {
     .expect(403);
 });
 
+test("signup rejects non-numeric or non-10-digit mobile numbers", async () => {
+  const response = await request(app)
+    .post("/api/auth/signup")
+    .set("Origin", "http://localhost:5000")
+    .send({
+      business_name: "Example Business",
+      contact_person: "Example Owner",
+      email: "owner@example.com",
+      mobile_number: "+91 98765 43210",
+      password: "Password1",
+      confirm_password: "Password1"
+    })
+    .expect(400);
+
+  assert.equal(response.body.message, "Enter a 10-digit mobile number using numbers only");
+});
+
 test("Meta webhooks reject missing signatures", async () => {
   await request(app)
     .post("/api/webhooks/meta")

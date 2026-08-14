@@ -4,6 +4,7 @@ const env = require("./config/env");
 const { connectDatabase } = require("./config/database");
 const { connectRedis, closeRedis } = require("./config/redis");
 const { assertProductionEnvironment } = require("./config/validate");
+const { closeRealtime, initRealtime } = require("./services/realtime.service");
 const mongoose = require("mongoose");
 
 async function startServer() {
@@ -15,6 +16,7 @@ async function startServer() {
   server.headersTimeout = 15000;
   server.requestTimeout = 120000;
   server.maxRequestsPerSocket = 1000;
+  initRealtime(server);
 
   server.listen(env.port, () => {
     console.log(`InterCon is running on http://localhost:${env.port}`);
@@ -25,6 +27,7 @@ async function startServer() {
     const forceTimer = setTimeout(() => process.exit(1), 15000);
     forceTimer.unref();
     server.close(async () => {
+      closeRealtime();
       await Promise.allSettled([mongoose.disconnect(), closeRedis()]);
       clearTimeout(forceTimer);
       process.exit(0);

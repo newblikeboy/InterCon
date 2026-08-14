@@ -31,13 +31,14 @@ const getMessage = asyncHandler(async (req, res) => {
 });
 
 const listReports = asyncHandler(async (req, res) => {
-  const messages = await messageService.listMessages(req.tenantId, req.query);
+  const result = await messageService.listMessagesPage(req.tenantId, req.query);
+  const messages = result.messages || [];
   const summary = messageService.summarizeMessages(messages);
 
   res.json({
     success: true,
     summary,
-    messages
+    ...result
   });
 });
 

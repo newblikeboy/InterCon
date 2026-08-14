@@ -1705,7 +1705,8 @@ address {
     minmax(110px, 0.85fr)
     minmax(70px, 0.5fr)
     minmax(90px, 0.7fr)
-    minmax(160px, 1fr);
+    minmax(160px, 1fr)
+    minmax(82px, 0.55fr);
 }
 
 .contact-tag-value {
@@ -1726,6 +1727,12 @@ address {
   gap: 8px;
   min-width: 0;
   text-align: left;
+}
+
+.contact-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .contact-group-value {
@@ -1764,7 +1771,8 @@ address {
   box-shadow: 0 0 0 3px rgba(45, 108, 223, 0.1);
 }
 
-.console-body .table-row .contact-group-assign {
+.console-body .table-row .contact-group-assign,
+.console-body .table-row .contact-edit-action {
   flex: 0 0 auto;
   display: grid;
   place-items: center;
@@ -1779,13 +1787,20 @@ address {
   transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
 }
 
-.console-body .table-row .contact-group-assign:hover {
+.console-body .table-row .contact-edit-action {
+  background: #fff;
+  color: var(--muted);
+}
+
+.console-body .table-row .contact-group-assign:hover,
+.console-body .table-row .contact-edit-action:hover {
   border-color: rgba(31, 111, 235, 0.48);
   background: rgba(31, 111, 235, 0.14);
   transform: translateY(-1px);
 }
 
-.console-body .table-row .contact-group-assign svg {
+.console-body .table-row .contact-group-assign svg,
+.console-body .table-row .contact-edit-action svg {
   width: 17px;
   height: 17px;
   fill: none;
@@ -1793,6 +1808,18 @@ address {
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.contact-edit-check {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center;
+  gap: 10px !important;
+}
+
+.contact-edit-check input {
+  width: 16px;
+  height: 16px;
 }
 
 /* --- Manage Groups ------------------------------------------------------- */
@@ -7901,6 +7928,67 @@ address {
   font-size: 18px;
 }
 
+.inbox-list-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.inbox-live-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.inbox-live-state i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #9aa7b0;
+  box-shadow: 0 0 0 3px rgba(154, 167, 176, 0.14);
+}
+
+.inbox-live-state[data-state="live"] {
+  border-color: rgba(18, 160, 98, 0.22);
+  color: #107a4d;
+  background: #f1fbf6;
+}
+
+.inbox-live-state[data-state="live"] i {
+  background: #12a062;
+  box-shadow: 0 0 0 4px rgba(18, 160, 98, 0.14);
+  animation: inbox-live-dot 1.4s ease-in-out infinite;
+}
+
+.inbox-live-state[data-state="connecting"],
+.inbox-live-state[data-state="reconnecting"] {
+  border-color: rgba(214, 138, 36, 0.24);
+  color: #9a5b0a;
+  background: #fff8eb;
+}
+
+.inbox-live-state[data-state="connecting"] i,
+.inbox-live-state[data-state="reconnecting"] i {
+  background: #d68a24;
+  box-shadow: 0 0 0 4px rgba(214, 138, 36, 0.14);
+}
+
+.inbox-live-state[data-state="fallback"] {
+  background: var(--soft);
+}
+
 .inbox-search {
   display: flex;
   align-items: center;
@@ -8268,6 +8356,7 @@ address {
 }
 
 .inbox-chat-who {
+  flex: 1 1 auto;
   min-width: 0;
   display: grid;
 }
@@ -8284,6 +8373,17 @@ address {
   font-size: 12px;
 }
 
+.inbox-chat-live {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #e8f7ee;
+  color: #107a4d;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .inbox-messages {
   overflow-y: auto;
   min-height: 0;
@@ -8295,6 +8395,10 @@ address {
   background-image:
     radial-gradient(rgba(0, 0, 0, 0.035) 1px, transparent 1px);
   background-size: 22px 22px;
+}
+
+.inbox-chat-active.has-live-update .inbox-messages {
+  animation: inbox-live-surface 900ms ease;
 }
 
 .inbox-day-chip {
@@ -8442,6 +8546,28 @@ address {
   margin: 0;
 }
 
+@keyframes inbox-live-dot {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.28);
+  }
+}
+
+@keyframes inbox-live-surface {
+  0% {
+    box-shadow: inset 0 0 0 0 rgba(18, 160, 98, 0);
+  }
+  35% {
+    box-shadow: inset 0 0 0 2px rgba(18, 160, 98, 0.22);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 rgba(18, 160, 98, 0);
+  }
+}
+
 /* ---- Tablet / narrow desktop: keep BOTH panes (WhatsApp Web style) -------
    The conversation list stays visible continuously; only the list column is
    slimmed so the chat keeps enough room. Single-pane is reserved for real
@@ -8481,6 +8607,30 @@ address {
 
   .inbox-back:active {
     background: rgba(31, 111, 235, 0.14);
+  }
+
+  .inbox-list-head {
+    padding: 12px;
+  }
+
+  .inbox-list-actions {
+    gap: 6px;
+  }
+
+  .inbox-live-state {
+    max-width: 110px;
+    padding: 0 8px;
+  }
+
+  .inbox-live-state span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .inbox-chat-live {
+    max-width: 112px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .inbox-bubble {

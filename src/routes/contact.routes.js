@@ -11,6 +11,7 @@ router.get("/", contactController.listContacts);
 router.post("/", authorize("owner", "admin"), contactController.createContact);
 router.post("/import", authorize("owner", "admin"), contactController.importContacts);
 router.get("/opt-outs", contactController.listOptOuts);
+router.put("/:contactId", authorize("owner", "admin"), contactController.updateContact);
 router.put("/:contactId/group", authorize("owner", "admin"), contactController.setContactGroup);
 router.get("/segments", contactController.listSegments);
 router.post("/segments", authorize("owner", "admin"), contactController.createSegment);

@@ -104,6 +104,49 @@ async function createContact(tenantId, body) {
   );
 }
 
+async function updateContact(tenantId, contactId, body = {}) {
+  if (!mongoose.Types.ObjectId.isValid(contactId)) {
+    throw new HttpError(400, "Contact ID is invalid");
+  }
+
+  const contact = normalizeContact(body);
+  if (!contact.name || !contact.phone) {
+    throw new HttpError(400, "Contact name and phone are required");
+  }
+  assertValidWhatsappPhone(contact.phone);
+
+  const status = String(body.status || "active").trim();
+  if (!["active", "opted_out", "blocked"].includes(status)) {
+    throw new HttpError(400, "Contact status is invalid");
+  }
+
+  const existing = await Contact.findOne({
+    tenantId,
+    phone: contact.phone,
+    _id: { $ne: contactId }
+  }).select("_id").lean();
+  if (existing) {
+    throw new HttpError(409, "Another contact already uses this WhatsApp number");
+  }
+
+  const updated = await Contact.findOneAndUpdate(
+    { _id: contactId, tenantId },
+    {
+      $set: {
+        ...contact,
+        status
+      }
+    },
+    { returnDocument: "after" }
+  );
+
+  if (!updated) {
+    throw new HttpError(404, "Contact not found");
+  }
+
+  return updated;
+}
+
 async function importContacts(tenantId, contacts = []) {
   if (!Array.isArray(contacts) || contacts.length === 0) {
     throw new HttpError(400, "At least one contact is required");
@@ -312,6 +355,7 @@ async function deleteSegment(tenantId, segmentId) {
 module.exports = {
   listContacts,
   createContact,
+  updateContact,
   importContacts,
   listOptOuts,
   createSegment,

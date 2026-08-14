@@ -48,6 +48,19 @@ const contactTemplateButtons = document.querySelectorAll("[data-contact-template
 const contactMessage = document.querySelector("[data-contact-message]");
 const contactList = document.querySelector("[data-contact-list]");
 const refreshContactsButton = document.querySelector("[data-refresh-contacts]");
+const contactEditModal = document.querySelector("[data-contact-edit-modal]");
+const contactEditForm = document.querySelector("[data-contact-edit-form]");
+const contactEditName = document.querySelector("[data-contact-edit-name]");
+const contactEditPhone = document.querySelector("[data-contact-edit-phone]");
+const contactEditEmail = document.querySelector("[data-contact-edit-email]");
+const contactEditCity = document.querySelector("[data-contact-edit-city]");
+const contactEditTag = document.querySelector("[data-contact-edit-tag]");
+const contactEditOptIn = document.querySelector("[data-contact-edit-opt-in]");
+const contactEditProof = document.querySelector("[data-contact-edit-proof]");
+const contactEditStatus = document.querySelector("[data-contact-edit-status]");
+const contactEditMessage = document.querySelector("[data-contact-edit-message]");
+const contactEditSave = document.querySelector("[data-contact-edit-save]");
+const closeContactEditButtons = document.querySelectorAll("[data-close-contact-edit]");
 const templateNameInput = document.querySelector("[data-template-name]");
 const templateLanguageSelect = document.querySelector("[data-template-language]");
 const templateCategorySelect = document.querySelector("[data-template-category]");
@@ -191,6 +204,10 @@ const sendVariableDataState = {
   sampleValues: [],
   rows: [],
   fileName: ""
+};
+const contactEditState = {
+  contactId: null,
+  saving: false
 };
 const bulkPreviewState = {
   rows: [],
@@ -1419,7 +1436,7 @@ function parseCsv(text) {
   const lines = text.split(/\r?\n/).filter((line) => line.trim());
   if (lines.length < 2) return [];
 
-  const headers = lines[0].split(",").map((header) => header.trim());
+  const headers = lines[0].replace(/^\uFEFF/, "").split(",").map((header) => header.trim());
 
   return lines.slice(1).map((line) => {
     const values = line.split(",").map((value) => value.trim());
@@ -1428,6 +1445,39 @@ function parseCsv(text) {
       return row;
     }, {});
   });
+}
+
+function isSpreadsheetFile(file) {
+  return /\.(xlsx|xls)$/i.test(file?.name || "");
+}
+
+async function parseSpreadsheetRows(file) {
+  if (!window.XLSX) {
+    throw new Error("Spreadsheet parser could not be loaded. Refresh the page and try again.");
+  }
+
+  const workbook = window.XLSX.read(await file.arrayBuffer(), {
+    type: "array",
+    cellDates: false,
+    raw: false
+  });
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) return [];
+
+  return window.XLSX.utils.sheet_to_json(sheet, {
+    defval: "",
+    raw: false
+  }).map((row) => Object.entries(row).reduce((normalized, [key, value]) => {
+    normalized[String(key || "").trim()] = String(value ?? "").trim();
+    return normalized;
+  }, {}));
+}
+
+async function parseContactImportFile(file) {
+  if (isSpreadsheetFile(file)) return parseSpreadsheetRows(file);
+  if (/\.csv$/i.test(file.name || "") || /csv/i.test(file.type || "")) return parseCsv(await file.text());
+  throw new Error("Upload a CSV, XLSX, or XLS contact file.");
 }
 
 // Header names mirror the fields accepted by contact.service.normalizeContact,
@@ -1452,7 +1502,7 @@ function downloadContactCsvTemplate() {
   link.click();
   link.remove();
   URL.revokeObjectURL(blobUrl);
-  setContactMessage("Downloaded contacts_template.csv. Fill in your contacts, then use Upload CSV.");
+  setContactMessage("Downloaded contacts_template.csv. Fill in your contacts, then use Upload contacts.");
 }
 
 function renderContactRows(contacts) {
@@ -1477,6 +1527,16 @@ function renderContactRows(contacts) {
             <span class="contact-group-dot" aria-hidden="true"></span>
             <strong>${escapeHtml(group?.name || "No group")}</strong>
           </span>
+        </span>
+        <span class="contact-row-actions" data-label="Actions">
+          <button
+            type="button"
+            class="contact-edit-action"
+            data-edit-contact="${escapeHtml(contact._id)}"
+            aria-label="Edit contact ${escapeHtml(contactLabel)}"
+            title="Edit contact">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
+          </button>
           <button
             type="button"
             class="contact-group-assign"
@@ -1789,8 +1849,8 @@ function updateSendVariableHint() {
     sendVariableDataState.fileName = "";
   }
   sendVariableHint.textContent = parameterCount > 10
-    ? "Bulk CSV sending supports templates with up to 10 variables."
-    : `Upload one CSV row per customer. Phone uniquely matches that row's ${parameterCount} value${parameterCount === 1 ? "" : "s"}; sending is blocked if any eligible selected phone is missing.`;
+    ? "Bulk file sending supports templates with up to 10 variables."
+    : `Upload one CSV or Excel row per customer. Phone uniquely matches that row's ${parameterCount} value${parameterCount === 1 ? "" : "s"}; sending is blocked if any eligible selected phone is missing.`;
   renderSendVariableEditor();
   updateWhatsAppPreview();
 }
@@ -1808,7 +1868,7 @@ function renderSendVariableEditor() {
     return;
   }
   if (sendVariableDataState.parameterCount > 10) {
-    sendVariableEditor.innerHTML = `<div class="send-variable-empty error">This template has ${sendVariableDataState.parameterCount} variables. Bulk CSV sending supports a maximum of 10.</div>`;
+    sendVariableEditor.innerHTML = `<div class="send-variable-empty error">This template has ${sendVariableDataState.parameterCount} variables. Bulk file sending supports a maximum of 10.</div>`;
     updateSendRecipientSummary();
     return;
   }
@@ -1837,8 +1897,8 @@ function renderSendVariableEditor() {
       <div class="send-variable-actions">
         <button type="button" data-download-variable-csv>Download CSV for selected recipients</button>
         <label>
-          Upload completed CSV
-          <input type="file" accept=".csv,text/csv" hidden data-upload-variable-csv>
+          Upload completed file
+          <input type="file" accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden data-upload-variable-csv>
         </label>
         ${sendVariableDataState.rows.length ? `<button type="button" class="details" data-see-variable-details>See details</button>` : ""}
         ${sendVariableDataState.rows.length ? `<button type="button" class="clear" data-clear-variable-csv>Clear file</button>` : ""}
@@ -1847,10 +1907,10 @@ function renderSendVariableEditor() {
       <div class="send-variable-file-state${sendVariableDataState.rows.length ? " is-ready" : ""}">
         <strong>${sendVariableDataState.rows.length
           ? `${sendVariableDataState.rows.length} phone row${sendVariableDataState.rows.length === 1 ? "" : "s"} loaded`
-          : "No variable CSV uploaded"}</strong>
+          : "No variable file uploaded"}</strong>
         <small>${sendVariableDataState.rows.length
-          ? `${escapeHtml(sendVariableDataState.fileName || "CSV")} · ${knownMatchCount} currently visible selected contact${knownMatchCount === 1 ? "" : "s"} matched`
-          : "Download the prepared CSV, fill every variable column, then upload it."}</small>
+          ? `${escapeHtml(sendVariableDataState.fileName || "file")} - ${knownMatchCount} currently visible selected contact${knownMatchCount === 1 ? "" : "s"} matched`
+          : "Download the prepared CSV, fill every variable column, then upload CSV/XLSX/XLS."}</small>
       </div>
       ${previewRows.length ? `
         <div class="send-variable-preview">
@@ -1940,39 +2000,66 @@ function parseCsvMatrix(text) {
   return rows;
 }
 
-function parseRecipientVariableCsv(text) {
-  const matrix = parseCsvMatrix(text);
+async function parseSpreadsheetMatrix(file) {
+  if (!window.XLSX) {
+    throw new Error("Spreadsheet parser could not be loaded. Refresh the page and try again.");
+  }
+
+  const workbook = window.XLSX.read(await file.arrayBuffer(), {
+    type: "array",
+    cellDates: false,
+    raw: false
+  });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  if (!sheet) return [];
+
+  return window.XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    defval: "",
+    raw: false
+  }).map((row) => row.map((value) => String(value ?? "").trim()));
+}
+
+async function parseRecipientVariableFile(file) {
+  if (isSpreadsheetFile(file)) return parseRecipientVariableRows(await parseSpreadsheetMatrix(file), "Spreadsheet");
+  if (/\.csv$/i.test(file.name || "") || /csv/i.test(file.type || "")) {
+    return parseRecipientVariableRows(parseCsvMatrix(await file.text()), "CSV");
+  }
+  throw new Error("Upload a CSV, XLSX, or XLS variable file.");
+}
+
+function parseRecipientVariableRows(matrix, fileKind = "CSV") {
   const expectedColumnCount = sendVariableDataState.parameterCount + 1;
   const normalizeHeader = (header) => String(header || "").trim().toLowerCase().replace(/[\s_-]+/g, "");
   const headerRow = matrix.shift() || [];
   // Only the phone column and the column count matter; variable header text is
   // free-form guidance (it carries example values) and may vary between files.
   if (!normalizeHeader(headerRow[0]).startsWith("phone")) {
-    throw new Error("The first CSV column must be the phone number.");
+    throw new Error(`The first ${fileKind} column must be the phone number.`);
   }
   if (headerRow.length !== expectedColumnCount) {
-    throw new Error(`The CSV must have ${expectedColumnCount} columns: the phone number plus ${sendVariableDataState.parameterCount} variable value${sendVariableDataState.parameterCount === 1 ? "" : "s"}.`);
+    throw new Error(`The ${fileKind} file must have ${expectedColumnCount} columns: the phone number plus ${sendVariableDataState.parameterCount} variable value${sendVariableDataState.parameterCount === 1 ? "" : "s"}.`);
   }
 
   const dataRows = matrix.filter((row) => row.some((value) => String(value).trim()));
-  if (!dataRows.length) throw new Error("The CSV contains no recipient rows.");
-  if (dataRows.length > 1000) throw new Error("The CSV can contain at most 1000 rows.");
+  if (!dataRows.length) throw new Error(`The ${fileKind} file contains no recipient rows.`);
+  if (dataRows.length > 1000) throw new Error(`The ${fileKind} file can contain at most 1000 rows.`);
 
   const seenPhones = new Set();
   return dataRows.map((row, index) => {
     const rowNumber = index + 2;
     if (row.length !== expectedColumnCount) {
-      throw new Error(`CSV row ${rowNumber} must contain ${expectedColumnCount} columns.`);
+      throw new Error(`${fileKind} row ${rowNumber} must contain ${expectedColumnCount} columns.`);
     }
     if (looksLikeExcelScientific(row[0])) {
-      throw new Error(`CSV row ${rowNumber}: Excel converted the phone number to scientific notation ("${String(row[0]).trim()}"), which loses digits. Re-download the CSV and fill it again, or format the phone column as Number (0 decimals) before saving.`);
+      throw new Error(`${fileKind} row ${rowNumber}: Excel converted the phone number to scientific notation ("${String(row[0]).trim()}"), which loses digits. Re-download the CSV and fill it again, or format the phone column as Number (0 decimals) before saving.`);
     }
     const phone = normalizeSendPhone(row[0]);
     const variables = row.slice(1).map((value) => String(value).trim());
-    if (!/^\d{11,15}$/.test(phone)) throw new Error(`CSV row ${rowNumber} has an invalid phone number.`);
-    if (seenPhones.has(phone)) throw new Error(`Phone ${phone} appears more than once in the CSV.`);
-    if (variables.some((value) => !value)) throw new Error(`CSV row ${rowNumber} is missing a variable value.`);
-    if (variables.some((value) => value.length > 300)) throw new Error(`CSV row ${rowNumber} contains a value longer than 300 characters.`);
+    if (!/^\d{11,15}$/.test(phone)) throw new Error(`${fileKind} row ${rowNumber} has an invalid phone number.`);
+    if (seenPhones.has(phone)) throw new Error(`Phone ${phone} appears more than once in the ${fileKind} file.`);
+    if (variables.some((value) => !value)) throw new Error(`${fileKind} row ${rowNumber} is missing a variable value.`);
+    if (variables.some((value) => value.length > 300)) throw new Error(`${fileKind} row ${rowNumber} contains a value longer than 300 characters.`);
     seenPhones.add(phone);
     return { phone, variables };
   });
@@ -1999,7 +2086,7 @@ async function downloadRecipientVariableCsv() {
     throw new Error("Select a template that contains variables first.");
   }
   if (sendVariableDataState.parameterCount > 10) {
-    throw new Error("Bulk CSV sending supports a maximum of 10 template variables.");
+    throw new Error("Bulk file sending supports a maximum of 10 template variables.");
   }
   if (!sendRecipientState.contactIds.size && !sendRecipientState.groupIds.size) {
     throw new Error("Select contacts or groups before downloading the CSV.");
@@ -3455,11 +3542,11 @@ if (contactFileInput) {
 
     try {
       setContactMessage("Importing contacts...");
-      const contacts = parseCsv(await file.text());
+      const contacts = await parseContactImportFile(file);
       contacts.forEach((row, index) => {
         const phone = row.whatsapp_number ?? row.phone ?? row.mobile;
         if (looksLikeExcelScientific(phone)) {
-          throw new Error(`CSV row ${index + 2}: Excel converted the phone number to scientific notation ("${String(phone).trim()}"), which loses digits. Re-enter the numbers, or format the phone column as Number (0 decimals) before saving.`);
+          throw new Error(`Row ${index + 2}: Excel converted the phone number to scientific notation ("${String(phone).trim()}"), which loses digits. Re-enter the numbers, or format the phone column as Number (0 decimals) before saving.`);
         }
       });
       const data = await requestJson("/api/contacts/import", {
@@ -3661,7 +3748,7 @@ sendVariableEditor?.addEventListener("change", async (event) => {
   const file = fileInput?.files?.[0];
   if (!file) return;
   try {
-    const rows = parseRecipientVariableCsv(await file.text());
+    const rows = await parseRecipientVariableFile(file);
     sendVariableDataState.rows = rows;
     sendVariableDataState.fileName = file.name;
     renderSendVariableEditor();
@@ -4167,6 +4254,8 @@ const inboxInput = document.querySelector("[data-inbox-input]");
 const inboxSendButton = document.querySelector("[data-inbox-send]");
 const inboxStatus = document.querySelector("[data-inbox-status]");
 const inboxWindowNote = document.querySelector("[data-inbox-window-note]");
+const inboxLiveState = document.querySelector("[data-inbox-live-state]");
+const inboxChatLive = document.querySelector("[data-inbox-chat-live]");
 const inboxBackButton = document.querySelector("[data-inbox-back]");
 const inboxRailBadge = document.querySelector("[data-inbox-rail-badge]");
 const inboxPhoneMedia = window.matchMedia("(max-width: 560px)");
@@ -4191,6 +4280,7 @@ const inboxState = {
   realtimeReconnectTimer: null,
   realtimeReconnectDelay: 1000,
   realtimeStarted: false,
+  realtimePulseTimer: null,
   loadingActive: false,
   polling: false
 };
@@ -4237,6 +4327,30 @@ function updateInboxRailBadge(totalUnread) {
   } else {
     inboxRailBadge.hidden = true;
   }
+}
+
+function setInboxRealtimeState(state, label) {
+  if (!inboxLiveState) return;
+  inboxLiveState.dataset.state = state;
+  const labelEl = inboxLiveState.querySelector("span");
+  if (labelEl) labelEl.textContent = label;
+}
+
+function pulseInboxRealtimeUpdate(label = "New message") {
+  if (!inboxChatActive) return;
+
+  inboxChatActive.classList.add("has-live-update");
+  if (inboxChatLive) {
+    inboxChatLive.textContent = label;
+    inboxChatLive.hidden = false;
+  }
+
+  if (inboxState.realtimePulseTimer) clearTimeout(inboxState.realtimePulseTimer);
+  inboxState.realtimePulseTimer = setTimeout(() => {
+    inboxChatActive.classList.remove("has-live-update");
+    if (inboxChatLive) inboxChatLive.hidden = true;
+    inboxState.realtimePulseTimer = null;
+  }, 1600);
 }
 
 function setInboxPane(pane) {
@@ -4688,6 +4802,7 @@ function getInboxRealtimeUrl() {
 
 function scheduleInboxRealtimeReconnect() {
   if (!inboxState.realtimeStarted || inboxState.realtimeReconnectTimer) return;
+  setInboxRealtimeState("reconnecting", "Reconnecting");
   const delay = inboxState.realtimeReconnectDelay;
   inboxState.realtimeReconnectDelay = Math.min(
     INBOX_WS_RECONNECT_MAX_MS,
@@ -4699,23 +4814,61 @@ function scheduleInboxRealtimeReconnect() {
   }, delay);
 }
 
-function handleInboxRealtimeEvent(event) {
-  if (event?.type !== "inbox:updated") return;
-  if (isInboxViewVisible()) {
-    pollInboxView();
-  } else {
-    pollInboxUnread();
+async function refreshInboxFromRealtime(event) {
+  const eventConversationId = event?.conversationId ? String(event.conversationId) : "";
+  const activeConversationUpdated = Boolean(
+    eventConversationId
+    && inboxState.activeId
+    && String(inboxState.activeId) === eventConversationId
+  );
+
+  if (!isInboxViewVisible()) {
+    await pollInboxUnread();
+    return;
+  }
+
+  if (activeConversationUpdated) {
+    await refreshActiveConversation();
+    await loadInboxConversations(true);
+    markActiveConversationReadInList();
+    pulseInboxRealtimeUpdate(event?.action === "message_sent" ? "Message sent" : "New message");
+    return;
+  }
+
+  await loadInboxConversations(true);
+
+  // Older events may not include a conversation id. Keep the active pane fresh
+  // in that case without waiting for the fallback poll interval.
+  if (inboxState.activeId && !eventConversationId) {
+    await refreshActiveConversation();
   }
 }
 
-function connectInboxRealtime() {
-  if (!("WebSocket" in window) || inboxState.realtimeSocket) return;
+function handleInboxRealtimeEvent(event) {
+  if (event?.type !== "inbox:updated") return;
+  refreshInboxFromRealtime(event).catch(() => {
+    if (isInboxViewVisible()) {
+      pollInboxView();
+    } else {
+      pollInboxUnread();
+    }
+  });
+}
 
+function connectInboxRealtime() {
+  if (!("WebSocket" in window)) {
+    setInboxRealtimeState("fallback", "Refresh");
+    return;
+  }
+  if (inboxState.realtimeSocket) return;
+
+  setInboxRealtimeState("connecting", "Connecting");
   const socket = new WebSocket(getInboxRealtimeUrl());
   inboxState.realtimeSocket = socket;
 
   socket.addEventListener("open", () => {
     inboxState.realtimeReconnectDelay = 1000;
+    setInboxRealtimeState("live", "Live");
   });
 
   socket.addEventListener("message", (message) => {
@@ -4730,10 +4883,12 @@ function connectInboxRealtime() {
 
   socket.addEventListener("close", () => {
     if (inboxState.realtimeSocket === socket) inboxState.realtimeSocket = null;
+    if (inboxState.realtimeStarted) setInboxRealtimeState("reconnecting", "Reconnecting");
     scheduleInboxRealtimeReconnect();
   });
 
   socket.addEventListener("error", () => {
+    setInboxRealtimeState("reconnecting", "Reconnecting");
     socket.close();
   });
 }
@@ -5183,6 +5338,93 @@ function closeAssignModal() {
   setAssignMessage("");
 }
 
+function setContactEditMessage(message, isError = false) {
+  if (!contactEditMessage) return;
+  contactEditMessage.textContent = message || "";
+  contactEditMessage.classList.toggle("error", Boolean(isError));
+}
+
+function openContactEditModal(contactId) {
+  const contact = getContactById(contactId);
+  if (!contactEditModal || !contact) return;
+
+  contactEditState.contactId = contactId;
+  contactEditState.saving = false;
+  if (contactEditName) contactEditName.value = contact.name || "";
+  if (contactEditPhone) contactEditPhone.value = contact.phone || "";
+  if (contactEditEmail) contactEditEmail.value = contact.email || "";
+  if (contactEditCity) contactEditCity.value = contact.city || "";
+  if (contactEditTag) contactEditTag.value = contact.tags?.[0] || "";
+  if (contactEditOptIn) contactEditOptIn.checked = Boolean(contact.optIn?.status);
+  if (contactEditProof) contactEditProof.value = contact.optIn?.proof || "";
+  if (contactEditStatus) contactEditStatus.value = contact.status || "active";
+  if (contactEditSave) contactEditSave.disabled = false;
+  setContactEditMessage("");
+  contactEditModal.hidden = false;
+  document.body.classList.add("modal-open");
+}
+
+function closeContactEditModal() {
+  if (!contactEditModal || contactEditState.saving) return;
+  contactEditModal.hidden = true;
+  document.body.classList.remove("modal-open");
+  contactEditState.contactId = null;
+  setContactEditMessage("");
+  contactEditForm?.reset();
+}
+
+function getContactEditPayload() {
+  const tag = contactEditTag?.value.trim() || "";
+  return {
+    name: contactEditName?.value.trim() || "",
+    phone: contactEditPhone?.value.trim() || "",
+    email: contactEditEmail?.value.trim() || "",
+    city: contactEditCity?.value.trim() || "",
+    tags: tag ? [tag.replace(/^#/, "")] : [],
+    optIn: Boolean(contactEditOptIn?.checked),
+    optInProof: contactEditProof?.value.trim() || "",
+    status: contactEditStatus?.value || "active"
+  };
+}
+
+async function saveContactEdit() {
+  if (!contactEditState.contactId || contactEditState.saving) return;
+
+  const payload = getContactEditPayload();
+  if (!payload.name || !payload.phone) {
+    setContactEditMessage("Contact name and WhatsApp number are required.", true);
+    return;
+  }
+
+  contactEditState.saving = true;
+  if (contactEditSave) contactEditSave.disabled = true;
+  setContactEditMessage("Saving contact...");
+
+  try {
+    const data = await requestJson(`/api/contacts/${contactEditState.contactId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+    const index = setupState.contacts.findIndex((contact) => contact._id === contactEditState.contactId);
+    if (index !== -1 && data.contact) {
+      setupState.contacts[index] = {
+        ...setupState.contacts[index],
+        ...data.contact,
+        group: setupState.contacts[index].group || null
+      };
+    }
+    await loadContacts();
+    loadInboxConversations(true);
+    contactEditState.saving = false;
+    closeContactEditModal();
+    setContactMessage("Contact updated.");
+  } catch (error) {
+    contactEditState.saving = false;
+    if (contactEditSave) contactEditSave.disabled = false;
+    setContactEditMessage(error.message, true);
+  }
+}
+
 async function saveContactGroupAssignment() {
   if (!assignState.contactId || assignState.saving) return;
 
@@ -5230,11 +5472,30 @@ async function saveContactGroupAssignment() {
 
 if (contactList) {
   contactList.addEventListener("click", (event) => {
+    const editButton = event.target.closest("[data-edit-contact]");
+    if (editButton) {
+      openContactEditModal(editButton.getAttribute("data-edit-contact"));
+      return;
+    }
+
     const assignButton = event.target.closest("[data-assign-groups]");
     if (!assignButton) return;
     openAssignModal(assignButton.getAttribute("data-assign-groups"), assignButton.getAttribute("data-contact-name"));
   });
 }
+
+contactEditPhone?.addEventListener("input", () => {
+  contactEditPhone.value = contactEditPhone.value.replace(/\D/g, "").slice(0, 15);
+});
+
+contactEditForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  saveContactEdit();
+});
+
+closeContactEditButtons.forEach((button) => {
+  button.addEventListener("click", () => closeContactEditModal());
+});
 
 if (assignGroupListEl) {
   assignGroupListEl.addEventListener("change", (event) => {
@@ -5256,6 +5517,9 @@ closeAssignModalButtons.forEach((button) => {
 });
 
 document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && contactEditModal && !contactEditModal.hidden) {
+    closeContactEditModal();
+  }
   if (event.key === "Escape" && assignModal && !assignModal.hidden) {
     closeAssignModal();
   }

@@ -19,6 +19,16 @@ const createContact = asyncHandler(async (req, res) => {
   });
 });
 
+const updateContact = asyncHandler(async (req, res) => {
+  const contact = await contactService.updateContact(req.tenantId, req.params.contactId, req.body);
+
+  res.json({
+    success: true,
+    message: "Contact updated",
+    contact
+  });
+});
+
 const importContacts = asyncHandler(async (req, res) => {
   const result = await contactService.importContacts(req.tenantId, req.body.contacts);
 
@@ -120,6 +130,7 @@ const deleteSegment = asyncHandler(async (req, res) => {
 module.exports = {
   listContacts,
   createContact,
+  updateContact,
   importContacts,
   listOptOuts,
   createSegment,

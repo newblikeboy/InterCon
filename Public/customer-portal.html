@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>InterCon Customer Portal</title>
   <meta name="description" content="InterCon customer portal for connecting WhatsApp Business, managing contacts, creating templates, sending messages, and checking billing readiness.">
-  <link rel="stylesheet" href="style/customer-portal.css?v=blue-theme-20260701k">
+  <link rel="stylesheet" href="style/customer-portal.css?v=blue-theme-20260815-live">
 </head>
 <body class="portal-body console-body">
   <div class="portal-shell console-shell">
@@ -358,15 +358,15 @@
               <h2>Contact list</h2>
             </div>
             <div class="template-actions">
-              <button class="btn" type="button" data-contact-upload>Upload CSV</button>
+              <button class="btn" type="button" data-contact-upload>Upload contacts</button>
               <button class="btn btn-outline" type="button" data-contact-template>Download CSV template</button>
               <button class="btn btn-outline" type="button" data-refresh-contacts>Refresh</button>
             </div>
-            <input type="file" accept=".csv,text/csv" hidden data-contact-file>
+            <input type="file" accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden data-contact-file>
           </div>
           <div class="table-panel">
             <div class="table-row contact-table-row contact-list-row table-head">
-              <span>Name</span><span>Phone</span><span>Opt-in</span><span>Tag</span><span>Group</span>
+              <span>Name</span><span>Phone</span><span>Opt-in</span><span>Tag</span><span>Group</span><span>Actions</span>
             </div>
             <div data-contact-list></div>
           </div>
@@ -537,7 +537,13 @@
           <aside class="inbox-list" data-inbox-list-pane aria-label="Conversations">
             <div class="inbox-list-head">
               <strong>Chats</strong>
-              <button class="btn btn-outline btn-small" type="button" data-inbox-refresh>Refresh</button>
+              <div class="inbox-list-actions">
+                <span class="inbox-live-state" data-inbox-live-state data-state="connecting" aria-live="polite">
+                  <i aria-hidden="true"></i>
+                  <span>Connecting</span>
+                </span>
+                <button class="btn btn-outline btn-small" type="button" data-inbox-refresh>Refresh</button>
+              </div>
             </div>
             <div class="inbox-search">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
@@ -568,6 +574,7 @@
                   <strong data-inbox-active-name>Customer</strong>
                   <small data-inbox-active-phone></small>
                 </div>
+                <span class="inbox-chat-live" data-inbox-chat-live hidden>New message</span>
               </header>
 
               <div class="inbox-messages" data-inbox-messages></div>
@@ -1082,6 +1089,62 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
         </section>
       </div>
 
+      <div class="template-modal" role="dialog" aria-modal="true" aria-labelledby="contact-edit-title" hidden data-contact-edit-modal>
+        <div class="modal-backdrop" data-close-contact-edit></div>
+        <section class="template-modal-card group-modal-card">
+          <button class="modal-close" type="button" aria-label="Close contact editor" data-close-contact-edit>&times;</button>
+          <div class="portal-section-head compact">
+            <div>
+              <p class="eyebrow">Contact details</p>
+              <h2 id="contact-edit-title">Edit contact</h2>
+            </div>
+          </div>
+          <form class="template-form-panel contact-edit-form" data-contact-edit-form>
+            <label>
+              Name
+              <input type="text" name="name" maxlength="140" required data-contact-edit-name>
+            </label>
+            <label>
+              WhatsApp number
+              <input type="tel" name="phone" inputmode="numeric" maxlength="15" required data-contact-edit-phone>
+            </label>
+            <label>
+              Email <span class="optional-label">Optional</span>
+              <input type="email" name="email" maxlength="160" data-contact-edit-email>
+            </label>
+            <label>
+              City <span class="optional-label">Optional</span>
+              <input type="text" name="city" maxlength="80" data-contact-edit-city>
+            </label>
+            <label>
+              Tag <span class="optional-label">Optional</span>
+              <input type="text" name="tags" maxlength="40" placeholder="vip" data-contact-edit-tag>
+            </label>
+            <label class="contact-edit-check">
+              <input type="checkbox" data-contact-edit-opt-in>
+              <span>Customer has WhatsApp opt-in</span>
+            </label>
+            <label>
+              Opt-in proof <span class="optional-label">Optional</span>
+              <input type="text" name="optInProof" maxlength="240" data-contact-edit-proof>
+            </label>
+            <label>
+              Status
+              <select name="status" data-contact-edit-status>
+                <option value="active">Active</option>
+                <option value="opted_out">Opted out</option>
+                <option value="blocked">Blocked</option>
+              </select>
+            </label>
+            <p class="contact-message" data-contact-edit-message></p>
+            <div class="template-actions">
+              <button class="btn btn-outline" type="button" data-close-contact-edit>Cancel</button>
+              <button class="btn" type="submit" data-contact-edit-save>Save contact</button>
+            </div>
+          </form>
+        </section>
+      </div>
+
       <div class="template-modal" role="dialog" aria-modal="true" aria-labelledby="media-modal-title" hidden data-media-modal>
         <div class="modal-backdrop" data-close-media-modal></div>
         <section class="template-modal-card media-modal-card">
@@ -1169,6 +1232,7 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
     </main>
   </div>
 
-  <script src="js/customer-portal.js?v=blue-theme-20260701k"></script>
+  <script src="vendor/xlsx.full.min.js?v=20260815"></script>
+  <script src="js/customer-portal.js?v=blue-theme-20260815-live"></script>
 </body>
 </html>

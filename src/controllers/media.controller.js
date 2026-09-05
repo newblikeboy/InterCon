@@ -3,7 +3,7 @@ const asyncHandler = require("../utils/asyncHandler");
 
 const listMedia = asyncHandler(async (req, res) => {
   const media = await mediaService.listMedia(req.tenantId, req.query);
-  res.json({ success: true, media });
+  res.json({ success: true, media, nextCursor: media.length === require("../utils/pagination").pageSize(req.query.limit, 200) ? media.at(-1).id : null });
 });
 
 const createMedia = asyncHandler(async (req, res) => {

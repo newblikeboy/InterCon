@@ -76,6 +76,7 @@ const messageSchema = new mongoose.Schema(
       trim: true,
       maxlength: 160
     },
+    providerStatusAt: { type: Date },
     status: {
       type: String,
       enum: ["queued", "scheduled", "processing", "accepted", "sent", "delivered", "read", "failed", "uncertain"],

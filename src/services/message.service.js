@@ -1,3 +1,4 @@
+const MessageBatch = require("../models/MessageBatch");
 const Contact = require("../models/Contact");
 const ContactSegment = require("../models/ContactSegment");
 const Message = require("../models/Message");
@@ -10,7 +11,7 @@ const crypto = require("crypto");
 const env = require("../config/env");
 const HttpError = require("../utils/httpError");
 const { isMetaSampleTemplate } = require("./template.service");
-const { requireActivePaidPlan } = require("./billing.service");
+const { requireActivePaidPlan, hasActivePaidPlan } = require("./billing.service");
 const { acquireSlot, releaseDailyRecipient, reserveDailyRecipient } = require("./distributedLimit.service");
 const { fetchWithPolicy } = require("../utils/httpClient");
 
@@ -613,7 +614,7 @@ async function resolveContact(tenantId, body) {
   return Contact.findOneAndUpdate(
     { tenantId, phone },
     {
-      $set: {
+      $setOnInsert: {
         tenantId,
         phone,
         name: String(body.name || body.customer_name || body.customerName || phone).trim(),
@@ -732,7 +733,25 @@ async function sendTemplateMessage(tenantId, body = {}) {
   };
 }
 
+function bulkRequestHash(body) {
+  function canonical(value) {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().filter(key => !["idempotencyKey", "idempotency_key", "requestId", "request_id"].includes(key)).map(key => [key, canonical(value[key])]));
+    return value;
+  }
+  return crypto.createHash("sha256").update(JSON.stringify(canonical(body))).digest("hex");
+}
+
 async function sendTemplateMessages(tenantId, body = {}) {
+  const key = getIdempotencyKey(body);
+  if (!key || key.length > 160) throw new HttpError(400, "A unique idempotency key of 1 to 160 characters is required for a bulk send.");
+  const requestHash = bulkRequestHash(body);
+  function previousResult(batch) {
+    if (batch.requestHash !== requestHash) throw new HttpError(409, "This request key was already used with different message details.");
+    return { ...batch.result, idempotent: true };
+  }
+  const previous = await MessageBatch.findOne({ tenantId, key }).lean();
+  if (previous) return previousResult(previous);
   const context = await resolveTemplateSendContext(tenantId, body, { perRecipientVariables: true });
   const recipients = await resolveBulkRecipients(tenantId, body);
   const expectedVariableCount = Number(context.template.parameterCount || 0);
@@ -756,27 +775,38 @@ async function sendTemplateMessages(tenantId, body = {}) {
     .filter((phone) => !selectedPhones.has(phone))
     .length;
   const batchId = `BATCH-${crypto.randomUUID()}`;
-  const messages = await Message.insertMany(
-    sendableContacts.map((contact) => buildQueuedMessage(context, tenantId, contact, {
+  const queuedMessages = sendableContacts.map((contact) => ({
+    _id: new mongoose.Types.ObjectId(),
+    ...buildQueuedMessage(context, tenantId, contact, {
       batchId,
-      variables: expectedVariableCount
-        ? recipientVariableMap.get(normalizePhone(contact.phone))
-        : []
-    })),
-    { ordered: false }
-  );
-
-  return {
+      variables: expectedVariableCount ? recipientVariableMap.get(normalizePhone(contact.phone)) : []
+    })
+  }));
+  const result = {
     batchId,
     requestedContactCount: recipients.contactIds.length,
     requestedGroupCount: recipients.groupIds.length,
     selectedCount: recipients.selectedContacts.length + recipients.missingDirectCount,
-    queuedCount: messages.length,
+    queuedCount: queuedMessages.length,
     skippedCount: recipients.ineligibleCount + recipients.missingDirectCount + missingVariableCount,
-    missingVariableCount,
-    unmatchedVariableRowCount,
-    messageIds: messages.map((message) => String(message._id))
+    missingVariableCount, unmatchedVariableRowCount,
+    messageIds: queuedMessages.map(message => String(message._id))
   };
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      await MessageBatch.create([{ tenantId, key, requestHash, result }], { session });
+      await Message.insertMany(queuedMessages, { session, ordered: true });
+    });
+    return result;
+  } catch (error) {
+    if (error.code === 11000) {
+      const existing = await MessageBatch.findOne({ tenantId, key }).lean();
+      if (existing) return previousResult(existing);
+    }
+    throw error;
+  } finally { await session.endSession(); }
+
 }
 
 async function hasDailyUniqueCapacity(message) {
@@ -918,11 +948,17 @@ async function acceptMessage(message, metaResponse = {}) {
       }
     }
   );
-  await RecipientUsage.findOneAndUpdate(
-    { tenantId: message.tenantId, phoneNumberId: message.phoneNumberId, recipient: message.to },
-    { $set: { lastAcceptedAt: new Date() } },
-    { upsert: true }
-  );
+  try {
+    await RecipientUsage.findOneAndUpdate(
+      { tenantId: message.tenantId, phoneNumberId: message.phoneNumberId, recipient: message.to },
+      { $set: { lastAcceptedAt: new Date() } },
+      { upsert: true }
+    );
+  } catch (error) {
+    // The accepted Message is the durable source for recipient-usage recovery.
+    // Bookkeeping failure must never repeat a successful provider delivery.
+    console.error("Recipient usage update failed for accepted message", String(message._id), error.message);
+  }
 
   return {
     action: "accepted",
@@ -984,18 +1020,28 @@ async function claimNextQueuedMessage(workerId) {
 }
 
 async function processQueuedMessage(message) {
-  const [tenant, template] = await Promise.all([
+  const [tenant, template, contact] = await Promise.all([
     Tenant.findById(message.tenantId).select("+meta.accessToken"),
     Template.findOne({
       tenantId: message.tenantId,
       name: message.templateName,
       language: message.language,
       status: "approved"
-    }).select("name language category status body parameterCount headerType").lean()
+    }).select("name language category status body parameterCount headerType").lean(),
+    Contact.findOne({ tenantId: message.tenantId, phone: message.to }).select("status optIn").lean()
   ]);
 
   if (!tenant) {
     return failMessage(message, "Tenant not found for queued message.");
+  }
+  if (tenant.status !== "active" || !hasActivePaidPlan(tenant)) {
+    return failMessage(message, "Workspace is suspended or its paid plan is no longer active.");
+  }
+  if (!contact || contact.status !== "active" || !contact.optIn?.status) {
+    return failMessage(message, "Recipient is no longer active and opted in. Message was not sent.");
+  }
+  if (String(message.phoneNumberId) !== String(tenant.meta?.phoneNumberId)) {
+    return failMessage(message, "The connected sending number changed after this message was queued.");
   }
 
   const accessToken = tenant.getMetaAccessToken();
@@ -1085,6 +1131,12 @@ async function processQueuedMessage(message) {
     return failMessage(message, errorMessage, metaError);
   }
 
+  // Once the provider accepts delivery, only local bookkeeping may be retried.
+  // Leave the processing lock for stale recovery if even the uncertainty write fails.
+  message.providerAccepted = true;
+  if (!metaResponse.messages?.[0]?.id) {
+    return markMessageUncertain(message, "Provider returned success without a message reference. Review before retrying.");
+  }
   return acceptMessage(message, metaResponse);
 }
 
@@ -1095,6 +1147,9 @@ async function processNextQueuedMessage(workerId) {
   try {
     return await processQueuedMessage(message);
   } catch (error) {
+    if (message.providerAccepted) {
+      return markMessageUncertain(message, "Provider accepted delivery, but saving the result failed. Do not resend automatically.");
+    }
     const attempts = Number(message.attempts || 0) + 1;
     const errorDetails = error.details || {};
     await Message.updateOne(

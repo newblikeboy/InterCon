@@ -8,7 +8,7 @@ function ensureJwtSecret() {
   }
 }
 
-function signAuthToken(user) {
+function signAuthToken(user, remember = true) {
   ensureJwtSecret();
 
   return jwt.sign(
@@ -20,7 +20,7 @@ function signAuthToken(user) {
     },
     env.jwtSecret,
     {
-      expiresIn: env.jwtExpiresIn,
+      expiresIn: remember ? env.jwtExpiresIn : "12h",
       algorithm: "HS256",
       issuer: "intercon-api",
       audience: "intercon-portal"
@@ -28,14 +28,14 @@ function signAuthToken(user) {
   );
 }
 
-function setAuthCookie(res, token) {
+function setAuthCookie(res, token, remember = true) {
   const secureCookie = env.nodeEnv === "production" || env.clientOrigin.startsWith("https://");
 
   res.cookie(env.authCookieName, token, {
     httpOnly: true,
     secure: secureCookie,
     sameSite: "lax",
-    maxAge: env.authCookieMaxAgeMs,
+    ...(remember ? { maxAge: env.authCookieMaxAgeMs } : {}),
     path: "/"
   });
 }

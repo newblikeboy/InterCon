@@ -40,6 +40,7 @@ async function getUser(userId) {
 }
 
 async function invalidateUser(userId) {
+  await require("./realtime.service").revokeUserSessions(userId);
   const key = `intercon:session-user:${userId}`;
   localCache.delete(key);
   const redis = getRedisClient();

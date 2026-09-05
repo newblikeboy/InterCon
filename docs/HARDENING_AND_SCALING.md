@@ -149,3 +149,7 @@ testing.
    response headers.
 8. Enable WAF rules and alerts before opening public traffic.
 
+
+## September 2026 review fixes
+
+See [the rollout instructions](PRODUCTION_ROLLOUT_2026-09-06.md) for database indexes, the new payment webhook secret, billing worker, platform-administrator provisioning, and API contract changes.

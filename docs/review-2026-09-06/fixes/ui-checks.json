@@ -1,0 +1,248 @@
+{
+  "results": [
+    {
+      "check": "login keyboard focus stays inside dialog; recovery opens; Escape closes",
+      "passed": true
+    },
+    {
+      "check": "501 contacts available across pages; quoted CSV commas/newlines preserved; malformed CSV rejected",
+      "passed": true
+    },
+    {
+      "check": "renewal enabled, browser Back restores view, invalid view ID cannot blank portal",
+      "passed": true
+    },
+    {
+      "view": "setup",
+      "width": 1440,
+      "viewport": 1440,
+      "content": 1440,
+      "passed": true
+    },
+    {
+      "view": "send-whatsapp",
+      "width": 1440,
+      "viewport": 1440,
+      "content": 1440,
+      "passed": true
+    },
+    {
+      "view": "billing",
+      "width": 1440,
+      "viewport": 1440,
+      "content": 1440,
+      "passed": true
+    },
+    {
+      "view": "contacts",
+      "width": 1440,
+      "viewport": 1440,
+      "content": 1440,
+      "passed": true
+    },
+    {
+      "view": "blacklist",
+      "width": 1440,
+      "viewport": 1440,
+      "content": 1440,
+      "passed": true
+    },
+    {
+      "view": "optout",
+      "width": 1440,
+      "viewport": 1440,
+      "content": 1440,
+      "passed": true
+    },
+    {
+      "view": "setup",
+      "width": 390,
+      "viewport": 390,
+      "content": 390,
+      "passed": true
+    },
+    {
+      "view": "send-whatsapp",
+      "width": 390,
+      "viewport": 390,
+      "content": 390,
+      "passed": true
+    },
+    {
+      "view": "billing",
+      "width": 390,
+      "viewport": 390,
+      "content": 390,
+      "passed": true
+    },
+    {
+      "view": "contacts",
+      "width": 390,
+      "viewport": 390,
+      "content": 390,
+      "passed": true
+    },
+    {
+      "view": "blacklist",
+      "width": 390,
+      "viewport": 390,
+      "content": 390,
+      "passed": true
+    },
+    {
+      "view": "optout",
+      "width": 390,
+      "viewport": 390,
+      "content": 390,
+      "passed": true
+    },
+    {
+      "view": "setup",
+      "width": 320,
+      "viewport": 320,
+      "content": 320,
+      "passed": true
+    },
+    {
+      "view": "send-whatsapp",
+      "width": 320,
+      "viewport": 320,
+      "content": 320,
+      "passed": true
+    },
+    {
+      "view": "billing",
+      "width": 320,
+      "viewport": 320,
+      "content": 320,
+      "passed": true
+    },
+    {
+      "view": "contacts",
+      "width": 320,
+      "viewport": 320,
+      "content": 320,
+      "passed": true
+    },
+    {
+      "view": "blacklist",
+      "width": 320,
+      "viewport": 320,
+      "content": 320,
+      "passed": true
+    },
+    {
+      "view": "optout",
+      "width": 320,
+      "viewport": 320,
+      "content": 320,
+      "passed": true
+    },
+    {
+      "check": "inbox displays latest message, loads older history, and preserves reading position",
+      "passed": true
+    },
+    {
+      "check": "failed logout retains the session and displays an error",
+      "passed": true
+    },
+    {
+      "check": "admin renders API records; no uncaught browser exceptions",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "apiCalls": [
+    "/api/auth/me",
+    "/api/meta/onboarding",
+    "/api/billing",
+    "/api/contacts?limit=500",
+    "/api/templates",
+    "/api/messages?limit=25",
+    "/api/developer/api-keys",
+    "/api/auth/me",
+    "/api/meta/facebook-sdk-config",
+    "/api/inbox/unread",
+    "/api/contacts?limit=500&after=0000000000000000000001f4",
+    "/api/contacts?limit=500",
+    "/api/contacts?limit=500&after=0000000000000000000001f4",
+    "/api/billing",
+    "/api/contacts?limit=500",
+    "/api/contacts/segments",
+    "/api/contacts?limit=500&after=0000000000000000000001f4",
+    "/api/billing",
+    "/api/meta/onboarding",
+    "/api/billing",
+    "/api/contacts?limit=500",
+    "/api/templates",
+    "/api/messages?limit=25",
+    "/api/developer/api-keys",
+    "/api/contacts?limit=500&after=0000000000000000000001f4",
+    "/api/meta/onboarding",
+    "/api/billing",
+    "/api/contacts?limit=500",
+    "/api/templates",
+    "/api/messages?limit=25",
+    "/api/developer/api-keys",
+    "/api/contacts?limit=500&after=0000000000000000000001f4",
+    "/api/contacts?limit=500",
+    "/api/contacts/segments",
+    "/api/templates/approved",
+    "/api/messages?limit=25",
+    "/api/media?limit=500",
+    "/api/contacts?limit=500&after=0000000000000000000001f4",
+    "/api/billing",
+    "/api/contacts?limit=500",
+    "/api/contacts/segments",
+    "/api/contacts?limit=500&after=0000000000000000000001f4",
+    "/api/contacts?status=blocked&limit=500",
+    "/api/contacts?status=opted_out&limit=500",
+    "/api/meta/onboarding",
+    "/api/billing",
+    "/api/contacts?limit=500",
+    "/api/templates",
+    "/api/messages?limit=25",
+    "/api/developer/api-keys",
+    "/api/contacts?limit=500&after=0000000000000000000001f4",
+    "/api/contacts?limit=500",
+    "/api/contacts/segments",
+    "/api/templates/approved",
+    "/api/messages?limit=25",
+    "/api/contacts?limit=500&after=0000000000000000000001f4",
+    "/api/billing",
+    "/api/contacts?limit=500",
+    "/api/contacts/segments",
+    "/api/contacts?limit=500&after=0000000000000000000001f4",
+    "/api/contacts?status=blocked&limit=500",
+    "/api/contacts?status=opted_out&limit=500",
+    "/api/meta/onboarding",
+    "/api/billing",
+    "/api/contacts?limit=500",
+    "/api/templates",
+    "/api/messages?limit=25",
+    "/api/developer/api-keys",
+    "/api/contacts?limit=500&after=0000000000000000000001f4",
+    "/api/contacts?limit=500",
+    "/api/contacts/segments",
+    "/api/templates/approved",
+    "/api/messages?limit=25",
+    "/api/contacts?limit=500&after=0000000000000000000001f4",
+    "/api/billing",
+    "/api/contacts?limit=500",
+    "/api/contacts/segments",
+    "/api/contacts?limit=500&after=0000000000000000000001f4",
+    "/api/contacts?status=blocked&limit=500",
+    "/api/contacts?status=opted_out&limit=500",
+    "/api/inbox/conversations?limit=500",
+    "/api/inbox/conversations?limit=500",
+    "/api/inbox/conversations/000000000000000000000999/messages",
+    "/api/inbox/conversations/000000000000000000000999/read",
+    "/api/inbox/conversations/000000000000000000000999/messages?before=000000000000000000000006",
+    "/api/inbox/conversations/000000000000000000000999/messages",
+    "/api/inbox/conversations/000000000000000000000999/read",
+    "/api/auth/logout",
+    "/api/admin/overview",
+    "/api/admin/records/tenants"
+  ],
+  "limitations": "Mocked APIs; Chrome only; no live providers or production data."
+}

@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const env = require("../config/env");
 const Tenant = require("../models/Tenant");
 const Payment = require("../models/Payment");
+const BillingOrder = require("../models/BillingOrder");
 const HttpError = require("../utils/httpError");
 const { fetchWithPolicy } = require("../utils/httpClient");
 
@@ -66,7 +67,7 @@ function hasActivePaidPlan(tenant) {
 }
 
 async function getBillingStatus(tenantId) {
-  const tenant = await Tenant.findById(tenantId).select("billing");
+  const tenant = await Tenant.findById(tenantId).select("billing status");
   if (!tenant) {
     throw new HttpError(404, "Tenant not found");
   }
@@ -129,7 +130,8 @@ async function selectPlan(tenantId, planId) {
     throw new HttpError(404, "Tenant not found");
   }
 
-  const receipt = `ic_${String(tenantId).slice(-10)}_${Date.now()}`;
+  const receipt = `ic_${crypto.randomUUID().replaceAll("-", "")}`;
+  const checkout = await BillingOrder.create({ tenantId, plan: plan.id, amount: plan.amount * 100, currency: plan.currency, receipt });
   const order = await razorpayRequest("orders", {
     method: "POST",
     body: JSON.stringify({
@@ -138,41 +140,31 @@ async function selectPlan(tenantId, planId) {
       receipt,
       notes: {
         tenantId: String(tenantId),
+        checkoutId: String(checkout._id),
         businessEmail: existingTenant.businessEmail,
         plan: plan.id
       }
     })
   });
 
-  const tenant = await Tenant.findByIdAndUpdate(
-    tenantId,
-    {
-      $set: {
-        "billing.plan": plan.id,
-        "billing.status": "pending_payment",
-        "billing.amount": plan.amount,
-        "billing.currency": plan.currency,
-        "billing.selectedAt": new Date(),
-        "billing.razorpayOrderId": order.id,
-        "billing.razorpayPaymentId": "",
-        "billing.razorpaySignature": "",
-        "billing.receipt": receipt
-      }
-    },
-    { returnDocument: "after" }
-  );
-
-  return {
-    billing: publicBilling(tenant),
-    plan,
-    checkout: buildCheckoutPayload({ order, plan, tenant: existingTenant })
-  };
+  if (!order.id || order.amount !== checkout.amount || order.currency !== checkout.currency) throw new HttpError(502, "Payment provider returned an incomplete or mismatched order");
+  await BillingOrder.updateOne({ _id: checkout._id }, { $set: { providerOrderId: order.id, status: "pending" } });
+  return { billing: publicBilling(existingTenant), plan, checkout: buildCheckoutPayload({ order, plan, tenant: existingTenant }) };
 }
 
 function addMonths(date, months) {
   const next = new Date(date);
-  next.setMonth(next.getMonth() + months);
+  const day = next.getUTCDate();
+  next.setUTCDate(1);
+  next.setUTCMonth(next.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+  next.setUTCDate(Math.min(day, lastDay));
   return next;
+}
+
+function periodEnd(billing, months, now = new Date()) {
+  const paidThrough = new Date(billing?.currentPeriodEnd || 0);
+  return addMonths(billing?.status === "active" && paidThrough > now ? paidThrough : now, months);
 }
 
 async function activatePlan(tenantId, planId = "", payment = {}) {
@@ -198,7 +190,7 @@ async function activatePlan(tenantId, planId = "", payment = {}) {
         "billing.currency": plan.currency,
         "billing.selectedAt": currentTenant.billing?.selectedAt || activatedAt,
         "billing.activatedAt": activatedAt,
-        "billing.currentPeriodEnd": addMonths(activatedAt, plan.months),
+        "billing.currentPeriodEnd": periodEnd(currentTenant.billing, plan.months, activatedAt),
         ...(payment.razorpayOrderId ? { "billing.razorpayOrderId": payment.razorpayOrderId } : {}),
         ...(payment.razorpayPaymentId ? { "billing.razorpayPaymentId": payment.razorpayPaymentId } : {}),
         ...(payment.razorpaySignature ? { "billing.razorpaySignature": payment.razorpaySignature } : {})
@@ -228,159 +220,128 @@ function verifyRazorpaySignature({ orderId, paymentId, signature }) {
   return crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
 }
 
-async function verifyPayment(tenantId, body = {}) {
-  const razorpayOrderId = String(body.razorpay_order_id || body.razorpayOrderId || "").trim();
-  const razorpayPaymentId = String(body.razorpay_payment_id || body.razorpayPaymentId || "").trim();
-  const razorpaySignature = String(body.razorpay_signature || body.razorpaySignature || "").trim();
-
-  if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
-    throw new HttpError(400, "Razorpay payment id, order id, and signature are required");
-  }
-
+async function findOrder(tenantId, providerOrderId) {
+  let order = await BillingOrder.findOne({ tenantId, providerOrderId });
+  if (order) return order;
+  // Upgrade path for checkouts created before the order ledger was introduced.
   const tenant = await Tenant.findById(tenantId).select("billing");
-  if (!tenant) {
-    throw new HttpError(404, "Tenant not found");
+  if (tenant?.billing?.razorpayOrderId !== providerOrderId) throw new HttpError(404, "Payment order not found");
+  const plan = getPlan(tenant.billing.plan);
+  if (!plan) throw new HttpError(400, "Payment plan is invalid");
+  return BillingOrder.findOneAndUpdate({ tenantId, providerOrderId }, { $setOnInsert: {
+    tenantId, providerOrderId, plan: plan.id, amount: tenant.billing.amount * 100,
+    currency: tenant.billing.currency, receipt: tenant.billing.receipt || providerOrderId, status: "pending"
+  } }, { upsert: true, returnDocument: "after" });
+}
+
+async function settlePayment(order, providerPaymentId, signature = "") {
+  let payment = await razorpayRequest(`payments/${encodeURIComponent(providerPaymentId)}`);
+  if (payment.order_id !== order.providerOrderId || payment.currency !== order.currency || Number(payment.amount) !== order.amount) {
+    throw new HttpError(400, "Payment does not match this order");
   }
-
-  if (tenant.billing?.razorpayOrderId !== razorpayOrderId) {
-    throw new HttpError(400, "Razorpay order does not match the selected InterCon plan");
-  }
-
-  const signatureValid = verifyRazorpaySignature({
-    orderId: tenant.billing.razorpayOrderId,
-    paymentId: razorpayPaymentId,
-    signature: razorpaySignature
-  });
-
-  if (!signatureValid) {
-    throw new HttpError(400, "Razorpay payment signature verification failed");
-  }
-
-  let payment = await razorpayRequest(`payments/${encodeURIComponent(razorpayPaymentId)}`);
-  if (payment.order_id !== razorpayOrderId) {
-    throw new HttpError(400, "Razorpay payment does not belong to the selected order");
-  }
-
-  if (payment.currency !== tenant.billing.currency || Number(payment.amount) !== Number(tenant.billing.amount) * 100) {
-    throw new HttpError(400, "Razorpay payment amount does not match the selected plan");
-  }
-
   if (payment.status === "authorized") {
-    payment = await razorpayRequest(`payments/${encodeURIComponent(razorpayPaymentId)}/capture`, {
-      method: "POST",
-      body: JSON.stringify({
-        amount: Number(tenant.billing.amount) * 100,
-        currency: tenant.billing.currency
-      })
+    payment = await razorpayRequest(`payments/${encodeURIComponent(providerPaymentId)}/capture`, {
+      method: "POST", body: JSON.stringify({ amount: order.amount, currency: order.currency })
     });
   }
-
-  if (payment.status !== "captured") {
-    throw new HttpError(409, `Razorpay payment is ${payment.status}. The plan will activate after payment capture.`, {
-      code: "RAZORPAY_PAYMENT_NOT_CAPTURED",
-      paymentStatus: payment.status
-    });
+  if (payment.status !== "captured" || Number(payment.amount) !== order.amount || payment.currency !== order.currency || payment.order_id !== order.providerOrderId) {
+    throw new HttpError(409, "Payment is not captured yet. We will check it again automatically.");
   }
-
   const session = await mongoose.startSession();
   let result;
   try {
     await session.withTransaction(async () => {
-      const existingPayment = await Payment.findOne({
-        provider: "razorpay",
-        providerPaymentId: razorpayPaymentId
-      }).session(session);
-
-      if (existingPayment) {
-        if (
-          String(existingPayment.tenantId) !== String(tenantId)
-          || existingPayment.providerOrderId !== razorpayOrderId
-        ) {
-          throw new HttpError(409, "This payment has already been used");
-        }
-
-        const currentTenant = await Tenant.findById(tenantId).select("billing").session(session);
-        result = {
-          billing: publicBilling(currentTenant),
-          plan: getPlan(existingPayment.plan),
-          idempotent: true
-        };
+      const existing = await Payment.findOne({ provider: "razorpay", providerOrderId: order.providerOrderId }).session(session);
+      const tenant = await Tenant.findById(order.tenantId).select("billing").session(session);
+      if (!tenant) throw new HttpError(404, "Workspace not found");
+      const plan = getPlan(order.plan);
+      if (existing) {
+        if (String(existing.tenantId) !== String(order.tenantId)) throw new HttpError(409, "Payment belongs to another workspace");
+        result = { billing: publicBilling(tenant), plan, idempotent: true };
         return;
       }
-
-      const currentTenant = await Tenant.findById(tenantId).select("billing").session(session);
-      if (!currentTenant || currentTenant.billing?.razorpayOrderId !== razorpayOrderId) {
-        throw new HttpError(409, "The selected payment order is no longer active");
-      }
-
-      const plan = getPlan(currentTenant.billing.plan);
-      if (!plan) throw new HttpError(400, "The selected InterCon plan is invalid");
-
+      const now = new Date();
       await Payment.create([{
-        tenantId,
-        provider: "razorpay",
-        providerOrderId: razorpayOrderId,
-        providerPaymentId: razorpayPaymentId,
-        signatureHash: crypto.createHash("sha256").update(razorpaySignature).digest("hex"),
-        plan: plan.id,
-        amount: Number(payment.amount),
-        currency: payment.currency,
-        status: "captured",
-        capturedAt: new Date()
+        tenantId: order.tenantId, provider: "razorpay", providerOrderId: order.providerOrderId,
+        providerPaymentId, signatureHash: crypto.createHash("sha256").update(signature || providerPaymentId).digest("hex"),
+        plan: plan.id, amount: order.amount, currency: order.currency, status: "captured", capturedAt: now
       }], { session });
-
-      const activatedAt = new Date();
-      const updatedTenant = await Tenant.findByIdAndUpdate(
-        tenantId,
-        {
-          $set: {
-            "billing.plan": plan.id,
-            "billing.status": "active",
-            "billing.amount": plan.amount,
-            "billing.currency": plan.currency,
-            "billing.selectedAt": currentTenant.billing?.selectedAt || activatedAt,
-            "billing.activatedAt": activatedAt,
-            "billing.currentPeriodEnd": addMonths(activatedAt, plan.months),
-            "billing.razorpayOrderId": razorpayOrderId,
-            "billing.razorpayPaymentId": razorpayPaymentId,
-            "billing.razorpaySignature": ""
-          }
-        },
-        { returnDocument: "after", session }
-      );
-
-      result = { billing: publicBilling(updatedTenant), plan, idempotent: false };
+      const updated = await Tenant.findByIdAndUpdate(order.tenantId, { $set: {
+        "billing.plan": plan.id, "billing.status": "active", "billing.amount": order.amount / 100,
+        "billing.currency": order.currency, "billing.selectedAt": order.createdAt,
+        "billing.activatedAt": now, "billing.currentPeriodEnd": periodEnd(tenant.billing, plan.months, now),
+        "billing.razorpayOrderId": order.providerOrderId, "billing.razorpayPaymentId": providerPaymentId,
+        "billing.razorpaySignature": "", "billing.receipt": order.receipt
+      } }, { returnDocument: "after", session });
+      await BillingOrder.updateOne({ _id: order._id }, { $set: { status: "paid", paymentId: providerPaymentId } }, { session });
+      result = { billing: publicBilling(updated), plan, idempotent: false };
     });
   } catch (error) {
-    if (error?.code === 11000) {
-      const existing = await Payment.findOne({
-        provider: "razorpay",
-        providerPaymentId: razorpayPaymentId,
-        tenantId
-      }).lean();
-      if (existing) {
-        return {
-          billing: await getBillingStatus(tenantId),
-          plan: getPlan(existing.plan),
-          idempotent: true
-        };
-      }
-    }
-    throw error;
-  } finally {
-    await session.endSession();
-  }
-
+    if (error.code !== 11000) throw error;
+    const existing = await Payment.findOne({ provider: "razorpay", providerOrderId: order.providerOrderId, tenantId: order.tenantId }).lean();
+    if (!existing) throw error;
+    result = { billing: await getBillingStatus(order.tenantId), plan: getPlan(existing.plan), idempotent: true };
+  } finally { await session.endSession(); }
   return result;
 }
 
+async function verifyPayment(tenantId, body = {}) {
+  const orderId = String(body.razorpay_order_id || body.razorpayOrderId || "").trim();
+  const paymentId = String(body.razorpay_payment_id || body.razorpayPaymentId || "").trim();
+  const signature = String(body.razorpay_signature || body.razorpaySignature || "").trim();
+  if (!orderId || !paymentId || !verifyRazorpaySignature({ orderId, paymentId, signature })) {
+    throw new HttpError(400, "Payment signature verification failed");
+  }
+  return settlePayment(await findOrder(tenantId, orderId), paymentId, signature);
+}
+
+async function reconcileOrder(order) {
+  const data = await razorpayRequest(`orders/${encodeURIComponent(order.providerOrderId)}/payments`);
+  const payment = (data.items || []).find(item => ["authorized", "captured"].includes(item.status));
+  if (payment) return settlePayment(order, payment.id);
+  return null;
+}
+
+async function reconcilePendingOrders() {
+  const orders = await BillingOrder.find({ status: "pending", $or: [{ checkedAt: { $exists: false } }, { checkedAt: { $lt: new Date(Date.now() - 60000) } }] })
+    .sort({ checkedAt: 1, createdAt: 1 }).limit(25);
+  for (const order of orders) {
+    await BillingOrder.updateOne({ _id: order._id }, { $set: { checkedAt: new Date() } });
+    try { await reconcileOrder(order); } catch (error) { console.error("Payment reconciliation failed", String(order._id), error.message); }
+  }
+}
+
+async function handlePaymentWebhook(req) {
+  const secret = env.razorpayWebhookSecret;
+  const signature = String(req.headers["x-razorpay-signature"] || "");
+  if (!secret) throw new HttpError(503, "Payment notifications are not configured");
+  const expected = crypto.createHmac("sha256", secret).update(req.rawBody || Buffer.alloc(0)).digest("hex");
+  if (!req.rawBody || !/^[a-f0-9]{64}$/.test(signature) || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))) {
+    throw new HttpError(403, "Invalid payment notification signature");
+  }
+  if (!["payment.captured", "order.paid"].includes(req.body.event)) return;
+  const payment = req.body.payload?.payment?.entity;
+  if (!payment?.order_id || !payment.id) throw new HttpError(400, "Payment notification is incomplete");
+  let order = await BillingOrder.findOne({ providerOrderId: payment.order_id });
+  if (!order) {
+    const tenant = await Tenant.findOne({ "billing.razorpayOrderId": payment.order_id }).select("_id");
+    if (tenant) order = await findOrder(tenant._id, payment.order_id);
+  }
+  if (!order) throw new HttpError(409, "Payment order is not available yet");
+  await settlePayment(order, payment.id, signature);
+}
+
+async function listPaymentHistory(tenantId) {
+  return Payment.find({ tenantId }).select("providerOrderId providerPaymentId plan amount currency status capturedAt").sort({ capturedAt: -1 }).limit(100).lean();
+}
+
 async function requireActivePaidPlan(tenantId) {
-  const tenant = await Tenant.findById(tenantId).select("billing");
+  const tenant = await Tenant.findById(tenantId).select("billing status");
   if (!tenant) {
     throw new HttpError(404, "Tenant not found");
   }
 
-  if (!hasActivePaidPlan(tenant)) {
+  if (tenant.status !== "active" || !hasActivePaidPlan(tenant)) {
     throw new HttpError(402, "Choose and activate an InterCon paid plan before submitting templates or sending WhatsApp messages.", {
       code: "INTERCON_PLAN_REQUIRED",
       billing: publicBilling(tenant),
@@ -392,6 +353,12 @@ async function requireActivePaidPlan(tenantId) {
 }
 
 module.exports = {
+  addMonths,
+  periodEnd,
+  settlePayment,
+  handlePaymentWebhook,
+  reconcilePendingOrders,
+  listPaymentHistory,
   getPlans,
   getBillingStatus,
   selectPlan,

@@ -15,6 +15,7 @@ function assertProductionEnvironment() {
   if (!env.smtpHost) missing.push("SMTP_HOST");
   if (!env.smtpUser) missing.push("SMTP_USER");
   if (!env.smtpPass) missing.push("SMTP_PASS");
+  if (env.razorpayKeyId && !env.razorpayWebhookSecret) missing.push("RAZORPAY_WEBHOOK_SECRET");
 
   if (env.jwtSecret && env.dataEncryptionKey && env.jwtSecret === env.dataEncryptionKey) {
     throw new Error("JWT_SECRET and DATA_ENCRYPTION_KEY must be different in production");

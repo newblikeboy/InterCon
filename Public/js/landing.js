@@ -1,3 +1,5 @@
+let passwordResetToken = new URLSearchParams(window.location.hash.slice(1)).get("reset") || "";
+if (passwordResetToken) history.replaceState(null, "", window.location.pathname);
 const header = document.querySelector("[data-header]");
 const navToggle = document.querySelector("[data-nav-toggle]");
 const nav = document.querySelector("[data-nav]");
@@ -14,10 +16,13 @@ function updateHeader() {
 }
 
 function setAuthMode(mode) {
+  const heading = document.querySelector('[data-auth-form="' + mode + '"] h2');
+  if (heading) { heading.id = "auth-" + mode + "-title"; authModal.setAttribute("aria-labelledby", heading.id); }
   authTabs.forEach((tab) => {
     const active = tab.dataset.authTab === mode;
     tab.classList.toggle("active", active);
     tab.setAttribute("aria-selected", String(active));
+    tab.tabIndex = active ? 0 : -1;
   });
 
   authForms.forEach((form) => {
@@ -205,6 +210,12 @@ closeAuthButtons.forEach((button) => {
 
 authTabs.forEach((tab) => {
   tab.addEventListener("click", () => setAuthMode(tab.dataset.authTab));
+  tab.addEventListener("keydown", event => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const target = event.key === "Home" ? authTabs[0] : event.key === "End" ? authTabs[authTabs.length - 1] : [...authTabs].find(item => item !== tab);
+    setAuthMode(target.dataset.authTab); target.focus();
+  });
 });
 
 if (signupMobileInput) {
@@ -214,10 +225,14 @@ if (signupMobileInput) {
 authForms.forEach((form) => {
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const isSignup = form.dataset.authForm === "signup";
+    const mode = form.dataset.authForm;
+    const isSignup = mode === "signup";
+    const isRecovery = ["forgot-password", "reset-password"].includes(mode);
+    const originalLabel = form.querySelector("button[type=submit]").textContent;
     const submitButton = form.querySelector("button[type='submit']");
     const formData = normalizeAuthFormData(Object.fromEntries(new FormData(form).entries()), isSignup);
 
+    if (mode === "reset-password") formData.token = passwordResetToken;
     setFormMessage(form, "");
     removeResendButton(form);
 
@@ -226,10 +241,10 @@ authForms.forEach((form) => {
     }
 
     submitButton.disabled = true;
-    submitButton.textContent = isSignup ? "Creating account..." : "Logging in...";
+    submitButton.textContent = isRecovery ? "Please wait..." : isSignup ? "Creating account..." : "Logging in...";
 
     try {
-      const response = await fetch(isSignup ? "/api/auth/signup" : "/api/auth/login", {
+      const response = await fetch("/api/auth/" + mode, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -243,7 +258,11 @@ authForms.forEach((form) => {
         throw new Error(data.message || "Something went wrong");
       }
 
-      if (isSignup) {
+      if (isRecovery) {
+        setFormMessage(form, data.message);
+        form.reset();
+        if (mode === "reset-password") passwordResetToken = "";
+      } else if (isSignup) {
         setFormMessage(form, data.message || "Account created. Check your email to verify your account.");
         // Surface the resend control straight away (already counting down),
         // so a user whose email never arrives doesn't have to fail a login
@@ -263,7 +282,7 @@ authForms.forEach((form) => {
       }
     } finally {
       submitButton.disabled = false;
-      submitButton.textContent = isSignup ? "Signup" : "Login";
+      submitButton.textContent = originalLabel;
     }
   });
 });
@@ -272,7 +291,7 @@ authForms.forEach((form) => {
 // back/forward-cache restore of a page rendered before login), send them
 // straight to the portal instead of showing the logged-out landing page.
 (function redirectIfAlreadyAuthenticated() {
-  if (window.location.pathname !== "/") return;
+  if (window.location.pathname !== "/" || passwordResetToken) return;
 
   async function checkAndRedirect() {
     try {
@@ -388,3 +407,5 @@ updateHeader();
     revealEls.forEach((el) => el.classList.add("in"));
   }
 })();
+
+if (passwordResetToken) openAuth("reset-password");

@@ -129,8 +129,7 @@ async function sendMail({ to, subject, text, html }) {
   const activeTransporter = getTransporter();
 
   if (!activeTransporter) {
-    console.warn(`[email] SMTP is not configured — logging email instead of sending. to=${to} subject=${subject}\n${text}`);
-    return;
+    throw new Error("Email delivery is not configured");
   }
 
   await activeTransporter.sendMail({

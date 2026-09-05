@@ -43,6 +43,7 @@ async function createAutomationFlow(tenantId, body) {
 }
 
 async function updateAutomationStatus(tenantId, flowId, status) {
+  if (status === "active") throw new HttpError(501, "Automatic replies are not available yet. This flow remains a draft or paused.");
   if (!["draft", "active", "paused"].includes(status)) {
     throw new HttpError(400, "Invalid automation status");
   }

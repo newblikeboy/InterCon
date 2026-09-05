@@ -1,0 +1,18 @@
+{
+  "admin": {
+    "homeHidden": true,
+    "homeDisplay": "grid",
+    "detailDisplay": "grid"
+  },
+  "csv": [
+    {
+      "name": "\"Doe",
+      "phone": "Jane\"",
+      "city": "919876543210"
+    }
+  ],
+  "router": {
+    "hash": "#template-modal-title",
+    "visibleViews": []
+  }
+}

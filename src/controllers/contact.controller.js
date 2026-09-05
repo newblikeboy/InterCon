@@ -6,7 +6,8 @@ const listContacts = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    contacts
+    contacts,
+    nextCursor: contacts.length === require("../utils/pagination").pageSize(req.query.limit) ? String(contacts.at(-1)._id) : null
   });
 });
 
@@ -20,7 +21,7 @@ const createContact = asyncHandler(async (req, res) => {
 });
 
 const updateContact = asyncHandler(async (req, res) => {
-  const contact = await contactService.updateContact(req.tenantId, req.params.contactId, req.body);
+  const contact = await contactService.updateContact(req.tenantId, req.params.contactId, req.body, req.user._id);
 
   res.json({
     success: true,
@@ -39,11 +40,12 @@ const importContacts = asyncHandler(async (req, res) => {
 });
 
 const listOptOuts = asyncHandler(async (req, res) => {
-  const contacts = await contactService.listOptOuts(req.tenantId);
+  const contacts = await contactService.listOptOuts(req.tenantId, req.query);
 
   res.json({
     success: true,
-    contacts
+    contacts,
+    nextCursor: contacts.length === require("../utils/pagination").pageSize(req.query.limit) ? String(contacts.at(-1)._id) : null
   });
 });
 
@@ -66,7 +68,7 @@ const listSegments = asyncHandler(async (req, res) => {
 });
 
 const getSegmentMembers = asyncHandler(async (req, res) => {
-  const data = await contactService.getSegmentMembers(req.tenantId, req.params.segmentId);
+  const data = await contactService.getSegmentMembers(req.tenantId, req.params.segmentId, req.query);
 
   res.json({
     success: true,

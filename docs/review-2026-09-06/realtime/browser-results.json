@@ -1,0 +1,18 @@
+{
+  "passed": true,
+  "timingsMs": {
+    "delivered": 94,
+    "read": 94
+  },
+  "pageNavigations": 1,
+  "checks": [
+    "real authenticated WebSocket",
+    "delivered/read ticks without reload",
+    "late status and stale fetch do not regress read",
+    "incoming message without reload",
+    "reconnect recovers missed message",
+    "notification fields contain no message body, phone, or credentials"
+  ],
+  "errors": [],
+  "limitations": "Local Chrome and disposable MongoDB; provider webhook input simulated; no production or live Redis connection."
+}

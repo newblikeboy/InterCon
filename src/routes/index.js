@@ -17,6 +17,7 @@ const webhookRoutes = require("./webhook.routes");
 const router = express.Router();
 
 router.use("/auth", authRoutes);
+router.use("/admin", require("./admin.routes"));
 router.use("/automations", automationRoutes);
 router.use("/billing", billingRoutes);
 router.use("/campaigns", campaignRoutes);

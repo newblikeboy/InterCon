@@ -1,0 +1,64 @@
+[
+  {
+    "test": "Login throttle bypass with unvalidated header",
+    "normal": [
+      400,
+      400,
+      400,
+      429,
+      429,
+      429
+    ],
+    "rotated": [
+      400,
+      400,
+      400,
+      400,
+      400,
+      400
+    ]
+  },
+  {
+    "test": "Opening checkout disables paid access",
+    "before": true,
+    "after": false,
+    "status": "pending_payment"
+  },
+  {
+    "test": "Early renewal overwrites remaining prepaid term",
+    "oldEnd": "2026-12-04T18:48:51.704Z",
+    "newEnd": "2026-10-05T18:48:51.704Z"
+  },
+  {
+    "test": "Long chat excludes newest messages and clears unread",
+    "returned": 200,
+    "first": "Message 1",
+    "last": "Message 200",
+    "unread": 0
+  },
+  {
+    "test": "Older webhook regresses delivered state",
+    "before": "read",
+    "after": "sent"
+  },
+  {
+    "test": "Phone name webhook uses wrong tenant key",
+    "castFilter": {}
+  },
+  {
+    "test": "Phone-based send resets a blocked contact",
+    "afterStatus": "active",
+    "afterOptIn": true
+  },
+  {
+    "test": "Template sync ignores next page before disabling absent templates",
+    "requests": 1,
+    "hasNextPage": true,
+    "disableExclusions": [
+      {
+        "name": "first_page",
+        "language": "en"
+      }
+    ]
+  }
+]

@@ -418,22 +418,22 @@ async function doSyncMetaTemplates(tenantId) {
 
   if (!tenant?.meta?.wabaId || !accessToken) return;
 
-  const response = await fetchWithPolicy(
-    `https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.wabaId}/message_templates?fields=id,name,status,category,language,rejected_reason,quality_score,components&limit=100`,
-    {
-      headers: {
-        "Authorization": `Bearer ${accessToken}`,
-        "Content-Type": "application/json"
-      }
-    }
-  );
-  const metaResponse = await response.json().catch(() => ({}));
-
-  if (!response.ok || metaResponse.error) {
-    throw new HttpError(response.status || 400, metaResponse.error?.message || "Unable to sync Meta templates", metaResponse.error || metaResponse);
-  }
-
-  const templates = Array.isArray(metaResponse.data) ? metaResponse.data : [];
+  const templates = [];
+  let after = "";
+  const seen = new Set();
+  do {
+    const params = new URLSearchParams({ fields: "id,name,status,category,language,rejected_reason,quality_score,components", limit: "100" });
+    if (after) params.set("after", after);
+    const response = await fetchWithPolicy(`https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.wabaId}/message_templates?${params}`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    const data = await response.json();
+    if (!response.ok || data.error || !Array.isArray(data.data)) throw new HttpError(502, "Unable to complete template synchronization");
+    templates.push(...data.data);
+    after = data.paging?.next ? data.paging?.cursors?.after : "";
+    if (data.paging?.next && (!after || seen.has(after))) throw new HttpError(502, "Incomplete template pagination");
+    if (after) seen.add(after);
+  } while (after);
   const operations = templates.map((template) => {
     const category = String(template.category || "utility").toLowerCase();
     const body = getStoredTemplateBody(template);

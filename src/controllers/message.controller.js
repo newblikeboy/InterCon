@@ -21,7 +21,7 @@ const sendTemplateMessage = asyncHandler(async (req, res) => {
 });
 
 const sendTemplateMessages = asyncHandler(async (req, res) => {
-  const result = await messageService.sendTemplateMessages(req.tenantId, req.body);
+  const result = await messageService.sendTemplateMessages(req.tenantId, { ...req.body, idempotencyKey: req.get("Idempotency-Key") || req.body.idempotencyKey });
 
   res.status(201).json({
     success: true,

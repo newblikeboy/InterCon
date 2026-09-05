@@ -57,6 +57,11 @@ if (env.nodeEnv !== "test") {
   }));
 }
 
+app.get(["/admin", "/admin-portal.html"], require("./middleware/authenticate"), require("./middleware/platformAdmin"), (req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.sendFile(path.join(__dirname, "views", "admin-portal.html"));
+});
+
 app.use(express.static(publicPath, {
   maxAge: 0,
   etag: true,
@@ -102,9 +107,7 @@ app.get("/customer", (req, res) => {
   sendAuthenticatedHtml(res, "customer-portal.html");
 });
 
-app.get("/admin", (req, res) => {
-  sendAuthenticatedHtml(res, "admin-portal.html");
-});
+
 
 app.get("/privacy-policy", (req, res) => {
   sendHtml(res, "privacy-policy.html");

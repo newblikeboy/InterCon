@@ -8669,3 +8669,12 @@ address {
     display: none;
   }
 }
+
+/* Hidden panels and controls must stay outside the rendered layout. */
+[hidden] { display: none !important; }
+
+.inbox-history { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.inbox-history .inbox-messages { flex: 1; }
+[data-inbox-older] { flex-shrink: 0; padding: 10px; background: #fff; }
+
+.inbox-ticks.is-failed { color: #b42318; font-weight: 800; }

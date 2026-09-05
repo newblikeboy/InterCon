@@ -7,6 +7,7 @@ const Message = require("../models/Message");
 const Template = require("../models/Template");
 const env = require("../config/env");
 const HttpError = require("../utils/httpError");
+const { cursorFilter, pageSize } = require("../utils/pagination");
 
 cloudinary.config({
   cloud_name: env.cloudinaryCloudName,
@@ -78,12 +79,12 @@ async function detectMediaType(filePath) {
 }
 
 async function listMedia(tenantId, query = {}) {
-  const filter = { tenantId };
+  const filter = { tenantId, ...cursorFilter(query.after) };
   if (["image", "video", "document"].includes(query.type)) filter.mediaType = query.type;
 
   const assets = await MediaAsset.find(filter)
-    .sort({ createdAt: -1 })
-    .limit(200)
+    .sort({ _id: -1 })
+    .limit(pageSize(query.limit, 200))
     .lean();
 
   return assets.map(publicMedia);

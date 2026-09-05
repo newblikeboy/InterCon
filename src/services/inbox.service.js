@@ -9,6 +9,7 @@ const HttpError = require("../utils/httpError");
 const { requireActivePaidPlan } = require("./billing.service");
 const { fetchWithPolicy } = require("../utils/httpClient");
 const { publishInboxUpdated } = require("./realtime.service");
+const { cursorFilter, pageSize } = require("../utils/pagination");
 
 // Meta's customer-service window: free-form (non-template) replies are only
 // permitted within 24 hours of the customer's most recent inbound message.
@@ -82,11 +83,11 @@ function publicMessage(message) {
 }
 
 async function listConversations(tenantId, query = {}) {
-  const limit = Math.min(Number(query.limit) || 100, 300);
+  const limit = pageSize(query.limit, 100, 500);
   const [conversations, segments] = await Promise.all([
-    Conversation.find({ tenantId })
+    Conversation.find({ tenantId, ...cursorFilter(query.after) })
       .populate({ path: "contactId", model: Contact, select: "name tags" })
-      .sort({ lastMessageAt: -1 })
+      .sort({ _id: -1 })
       .limit(limit)
       .lean(),
     ContactSegment.find({ tenantId })
@@ -100,11 +101,12 @@ async function listConversations(tenantId, query = {}) {
     return map;
   }, new Map());
 
-  const totalUnread = conversations.reduce((sum, item) => sum + (item.unreadCount || 0), 0);
+  const { totalUnread } = await getUnreadSummary(tenantId);
 
   return {
     conversations: conversations.map((conversation) => publicConversation(conversation, groupNamesByTag)),
-    totalUnread
+    totalUnread,
+    nextCursor: conversations.length === limit ? String(conversations.at(-1)._id) : null
   };
 }
 
@@ -132,30 +134,33 @@ async function loadConversation(tenantId, conversationId) {
 
 async function getConversationMessages(tenantId, conversationId, query = {}) {
   const conversation = await loadConversation(tenantId, conversationId);
-  const limit = Math.min(Number(query.limit) || 200, 500);
+  const limit = pageSize(query.limit, 200);
 
-  const messages = await InboxMessage.find({ tenantId, conversationId: conversation._id })
-    .sort({ createdAt: 1 })
-    .limit(limit)
+  const messages = await InboxMessage.find({ tenantId, conversationId: conversation._id, ...cursorFilter(query.before) })
+    .sort({ _id: -1 })
+    .limit(limit + 1)
     .lean();
-
-  // Opening a conversation clears its unread badge.
-  if (conversation.unreadCount > 0) {
-    conversation.unreadCount = 0;
-    await conversation.save();
-  }
+  const hasMore = messages.length > limit;
+  if (hasMore) messages.pop();
+  messages.reverse();
 
   return {
     conversation: publicConversation(conversation),
-    messages: messages.map(publicMessage)
+    messages: messages.map(publicMessage),
+    nextCursor: hasMore ? String(messages[0]._id) : null
   };
 }
 
-async function markConversationRead(tenantId, conversationId) {
+async function markConversationRead(tenantId, conversationId, body = {}) {
   const conversation = await loadConversation(tenantId, conversationId);
-  conversation.unreadCount = 0;
-  await conversation.save();
-  return publicConversation(conversation);
+  if (!mongoose.Types.ObjectId.isValid(body.throughMessageId)) throw new HttpError(400, "Last displayed message is required");
+  const lastSeen = await InboxMessage.findOne({ _id: body.throughMessageId, tenantId, conversationId }).lean();
+  if (!lastSeen) throw new HttpError(404, "Displayed message not found");
+  const lastStoredFilter = conversation.lastStoredMessageId
+    ? { lastStoredMessageId: lastSeen._id }
+    : { lastStoredMessageId: { $exists: false }, lastMessageAt: { $lte: lastSeen.sentAt || lastSeen.createdAt } };
+  await Conversation.updateOne({ _id: conversation._id, tenantId, ...lastStoredFilter }, { $set: { unreadCount: 0 } });
+  return publicConversation(await loadConversation(tenantId, conversationId));
 }
 
 async function deleteConversation(tenantId, conversationId) {
@@ -195,6 +200,8 @@ async function sendReply(tenantId, conversationId, body = {}) {
 
   const conversation = await loadConversation(tenantId, conversationId);
   const { windowOpen, windowExpiresAt } = getWindowState(conversation);
+  const contact = await Contact.findOne({ tenantId, phone: conversation.customerPhone }).lean();
+  if (!contact || contact.status !== "active") throw new HttpError(403, "This contact is blocked or opted out");
 
   if (!windowOpen) {
     throw new HttpError(
@@ -255,10 +262,12 @@ async function sendReply(tenantId, conversationId, body = {}) {
   conversation.lastMessageText = text.slice(0, 1000);
   conversation.lastMessageAt = sentAt;
   conversation.lastDirection = "out";
-  conversation.unreadCount = 0;
-  await conversation.save();
+  await Conversation.updateOne({ _id: conversation._id, tenantId }, { $max: { lastStoredMessageId: message._id } });
+  await Conversation.updateOne({ _id: conversation._id, tenantId, lastMessageAt: { $lte: sentAt } }, { $set: {
+    lastMessageText: text.slice(0, 1000), lastMessageAt: sentAt, lastDirection: "out"
+  } });
 
-  publishInboxUpdated(tenantId, {
+  await publishInboxUpdated(tenantId, {
     action: "message_sent",
     conversationId: String(conversation._id),
     messageId: String(message._id),

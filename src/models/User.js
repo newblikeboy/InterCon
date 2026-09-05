@@ -37,6 +37,7 @@ const userSchema = new mongoose.Schema(
       enum: ["owner", "admin", "agent"],
       default: "owner"
     },
+    platformRole: { type: String, enum: ["none", "admin"], default: "none", select: false },
     status: {
       type: String,
       enum: ["active", "disabled"],
@@ -66,7 +67,10 @@ const userSchema = new mongoose.Schema(
     },
     lastLoginAt: {
       type: Date
-    }
+    },
+    passwordResetHash: { type: String, select: false },
+    passwordResetExpires: { type: Date, select: false },
+    passwordResetSentAt: { type: Date, select: false }
   },
   {
     timestamps: true

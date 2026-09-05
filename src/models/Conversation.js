@@ -56,6 +56,7 @@ const conversationSchema = new mongoose.Schema(
     lastInboundAt: {
       type: Date
     },
+    lastStoredMessageId: { type: mongoose.Schema.Types.ObjectId },
     unreadCount: {
       type: Number,
       default: 0,

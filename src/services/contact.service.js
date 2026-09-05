@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Contact = require("../models/Contact");
 const ContactSegment = require("../models/ContactSegment");
 const HttpError = require("../utils/httpError");
+const { cursorFilter, pageSize } = require("../utils/pagination");
 
 function normalizePhone(phone) {
   const digits = String(phone || "").replace(/[^\d+]/g, "").replace(/^\+/, "").trim();
@@ -49,7 +50,7 @@ function normalizeContact(input) {
 }
 
 async function listContacts(tenantId, query = {}) {
-  const filter = { tenantId };
+  const filter = { tenantId, ...cursorFilter(query.after) };
 
   if (query.status) {
     filter.status = query.status;
@@ -70,7 +71,7 @@ async function listContacts(tenantId, query = {}) {
   }
 
   const [contacts, segments] = await Promise.all([
-    Contact.find(filter).sort({ createdAt: -1 }).limit(100).lean(),
+    Contact.find(filter).sort({ _id: -1 }).limit(pageSize(query.limit)).lean(),
     ContactSegment.find({ tenantId }).select("_id name tag").lean()
   ]);
   const groupByTag = new Map(
@@ -104,7 +105,7 @@ async function createContact(tenantId, body) {
   );
 }
 
-async function updateContact(tenantId, contactId, body = {}) {
+async function updateContact(tenantId, contactId, body = {}, actorId) {
   if (!mongoose.Types.ObjectId.isValid(contactId)) {
     throw new HttpError(400, "Contact ID is invalid");
   }
@@ -120,6 +121,9 @@ async function updateContact(tenantId, contactId, body = {}) {
     throw new HttpError(400, "Contact status is invalid");
   }
 
+  const current = await Contact.findOne({ _id: contactId, tenantId }).lean();
+  if (!current) throw new HttpError(404, "Contact not found");
+  if (current.status !== "active" && status === "active" && (!contact.optIn.status || !contact.optIn.proof.trim())) throw new HttpError(400, "To restore this contact, confirm fresh consent and enter its evidence.");
   const existing = await Contact.findOne({
     tenantId,
     phone: contact.phone,
@@ -129,20 +133,20 @@ async function updateContact(tenantId, contactId, body = {}) {
     throw new HttpError(409, "Another contact already uses this WhatsApp number");
   }
 
-  const updated = await Contact.findOneAndUpdate(
-    { _id: contactId, tenantId },
-    {
-      $set: {
-        ...contact,
-        status
-      }
-    },
-    { returnDocument: "after" }
-  );
-
-  if (!updated) {
-    throw new HttpError(404, "Contact not found");
-  }
+  const session = await mongoose.startSession();
+  let updated;
+  try {
+    await session.withTransaction(async () => {
+      updated = await Contact.findOneAndUpdate({ _id: contactId, tenantId, status: current.status }, {
+        $set: { ...contact, status }
+      }, { returnDocument: "after", runValidators: true, session });
+      if (!updated) throw new HttpError(409, "This contact changed while you were editing. Reload it and try again.");
+      if (current.status !== status) await require("../models/ContactStatusEvent").create([{
+        tenantId, contactId, actorId, previousStatus: current.status, status,
+        reason: contact.optIn.proof || "Contact status changed in contact editor"
+      }], { session });
+    });
+  } finally { await session.endSession(); }
 
   return updated;
 }
@@ -200,8 +204,31 @@ async function importContacts(tenantId, contacts = []) {
   return results;
 }
 
-async function listOptOuts(tenantId) {
-  return Contact.find({ tenantId, status: { $in: ["opted_out", "blocked"] } }).sort({ updatedAt: -1 }).limit(100).lean();
+async function suppressContact(tenantId, body = {}, actorId) {
+  const phone = normalizePhone(body.phone);
+  assertValidWhatsappPhone(phone);
+  const status = String(body.status || "blocked");
+  if (!["blocked", "opted_out"].includes(status)) throw new HttpError(400, "Choose blocked or opted out");
+  const reason = String(body.reason || "").trim();
+  if (!reason || reason.length > 1000) throw new HttpError(400, "Enter a reason of 1 to 1000 characters");
+  const session = await mongoose.startSession();
+  let contact;
+  try {
+    await session.withTransaction(async () => {
+      contact = await Contact.findOne({ tenantId, phone }).session(session);
+      const previousStatus = contact?.status || "active";
+      if (!contact) contact = new Contact({ tenantId, phone, name: phone, source: "manual_suppression" });
+      contact.status = status;
+      contact.optIn = { status: false, proof: reason.slice(0, 240), capturedAt: new Date() };
+      await contact.save({ session });
+      await require("../models/ContactStatusEvent").create([{ tenantId, contactId: contact._id, actorId, previousStatus, status, reason }], { session });
+    });
+    return contact;
+  } finally { await session.endSession(); }
+}
+
+async function listOptOuts(tenantId, query = {}) {
+  return Contact.find({ tenantId, status: { $in: ["opted_out", "blocked"] }, ...cursorFilter(query.after) }).sort({ _id: -1 }).limit(pageSize(query.limit)).lean();
 }
 
 async function createSegment(tenantId, body) {
@@ -243,7 +270,7 @@ async function listSegments(tenantId) {
   }));
 }
 
-async function getSegmentMembers(tenantId, segmentId) {
+async function getSegmentMembers(tenantId, segmentId, query = {}) {
   if (!mongoose.Types.ObjectId.isValid(segmentId)) {
     throw new HttpError(400, "Segment ID is invalid");
   }
@@ -253,12 +280,12 @@ async function getSegmentMembers(tenantId, segmentId) {
     throw new HttpError(404, "Group not found");
   }
 
-  const members = await Contact.find({ tenantId, tags: segment.tag })
-    .sort({ createdAt: -1 })
-    .limit(500)
+  const members = await Contact.find({ tenantId, tags: segment.tag, ...cursorFilter(query.after) })
+    .sort({ _id: -1 })
+    .limit(pageSize(query.limit, 500))
     .lean();
 
-  return { segment, members };
+  return { segment, members, nextCursor: members.length === pageSize(query.limit, 500) ? String(members.at(-1)._id) : null };
 }
 
 async function setContactSegmentMembership(tenantId, segmentId, contactId, attach) {
@@ -353,6 +380,7 @@ async function deleteSegment(tenantId, segmentId) {
 }
 
 module.exports = {
+  suppressContact,
   listContacts,
   createContact,
   updateContact,

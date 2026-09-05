@@ -985,15 +985,26 @@ async function completeEmbeddedSignup(tenantId, userId, body) {
 
   await assertMetaAssetsAvailable(tenantId, wabaId, phoneNumberId);
 
-  let subscribed = null;
-  try {
-    subscribed = await subscribeAppToWaba(wabaId, tokenData.access_token);
-  } catch (error) {
-    subscribed = {
-      success: false,
-      message: error.message
-    };
+  if (!/^\d+$/.test(String(wabaId)) || !/^\d+$/.test(String(phoneNumberId || ""))) {
+    throw new HttpError(400, "A valid WhatsApp account and phone number are required");
   }
+  // Read the phone collection with the exchanged token, never trust browser IDs.
+  let after = "";
+  let phoneVerified = false;
+  const seenCursors = new Set();
+  do {
+    const params = new URLSearchParams({ fields: "id", limit: "100" });
+    if (after) params.set("after", after);
+    const phones = await fetchMetaJson(`${wabaId}/phone_numbers?${params}`, tokenData.access_token);
+    phoneVerified = (phones.data || []).some((phone) => String(phone.id) === String(phoneNumberId));
+    if (phoneVerified) break;
+    after = phones.paging?.next ? phones.paging?.cursors?.after : "";
+    if (after && seenCursors.has(after)) throw new HttpError(502, "Unable to verify WhatsApp phone ownership");
+    if (after) seenCursors.add(after);
+  } while (after);
+  if (!phoneVerified) throw new HttpError(403, "This phone does not belong to an accessible WhatsApp Business Account");
+  const subscribed = await subscribeAppToWaba(wabaId, tokenData.access_token);
+  if (subscribed?.success !== true) throw new HttpError(502, "WhatsApp event subscription could not be completed");
 
   const expiresInSeconds = Number(tokenData.expires_in || 0);
   const tokenExpiresAt = expiresInSeconds

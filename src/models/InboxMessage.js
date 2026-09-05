@@ -55,6 +55,7 @@ const inboxMessageSchema = new mongoose.Schema(
       maxlength: 160,
       index: true
     },
+    providerStatusAt: { type: Date },
     status: {
       type: String,
       enum: ["received", "queued", "sent", "delivered", "read", "failed"],
@@ -87,6 +88,7 @@ const inboxMessageSchema = new mongoose.Schema(
 );
 
 inboxMessageSchema.index({ conversationId: 1, createdAt: 1 });
+inboxMessageSchema.index({ tenantId: 1, conversationId: 1, _id: -1 });
 inboxMessageSchema.index(
   { tenantId: 1, metaMessageId: 1 },
   { unique: true, partialFilterExpression: { metaMessageId: { $type: "string" } } }

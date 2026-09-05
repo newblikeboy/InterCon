@@ -16,18 +16,18 @@ async function startServer() {
   server.headersTimeout = 15000;
   server.requestTimeout = 120000;
   server.maxRequestsPerSocket = 1000;
-  initRealtime(server);
+  await initRealtime(server);
 
   server.listen(env.port, () => {
     console.log(`InterCon is running on http://localhost:${env.port}`);
   });
 
-  function shutdown(signal) {
+  async function shutdown(signal) {
     console.log(`${signal} received. Closing HTTP server.`);
     const forceTimer = setTimeout(() => process.exit(1), 15000);
     forceTimer.unref();
+    await closeRealtime();
     server.close(async () => {
-      closeRealtime();
       await Promise.allSettled([mongoose.disconnect(), closeRedis()]);
       clearTimeout(forceTimer);
       process.exit(0);

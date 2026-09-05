@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const crypto = require("crypto");
 const Message = require("../models/Message");
 const Template = require("../models/Template");
@@ -167,11 +168,15 @@ async function processMessageStatuses(tenantId, statuses = []) {
   const inboxOperations = [];
   for (const status of statuses) {
     const metaMessageId = status.id;
-    const mappedStatus = ["sent", "delivered", "read", "failed"].includes(status.status)
-      ? status.status
-      : "sent";
+    const mappedStatus = status.status;
+    const predecessors = {
+      sent: ["queued", "scheduled", "processing", "uncertain", "accepted", "sent"],
+      delivered: ["queued", "scheduled", "processing", "uncertain", "accepted", "sent", "delivered", "failed"],
+      read: ["queued", "scheduled", "processing", "uncertain", "accepted", "sent", "delivered", "read", "failed"],
+      failed: ["queued", "scheduled", "processing", "uncertain", "accepted", "sent", "failed"]
+    }[mappedStatus];
 
-    if (!metaMessageId) continue;
+    if (!metaMessageId || !predecessors) continue;
     const error = status.errors?.[0];
     const errorMessage = error
       ? [error.code, error.title || error.message, error.error_data?.details]
@@ -182,18 +187,31 @@ async function processMessageStatuses(tenantId, statuses = []) {
     const update = {
       $set: {
         status: mappedStatus,
-        ...(errorMessage ? { error: errorMessage } : {})
+        error: errorMessage
       }
     };
-    messageOperations.push({ updateOne: { filter: { tenantId, metaMessageId }, update } });
+    const providerTime = new Date(Number(status.timestamp) * 1000);
+    if (Number.isFinite(providerTime.getTime())) update.$max = { providerStatusAt: providerTime };
+    const filter = { tenantId, metaMessageId, status: { $in: predecessors } };
+    messageOperations.push({ updateOne: { filter, update } });
     inboxOperations.push({
-      updateOne: { filter: { tenantId, metaMessageId, direction: "out" }, update }
+      updateOne: { filter: { ...filter, direction: "out" }, update }
     });
   }
   await Promise.all([
     messageOperations.length ? Message.bulkWrite(messageOperations, { ordered: false }) : null,
     inboxOperations.length ? InboxMessage.bulkWrite(inboxOperations, { ordered: false }) : null
   ]);
+  if (inboxOperations.length) {
+    const affected = await InboxMessage.find({
+      tenantId, direction: "out", metaMessageId: { $in: inboxOperations.map(operation => operation.updateOne.filter.metaMessageId) }
+    }).select("_id conversationId status").lean();
+    // Publish the stored status, not the raw provider event (which may be late).
+    for (const message of affected) await publishInboxUpdated(tenantId, {
+      action: "status_updated", conversationId: String(message.conversationId),
+      messageId: String(message._id), status: message.status
+    });
+  }
 }
 
 // Reduce a Cloud API inbound message object to a short, displayable summary.
@@ -302,6 +320,42 @@ async function resolveInboundContact(tenantId, phone, profileName) {
   ).lean();
 }
 
+async function storeConversationMessage(tenantId, customerPhone, contact, profileName, wabaId, phoneNumberId, messageData) {
+  const session = await mongoose.startSession();
+  let result = null;
+  try {
+    await session.withTransaction(async () => {
+      result = null;
+      if (await InboxMessage.exists({ tenantId, metaMessageId: messageData.metaMessageId }).session(session)) return;
+      let conversation = await Conversation.findOne({ tenantId, customerPhone }).session(session);
+      if (!conversation) conversation = new Conversation({ tenantId, customerPhone, lastMessageAt: messageData.sentAt });
+      conversation.contactId = contact?._id;
+      if (profileName) conversation.customerName = profileName;
+      if (wabaId) conversation.wabaId = wabaId;
+      if (phoneNumberId) conversation.phoneNumberId = phoneNumberId;
+      if (messageData.sentAt >= conversation.lastMessageAt) {
+        conversation.lastMessageAt = messageData.sentAt;
+        conversation.lastMessageText = (messageData.text || messageData.mediaCaption || "").slice(0, 1000);
+        conversation.lastDirection = messageData.direction;
+      }
+      if (messageData.direction === "in") {
+        conversation.unreadCount += 1;
+        if (!conversation.lastInboundAt || messageData.sentAt > conversation.lastInboundAt) conversation.lastInboundAt = messageData.sentAt;
+      }
+      const [inboxMessage] = await InboxMessage.create([{
+        tenantId, conversationId: conversation._id, contactId: contact?._id, customerPhone, ...messageData
+      }], { session });
+      conversation.lastStoredMessageId = inboxMessage._id;
+      await conversation.save({ session });
+      result = { conversation, inboxMessage };
+    });
+    return result;
+  } catch (error) {
+    if (error.code === 11000 && await InboxMessage.exists({ tenantId, metaMessageId: messageData.metaMessageId })) return null;
+    throw error;
+  } finally { await session.endSession(); }
+}
+
 async function processInboundMessages(tenantId, value = {}, wabaId, phoneNumberId) {
   const messages = Array.isArray(value.messages) ? value.messages : [];
   if (!messages.length) return;
@@ -329,44 +383,14 @@ async function processInboundMessages(tenantId, value = {}, wabaId, phoneNumberI
 
     const contact = await resolveInboundContact(tenantId, fromPhone, profileName);
 
-    const conversation = await Conversation.findOneAndUpdate(
-      { tenantId, customerPhone: fromPhone },
-      {
-        $set: {
-          contactId: contact?._id,
-          ...(profileName ? { customerName: profileName } : {}),
-          ...(wabaId ? { wabaId } : {}),
-          ...(phoneNumberId ? { phoneNumberId } : {}),
-          lastMessageText: previewText,
-          lastMessageAt: sentAt,
-          lastInboundAt: sentAt,
-          lastDirection: "in"
-        },
-        $setOnInsert: {
-          tenantId,
-          customerPhone: fromPhone
-        },
-        $inc: { unreadCount: 1 }
-      },
-      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
-    );
-
-    const inboxMessage = await InboxMessage.create({
-      tenantId,
-      conversationId: conversation._id,
-      contactId: contact?._id,
-      customerPhone: fromPhone,
-      direction: "in",
-      type: summary.type,
-      text: summary.text,
-      mediaCaption: summary.caption,
-      error: describeMessageError(message),
-      metaMessageId,
-      status: "received",
-      sentAt
+    const stored = await storeConversationMessage(tenantId, fromPhone, contact, profileName, wabaId, phoneNumberId, {
+      direction: "in", type: summary.type, text: summary.text, mediaCaption: summary.caption,
+      error: describeMessageError(message), metaMessageId, status: "received", sentAt
     });
+    if (!stored) continue;
+    const { conversation, inboxMessage } = stored;
 
-    publishInboxUpdated(tenantId, {
+    await publishInboxUpdated(tenantId, {
       action: "message_received",
       conversationId: String(conversation._id),
       messageId: String(inboxMessage._id),
@@ -411,10 +435,11 @@ async function processMessageEchoes(tenantId, value = {}, wabaId, phoneNumberId)
     if (type === "revoke") {
       const originalId = echo.revoke?.original_message_id;
       if (originalId) {
-        await InboxMessage.findOneAndUpdate(
+        const updated = await InboxMessage.findOneAndUpdate(
           { tenantId, metaMessageId: originalId },
           { $set: { revoked: true, text: "", mediaCaption: "", type: "revoke" } }
-        );
+        ).select("_id conversationId");
+        if (updated) await publishInboxUpdated(tenantId, { action: "message_updated", conversationId: String(updated.conversationId), messageId: String(updated._id) });
       }
       continue;
     }
@@ -424,10 +449,11 @@ async function processMessageEchoes(tenantId, value = {}, wabaId, phoneNumberId)
       const originalId = echo.edit?.original_message_id;
       if (originalId) {
         const edited = describeIncomingMessage(echo.edit?.message || {});
-        await InboxMessage.findOneAndUpdate(
+        const updated = await InboxMessage.findOneAndUpdate(
           { tenantId, metaMessageId: originalId },
           { $set: { edited: true, type: edited.type, text: edited.text, mediaCaption: edited.caption } }
-        );
+        ).select("_id conversationId");
+        if (updated) await publishInboxUpdated(tenantId, { action: "message_updated", conversationId: String(updated.conversationId), messageId: String(updated._id) });
       }
       continue;
     }
@@ -447,50 +473,19 @@ async function processMessageEchoes(tenantId, value = {}, wabaId, phoneNumberId)
 
     const contact = await resolveEchoContact(tenantId, customerPhone, "");
 
-    const conversation = await Conversation.findOneAndUpdate(
-      { tenantId, customerPhone },
-      {
-        $set: {
-          contactId: contact?._id,
-          ...(wabaId ? { wabaId } : {}),
-          ...(phoneNumberId ? { phoneNumberId } : {}),
-          lastMessageText: previewText,
-          lastMessageAt: sentAt,
-          lastDirection: "out"
-        },
-        $setOnInsert: {
-          tenantId,
-          customerPhone
-        }
-      },
-      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
-    );
-
-    await InboxMessage.create({
-      tenantId,
-      conversationId: conversation._id,
-      contactId: contact?._id,
-      customerPhone,
-      direction: "out",
-      type: summary.type,
-      text: summary.text,
-      mediaCaption: summary.caption,
-      error: describeMessageError(echo),
-      metaMessageId,
-      status: "sent",
-      sentAt
+    const stored = await storeConversationMessage(tenantId, customerPhone, contact, "", wabaId, phoneNumberId, {
+      direction: "out", type: summary.type, text: summary.text, mediaCaption: summary.caption,
+      error: describeMessageError(echo), metaMessageId, status: "sent", sentAt
     });
+    if (stored) await publishInboxUpdated(tenantId, { action: "message_sent", conversationId: String(stored.conversation._id), messageId: String(stored.inboxMessage._id) });
   }
 }
 
 async function processPhoneNameUpdate(tenantId, value = {}) {
-  const displayPhoneNumber = String(value.display_phone_number || "").replace(/^\+/, "");
   const requestedName = value.requested_verified_name || value.verified_name || "";
 
-  const filter = {
-    tenantId,
-    ...(displayPhoneNumber ? { "meta.displayPhoneNumber": new RegExp(`${displayPhoneNumber}$`) } : {})
-  };
+  if (!tenantId) throw new HttpError(400, "Workspace is required for phone updates");
+  const filter = { _id: tenantId };
 
   await Tenant.findOneAndUpdate(
     filter,
@@ -638,6 +633,9 @@ async function processNextWebhookEvent(workerId) {
 }
 
 module.exports = {
+  processInboundMessages,
+  processPhoneNameUpdate,
+  processMessageStatuses,
   getMetaWebhookSetup,
   verifyMetaChallenge,
   enqueueMetaWebhook,

@@ -9,6 +9,10 @@ router.use(authenticate);
 
 router.get("/", contactController.listContacts);
 router.post("/", authorize("owner", "admin"), contactController.createContact);
+router.post("/suppress", authorize("owner", "admin"), require("../utils/asyncHandler")(async (req, res) => {
+  const contact = await require("../services/contact.service").suppressContact(req.tenantId, req.body, req.user._id);
+  res.json({ success: true, contact });
+}));
 router.post("/import", authorize("owner", "admin"), contactController.importContacts);
 router.get("/opt-outs", contactController.listOptOuts);
 router.put("/:contactId", authorize("owner", "admin"), contactController.updateContact);

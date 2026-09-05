@@ -14,17 +14,9 @@ function observe(name, milliseconds) {
 }
 
 function routeKey(req) {
-  const path = req.path
-    .split("/")
-    .filter(Boolean)
-    .slice(0, 4)
-    .map((part) => (
-      /^[a-f0-9]{24}$/i.test(part) || /^[0-9a-f-]{30,}$/i.test(part) || /^\d{6,}$/.test(part)
-        ? ":id"
-        : part
-    ))
-    .join(".");
-  return `${req.method}.${path || "root"}`;
+  const method = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].includes(req.method) ? req.method : "OTHER";
+  const route = req.route?.path;
+  return `${method}.${typeof route === "string" ? route : "unmatched-or-static"}`;
 }
 
 function middleware(req, res, next) {

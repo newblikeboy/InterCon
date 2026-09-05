@@ -7,7 +7,8 @@ const getBilling = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     billing,
-    plans: billingService.getPlans()
+    plans: billingService.getPlans(),
+    payments: await billingService.listPaymentHistory(req.tenantId)
   });
 });
 

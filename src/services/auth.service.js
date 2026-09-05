@@ -172,6 +172,7 @@ async function signupCustomer(body) {
 async function loginCustomer(body) {
   const loginId = body.email || body.login_id;
   const password = body.password;
+  if (typeof password !== "string" || password.length > 128) throw new HttpError(400, "Enter a valid password");
 
   if (!loginId || !password) {
     throw new HttpError(400, "Email and password are required");
@@ -286,6 +287,40 @@ async function resendVerificationEmail(identifier) {
   return generic;
 }
 
+async function requestPasswordReset(identifier) {
+  const generic = { message: "If this email belongs to an active account, a password reset link will arrive shortly." };
+  const email = String(identifier || "").trim().toLowerCase();
+  if (!validateEmail(email)) return generic;
+  const token = crypto.randomBytes(32).toString("hex");
+  const user = await User.findOneAndUpdate({
+    email, status: "active", isVerified: true,
+    $or: [{ passwordResetSentAt: { $exists: false } }, { passwordResetSentAt: { $lt: new Date(Date.now() - 60000) } }]
+  }, { $set: {
+    passwordResetHash: crypto.createHash("sha256").update(token).digest("hex"),
+    passwordResetExpires: new Date(Date.now() + 30 * 60000), passwordResetSentAt: new Date()
+  } }, { returnDocument: "after" });
+  if (user) {
+    const link = env.clientOrigin.replace(/\/$/, "") + "/#reset=" + token;
+    try { await emailService.sendMail({ to: user.email, subject: "Reset your InterCon password", text: "Open this link within 30 minutes to choose a new password: " + link + "\nIf you did not request this, ignore this email." }); }
+    catch (error) { console.error("Password reset email failed:", error.message); }
+  }
+  return generic;
+}
+
+async function resetPassword(body = {}) {
+  if (!/^[a-f0-9]{64}$/.test(String(body.token || ""))) throw new HttpError(400, "This reset link is invalid or has expired");
+  if (typeof body.password !== "string" || body.password.length < 8 || body.password.length > 128 || !validatePasswordStrength(body.password)) throw new HttpError(400, "Use 8 to 128 characters including a letter and a number");
+  if (body.password !== body.confirm_password) throw new HttpError(400, "The passwords do not match");
+  const passwordHash = await bcrypt.hash(body.password, 12);
+  const user = await User.findOneAndUpdate({
+    passwordResetHash: crypto.createHash("sha256").update(body.token).digest("hex"),
+    passwordResetExpires: { $gt: new Date() }, status: "active", isVerified: true
+  }, { $set: { passwordHash }, $inc: { sessionVersion: 1 }, $unset: { passwordResetHash: "", passwordResetExpires: "" } });
+  if (!user) throw new HttpError(400, "This reset link is invalid or has expired");
+  await require("./sessionCache.service").invalidateUser(user._id);
+  return { message: "Password changed. Please log in with your new password." };
+}
+
 async function getAuthenticatedProfile(user) {
   const tenant = await Tenant.findById(user.tenantId);
 
@@ -296,6 +331,8 @@ async function getAuthenticatedProfile(user) {
 }
 
 module.exports = {
+  requestPasswordReset,
+  resetPassword,
   signupCustomer,
   loginCustomer,
   verifyEmail,

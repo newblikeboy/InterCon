@@ -1,0 +1,406 @@
+{
+  "records": [
+    {
+      "page": "landing",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "viewport": 1440
+    },
+    {
+      "page": "login",
+      "width": 1440,
+      "focusEscapesDialog": true
+    },
+    {
+      "page": "home",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "viewport": 1440,
+      "visibleViews": [
+        "home"
+      ],
+      "text": "Services\nWhatsApp Messaging\nOnboard WABA, manage templates, contacts, and send.\nSOON\nRCS Messaging\nRich Communication Services. Coming soon.\nSOON\nSMS\nPlain text SMS messaging. Coming soon."
+    },
+    {
+      "page": "setup",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "viewport": 1440,
+      "visibleViews": [
+        "setup"
+      ],
+      "text": "Onboarding & Template Management\nConnected WABA\nLink your WhatsApp Business Account and number.\nCoexistence Onboarding\nKeep the WhatsApp Business app and add the API on the same number.\nManage Template\nCreate and submit templates for Meta review.\nTemplate Library\nBrowse the approved template catalogue.\nMedia Library\nManage images, video, and documents.\nContact Manager\nWhatsApp Contacts\nImport customers with WhatsApp consent.\nOpt-out Contacts\nView and manage opted-out numbers.\nManage Groups\nOrganise contacts into segments.\nBlacklist Numbers\nBlock numbers for better control."
+    },
+    {
+      "page": "contacts",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "viewport": 1440,
+      "visibleViews": [
+        "contacts"
+      ],
+      "text": "Setup\n\nCUSTOMER LIST\n\nContact list\nUpload contacts\nDownload CSV template\nRefresh\nNAME\nPHONE\nOPT-IN\nTAG\nGROUP\nACTIONS\nNo contacts imported yet."
+    },
+    {
+      "page": "templates",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "viewport": 1440,
+      "visibleViews": [
+        "templates"
+      ],
+      "text": "Setup\n\nSUBMITTED TEMPLATES\n\nAll template status\nCreate Template\nRefresh\nAll\n0\nPending\n0\nApproved\n0\nRejected\n0\nNAME\nCATEGORY\nSTATUS\nREASON\nACTIONS\nNo templates submitted yet."
+    },
+    {
+      "page": "send-whatsapp",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "viewport": 1440,
+      "visibleViews": [
+        "send-whatsapp"
+      ],
+      "text": "Message details\nRefresh\nRecipients\nSelect individual customers, complete groups, or both.\n0 selected\nSearch recipients\nSelect all contacts\nClear\nContacts\nActive and opted-in only\nNo active opted-in contacts available.\nGroups\nMembers are deduplicated\nNo groups created yet.\nApproved template\nNo approved templates available\nLanguage\nEnglish (US)\nEnglish\nHindi\nEnglish (India)\nRecipient variables\nEach phone number carries its own template values.\nSelect a template to configure its variables.\n\nNo approved templates available.\n\nSelect recipients\n\nLIVE PREVIEW\nCustomer view\n12:17 AM\nIC\nCustomer\nBusine"
+    },
+    {
+      "page": "inbox",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "viewport": 1440,
+      "visibleViews": [
+        "inbox"
+      ],
+      "text": "Chats\nReconnecting\nRefresh\nNo conversations yet. Customer replies will appear here.\nSelect a conversation\nReplies from your customers show up here. Pick a chat to read and respond.\n?\nCustomer"
+    },
+    {
+      "page": "billing",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "viewport": 1440,
+      "visibleViews": [
+        "billing"
+      ],
+      "text": "Payments\nCurrent plan\nNo active plan\nNo plan\n\nChoose a paid InterCon plan when you are ready to submit templates or send WhatsApp messages.\n\nNo plans configured.\nOpen Meta payments\nCheck Meta billing"
+    },
+    {
+      "page": "reports",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "viewport": 1440,
+      "visibleViews": [
+        "reports"
+      ],
+      "text": "Reports\n\nMESSAGE HISTORY\n\nMessage reports\nFrom\nTo\nStatus\nAll statuses\nQueued\nScheduled\nProcessing\nAccepted\nSent\nDelivered / read\nRead\nFailed\nUncertain\nMobile number\nRows\n25\n50\n100\nSearch\n\nTO\nTEMPLATE\nSTATUS\nSENT AT\nLAST UPDATE\nBATCH\nERROR\nChoose filters and click Search to fetch reports."
+    },
+    {
+      "page": "optout",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "viewport": 1440,
+      "visibleViews": [
+        "optout"
+      ],
+      "text": "Setup\nCOMING SOON\nWhat you'll do here\nReview recent opt-outs and the campaigns behind them.\nEnsure opted-out numbers are excluded from new sends.\nExport opt-out lists for compliance."
+    },
+    {
+      "page": "blacklist",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "viewport": 1440,
+      "visibleViews": [
+        "blacklist"
+      ],
+      "text": "Setup\nCOMING SOON\nWhat you'll do here\nAdd numbers that should never be messaged.\nReview blocks that are causing delivery failures.\nRemove numbers blocked in error."
+    },
+    {
+      "page": "developer-api",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "viewport": 1440,
+      "visibleViews": [
+        "developer-api"
+      ],
+      "text": "API\n\nKEYS\n\nCreate API key\nRefresh\nKey name\nCreate key\n\nNAME\nKEY\nSTATUS\nLAST USED\nACTION\nNo API keys created yet.\nAPI v1\nBASE URL\nhttp://127.0.0.1:5199/api/v1\nAUTH\nAuthorization: Bearer API_KEY\nALLOWED SEND\nApproved templates only\n1\nAdd contact\nPOST /api/v1/contacts\nAuthorization: Bearer API_KEY\n\n{\n  \"name\": \"Name\",\n  \"phone\": \"919999999999\",\n  \"optIn\": true,\n  \"optInProof\": \"Website signup\"\n}\n2\nSend WhatsApp\nPOST /api/v1/messages/send-template\nAuthorization: Bearer API_KEY\n\n{\n  \"phone\": \"919999999999\",\n  \"name\": \"Name\",\n  \"optIn\": true,\n  \"templateName\": \"order_update\",\n  \"language\": \"en_US\",\n"
+    },
+    {
+      "page": "connect",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "viewport": 1440,
+      "visibleViews": [
+        "connect"
+      ],
+      "text": "Setup\nNot connected\nRegister New WhatsApp\nRegister\nResolve billing\nBusiness Settings\nWABA NUMBER\nPHONENUMBER ID\nWABA BUSINESSID\nBSP NAME\nMESSAGING LIMIT\nQUALITY RATING\nHEALTH\nDISPLAY NAME\nCONFIGUREDATE\nWEBHOOK\nACTIONS\nNo WhatsApp number connected yet. Click \"Register New WhatsApp\" to onboard.\n\nVisit Business Settings to enhance your daily limit."
+    },
+    {
+      "page": "landing",
+      "width": 390,
+      "scrollWidth": 390,
+      "viewport": 390
+    },
+    {
+      "page": "login",
+      "width": 390,
+      "focusEscapesDialog": true
+    },
+    {
+      "page": "home",
+      "width": 390,
+      "scrollWidth": 390,
+      "viewport": 390,
+      "visibleViews": [
+        "home"
+      ],
+      "text": "Services\nWhatsApp Messaging\nOnboard WABA, manage templates, contacts, and send.\nSOON\nRCS Messaging\nRich Communication Services. Coming soon.\nSOON\nSMS\nPlain text SMS messaging. Coming soon."
+    },
+    {
+      "page": "setup",
+      "width": 390,
+      "scrollWidth": 390,
+      "viewport": 390,
+      "visibleViews": [
+        "setup"
+      ],
+      "text": "Onboarding & Template Management\nConnected WABA\nLink your WhatsApp Business Account and number.\nCoexistence Onboarding\nKeep the WhatsApp Business app and add the API on the same number.\nManage Template\nCreate and submit templates for Meta review.\nTemplate Library\nBrowse the approved template catalogue.\nMedia Library\nManage images, video, and documents.\nContact Manager\nWhatsApp Contacts\nImport customers with WhatsApp consent.\nOpt-out Contacts\nView and manage opted-out numbers.\nManage Groups\nOrganise contacts into segments.\nBlacklist Numbers\nBlock numbers for better control."
+    },
+    {
+      "page": "contacts",
+      "width": 390,
+      "scrollWidth": 390,
+      "viewport": 390,
+      "visibleViews": [
+        "contacts"
+      ],
+      "text": "Setup\n\nCUSTOMER LIST\n\nContact list\nUpload contacts\nDownload CSV template\nRefresh\nNo contacts imported yet."
+    },
+    {
+      "page": "templates",
+      "width": 390,
+      "scrollWidth": 390,
+      "viewport": 390,
+      "visibleViews": [
+        "templates"
+      ],
+      "text": "Setup\n\nSUBMITTED TEMPLATES\n\nAll template status\nCreate Template\nRefresh\nAll\n0\nPending\n0\nApproved\n0\nRejected\n0\nNo templates submitted yet."
+    },
+    {
+      "page": "send-whatsapp",
+      "width": 390,
+      "scrollWidth": 390,
+      "viewport": 390,
+      "visibleViews": [
+        "send-whatsapp"
+      ],
+      "text": "Message details\nRefresh\nRecipients\nSelect individual customers, complete groups, or both.\n0 selected\nSearch recipients\nSelect all contacts\nClear\nContacts\nActive and opted-in only\nNo active opted-in contacts available.\nGroups\nMembers are deduplicated\nNo groups created yet.\nApproved template\nNo approved templates available\nLanguage\nEnglish (US)\nEnglish\nHindi\nEnglish (India)\nRecipient variables\nEach phone number carries its own template values.\nSelect a template to configure its variables.\n\nNo approved templates available.\n\nSelect recipients\n\nLIVE PREVIEW\nCustomer view\n12:17 AM\nIC\nCustomer\nBusine"
+    },
+    {
+      "page": "inbox",
+      "width": 390,
+      "scrollWidth": 390,
+      "viewport": 390,
+      "visibleViews": [
+        "inbox"
+      ],
+      "text": "Chats\nReconnecting\nRefresh\nNo conversations yet. Customer replies will appear here."
+    },
+    {
+      "page": "billing",
+      "width": 390,
+      "scrollWidth": 390,
+      "viewport": 390,
+      "visibleViews": [
+        "billing"
+      ],
+      "text": "Payments\nCurrent plan\nNo active plan\nNo plan\n\nChoose a paid InterCon plan when you are ready to submit templates or send WhatsApp messages.\n\nNo plans configured.\nOpen Meta payments\nCheck Meta billing"
+    },
+    {
+      "page": "reports",
+      "width": 390,
+      "scrollWidth": 390,
+      "viewport": 390,
+      "visibleViews": [
+        "reports"
+      ],
+      "text": "Reports\n\nMESSAGE HISTORY\n\nMessage reports\nFrom\nTo\nStatus\nAll statuses\nQueued\nScheduled\nProcessing\nAccepted\nSent\nDelivered / read\nRead\nFailed\nUncertain\nMobile number\nRows\n25\n50\n100\nSearch\n\nChoose filters and click Search to fetch reports."
+    },
+    {
+      "page": "optout",
+      "width": 390,
+      "scrollWidth": 390,
+      "viewport": 390,
+      "visibleViews": [
+        "optout"
+      ],
+      "text": "Setup\nCOMING SOON\nWhat you'll do here\nReview recent opt-outs and the campaigns behind them.\nEnsure opted-out numbers are excluded from new sends.\nExport opt-out lists for compliance."
+    },
+    {
+      "page": "blacklist",
+      "width": 390,
+      "scrollWidth": 390,
+      "viewport": 390,
+      "visibleViews": [
+        "blacklist"
+      ],
+      "text": "Setup\nCOMING SOON\nWhat you'll do here\nAdd numbers that should never be messaged.\nReview blocks that are causing delivery failures.\nRemove numbers blocked in error."
+    },
+    {
+      "page": "developer-api",
+      "width": 390,
+      "scrollWidth": 390,
+      "viewport": 390,
+      "visibleViews": [
+        "developer-api"
+      ],
+      "text": "API\n\nKEYS\n\nCreate API key\nRefresh\nKey name\nCreate key\n\nNo API keys created yet.\nAPI v1\nBASE URL\nhttp://127.0.0.1:5199/api/v1\nAUTH\nAuthorization: Bearer API_KEY\nALLOWED SEND\nApproved templates only\n1\nAdd contact\nPOST /api/v1/contacts\nAuthorization: Bearer API_KEY\n\n{\n  \"name\": \"Name\",\n  \"phone\": \"919999999999\",\n  \"optIn\": true,\n  \"optInProof\": \"Website signup\"\n}\n2\nSend WhatsApp\nPOST /api/v1/messages/send-template\nAuthorization: Bearer API_KEY\n\n{\n  \"phone\": \"919999999999\",\n  \"name\": \"Name\",\n  \"optIn\": true,\n  \"templateName\": \"order_update\",\n  \"language\": \"en_US\",\n  \"mediaId\": \"MED-550e8400-e29b-4"
+    },
+    {
+      "page": "connect",
+      "width": 390,
+      "scrollWidth": 390,
+      "viewport": 390,
+      "visibleViews": [
+        "connect"
+      ],
+      "text": "Setup\nNot connected\nRegister New WhatsApp\nRegister\nResolve billing\nBusiness Settings\nNo WhatsApp number connected yet. Click \"Register New WhatsApp\" to onboard.\n\nVisit Business Settings to enhance your daily limit."
+    },
+    {
+      "page": "landing",
+      "width": 320,
+      "scrollWidth": 320,
+      "viewport": 320
+    },
+    {
+      "page": "login",
+      "width": 320,
+      "focusEscapesDialog": true
+    },
+    {
+      "page": "home",
+      "width": 320,
+      "scrollWidth": 320,
+      "viewport": 320,
+      "visibleViews": [
+        "home"
+      ],
+      "text": "Services\nWhatsApp Messaging\nOnboard WABA, manage templates, contacts, and send.\nSOON\nRCS Messaging\nRich Communication Services. Coming soon.\nSOON\nSMS\nPlain text SMS messaging. Coming soon."
+    },
+    {
+      "page": "setup",
+      "width": 320,
+      "scrollWidth": 320,
+      "viewport": 320,
+      "visibleViews": [
+        "setup"
+      ],
+      "text": "Onboarding & Template Management\nConnected WABA\nLink your WhatsApp Business Account and number.\nCoexistence Onboarding\nKeep the WhatsApp Business app and add the API on the same number.\nManage Template\nCreate and submit templates for Meta review.\nTemplate Library\nBrowse the approved template catalogue.\nMedia Library\nManage images, video, and documents.\nContact Manager\nWhatsApp Contacts\nImport customers with WhatsApp consent.\nOpt-out Contacts\nView and manage opted-out numbers.\nManage Groups\nOrganise contacts into segments.\nBlacklist Numbers\nBlock numbers for better control."
+    },
+    {
+      "page": "contacts",
+      "width": 320,
+      "scrollWidth": 320,
+      "viewport": 320,
+      "visibleViews": [
+        "contacts"
+      ],
+      "text": "Setup\n\nCUSTOMER LIST\n\nContact list\nUpload contacts\nDownload CSV template\nRefresh\nNo contacts imported yet."
+    },
+    {
+      "page": "templates",
+      "width": 320,
+      "scrollWidth": 320,
+      "viewport": 320,
+      "visibleViews": [
+        "templates"
+      ],
+      "text": "Setup\n\nSUBMITTED TEMPLATES\n\nAll template status\nCreate Template\nRefresh\nAll\n0\nPending\n0\nApproved\n0\nRejected\n0\nNo templates submitted yet."
+    },
+    {
+      "page": "send-whatsapp",
+      "width": 320,
+      "scrollWidth": 320,
+      "viewport": 320,
+      "visibleViews": [
+        "send-whatsapp"
+      ],
+      "text": "Message details\nRefresh\nRecipients\nSelect individual customers, complete groups, or both.\n0 selected\nSearch recipients\nSelect all contacts\nClear\nContacts\nActive and opted-in only\nNo active opted-in contacts available.\nGroups\nMembers are deduplicated\nNo groups created yet.\nApproved template\nNo approved templates available\nLanguage\nEnglish (US)\nEnglish\nHindi\nEnglish (India)\nRecipient variables\nEach phone number carries its own template values.\nSelect a template to configure its variables.\n\nNo approved templates available.\n\nSelect recipients\n\nLIVE PREVIEW\nCustomer view\n12:17 AM\nIC\nCustomer\nBusine"
+    },
+    {
+      "page": "inbox",
+      "width": 320,
+      "scrollWidth": 320,
+      "viewport": 320,
+      "visibleViews": [
+        "inbox"
+      ],
+      "text": "Chats\nConnecting\nRefresh\nNo conversations yet. Customer replies will appear here."
+    },
+    {
+      "page": "billing",
+      "width": 320,
+      "scrollWidth": 320,
+      "viewport": 320,
+      "visibleViews": [
+        "billing"
+      ],
+      "text": "Payments\nCurrent plan\nNo active plan\nNo plan\n\nChoose a paid InterCon plan when you are ready to submit templates or send WhatsApp messages.\n\nNo plans configured.\nOpen Meta payments\nCheck Meta billing"
+    },
+    {
+      "page": "reports",
+      "width": 320,
+      "scrollWidth": 320,
+      "viewport": 320,
+      "visibleViews": [
+        "reports"
+      ],
+      "text": "Reports\n\nMESSAGE HISTORY\n\nMessage reports\nFrom\nTo\nStatus\nAll statuses\nQueued\nScheduled\nProcessing\nAccepted\nSent\nDelivered / read\nRead\nFailed\nUncertain\nMobile number\nRows\n25\n50\n100\nSearch\n\nChoose filters and click Search to fetch reports."
+    },
+    {
+      "page": "optout",
+      "width": 320,
+      "scrollWidth": 320,
+      "viewport": 320,
+      "visibleViews": [
+        "optout"
+      ],
+      "text": "Setup\nCOMING SOON\nWhat you'll do here\nReview recent opt-outs and the campaigns behind them.\nEnsure opted-out numbers are excluded from new sends.\nExport opt-out lists for compliance."
+    },
+    {
+      "page": "blacklist",
+      "width": 320,
+      "scrollWidth": 320,
+      "viewport": 320,
+      "visibleViews": [
+        "blacklist"
+      ],
+      "text": "Setup\nCOMING SOON\nWhat you'll do here\nAdd numbers that should never be messaged.\nReview blocks that are causing delivery failures.\nRemove numbers blocked in error."
+    },
+    {
+      "page": "developer-api",
+      "width": 320,
+      "scrollWidth": 320,
+      "viewport": 320,
+      "visibleViews": [
+        "developer-api"
+      ],
+      "text": "API\n\nKEYS\n\nCreate API key\nRefresh\nKey name\nCreate key\n\nNo API keys created yet.\nAPI v1\nBASE URL\nhttp://127.0.0.1:5199/api/v1\nAUTH\nAuthorization: Bearer API_KEY\nALLOWED SEND\nApproved templates only\n1\nAdd contact\nPOST /api/v1/contacts\nAuthorization: Bearer API_KEY\n\n{\n  \"name\": \"Name\",\n  \"phone\": \"919999999999\",\n  \"optIn\": true,\n  \"optInProof\": \"Website signup\"\n}\n2\nSend WhatsApp\nPOST /api/v1/messages/send-template\nAuthorization: Bearer API_KEY\n\n{\n  \"phone\": \"919999999999\",\n  \"name\": \"Name\",\n  \"optIn\": true,\n  \"templateName\": \"order_update\",\n  \"language\": \"en_US\",\n  \"mediaId\": \"MED-550e8400-e29b-4"
+    },
+    {
+      "page": "connect",
+      "width": 320,
+      "scrollWidth": 320,
+      "viewport": 320,
+      "visibleViews": [
+        "connect"
+      ],
+      "text": "Setup\nNot connected\nRegister New WhatsApp\nRegister\nResolve billing\nBusiness Settings\nNo WhatsApp number connected yet. Click \"Register New WhatsApp\" to onboard.\n\nVisit Business Settings to enhance your daily limit."
+    },
+    {
+      "page": "unauthenticated-admin",
+      "text": "PLATFORM OPERATIONS\n\nAdmin Console\nSK\nChannels & Templates\nWABA Channels\nConnect and manage WhatsApp Business accounts.\nOnboarding Monitor\nTrack Embedded Signup completions and failures.\nManage Templates\nReview approvals, rejections, and quality.\nTemplate Library\nBrowse the approved template catalogue.\nMedia Library\nManage uploaded images, video, and docs.\nCustomers & Contacts\nCustomers\nMonitor accounts, plans, and live status.\nManage Groups\nOrganise contacts into segments.\nUnsubscribers\nView and manage opted-out numbers.\nBlacklist Numbers\nBlock numbers for better control.\nMessaging & Growth\nCampaigns\nWatch queue, delivery, and throttling.\nAutomation Flows\nBuild and monitor auto-reply journeys.\nWebhook Health\nTrack inbound events, retries, latency.\nReports\nUsage, delivery, and revenue analytics.\nAccount & Platform\nBilling\nPlans, invoices, wallets, and usage ledger.\nSupport\nHandle tickets and escalations.\nAPI Keys\nManage developer keys and access.\nSettings\nMeta app, limits, alerts, permissions.\nBack to console\n\nCUSTOMERS & CONTACTS\n\nCustomers\n\nMonitor every account from signup to live WhatsApp messaging.\n\nWhat you'll do here\nSee plan, status, and connection health per account.\nFlag accounts missing a payment method.\nAdd internal notes for the support team.\nRelated\nOnboarding Monitor\nBilling\nSupport"
+    },
+    {
+      "page": "invalid-fragment",
+      "visibleViews": 0
+    }
+  ],
+  "errors": []
+}

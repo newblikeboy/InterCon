@@ -38,8 +38,9 @@ const resendVerification = asyncHandler(async (req, res) => {
 
 const login = asyncHandler(async (req, res) => {
   const { user, tenant } = await authService.loginCustomer(req.body);
-  const token = signAuthToken(user);
-  setAuthCookie(res, token);
+  const remember = req.body.remember === true || req.body.remember === "on";
+  const token = signAuthToken(user, remember);
+  setAuthCookie(res, token, remember);
 
   res.json({
     success: true,

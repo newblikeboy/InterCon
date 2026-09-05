@@ -250,7 +250,7 @@ function toggleProfileMenu() {
 }
 
 function viewExists(viewId) {
-  return Boolean(document.getElementById(viewId));
+  return Array.from(portalViews).some((view) => view.id === viewId);
 }
 
 // Top-level launcher pages (rail items) and the feature views they own.
@@ -325,7 +325,7 @@ function showPortalView(viewId, shouldPersist = true) {
   if (shouldPersist) {
     localStorage.setItem("intercon_customer_portal_view", nextViewId);
     if (window.location.hash !== `#${nextViewId}`) {
-      history.replaceState(null, "", `#${nextViewId}`);
+      history.pushState(null, "", `#${nextViewId}`);
     }
   }
 }
@@ -830,7 +830,7 @@ function renderBilling() {
   if (billingMessage) {
     billingMessage.classList.remove("error");
     billingMessage.textContent = active
-      ? "Your InterCon platform plan is active. Template submission and WhatsApp sending are unlocked."
+      ? "Your plan is active" + (billing.currentPeriodEnd ? " through " + new Date(billing.currentPeriodEnd).toLocaleDateString() : "") + ". Renewals add time after your current paid period."
       : billing.status === "pending_payment"
         ? "Plan selected. Complete payment confirmation with InterCon to activate template submission and WhatsApp sending."
         : "Choose a paid InterCon plan when you are ready to submit templates or send WhatsApp messages.";
@@ -843,14 +843,14 @@ function renderBilling() {
       billingPlanGrid.innerHTML = setupState.plans.map((plan) => {
         const isSelected = plan.id === billing.plan;
         const isActive = isSelected && active;
-        const buttonText = isActive ? "Active plan" : isSelected && billing.status === "pending_payment" ? "Pay now" : "Pay now";
+        const buttonText = isActive ? "Renew plan" : "Pay now";
 
         return `
           <article class="billing-plan-card ${isSelected ? "selected" : ""}">
             <span>${plan.name}</span>
             <strong>${formatCurrency(plan.amount, plan.currency)}</strong>
             <small>${plan.interval === "quarter" ? "Every 3 months" : `Per ${plan.interval}`}</small>
-            <button class="btn ${isSelected ? "btn-outline" : ""}" type="button" data-select-plan="${plan.id}" ${isActive ? "disabled" : ""}>${buttonText}</button>
+            <button class="btn ${isSelected ? "btn-outline" : ""}" type="button" data-select-plan="${plan.id}" >${buttonText}</button>
           </article>
         `;
       }).join("");
@@ -867,6 +867,16 @@ async function loadBilling() {
     active: isInterconPlanActive(data.billing || {})
   };
   setupState.plans = data.plans || [];
+  const history = document.querySelector("[data-payment-history]");
+  if (history) {
+    history.replaceChildren();
+    for (const payment of data.payments || []) {
+      const row = document.createElement("p");
+      row.textContent = new Date(payment.capturedAt).toLocaleDateString() + " ? " + payment.plan + " ? " + formatCurrency(payment.amount / 100, payment.currency) + " ? " + payment.status + " ? " + payment.providerPaymentId;
+      history.append(row);
+    }
+    if (!history.childElementCount) history.textContent = "No completed payments yet.";
+  }
   renderBilling();
 }
 
@@ -939,7 +949,7 @@ async function startRazorpayPayment(planId) {
           }
           resolve(verified);
         } catch (error) {
-          reject(error);
+          reject(new Error("Payment confirmation is pending. If money was deducted, do not pay again. Refresh billing shortly; payment notifications will recover your payment. " + error.message));
         }
       },
       modal: {
@@ -1433,17 +1443,13 @@ async function registerPhoneNumber() {
 }
 
 function parseCsv(text) {
-  const lines = text.split(/\r?\n/).filter((line) => line.trim());
-  if (lines.length < 2) return [];
-
-  const headers = lines[0].replace(/^\uFEFF/, "").split(",").map((header) => header.trim());
-
-  return lines.slice(1).map((line) => {
-    const values = line.split(",").map((value) => value.trim());
-    return headers.reduce((row, header, index) => {
-      row[header] = values[index] || "";
-      return row;
-    }, {});
+  const rows = parseCsvMatrix(text).filter(row => row.some(value => String(value).trim()));
+  if (rows.length < 2) return [];
+  const headers = rows.shift().map(value => value.trim());
+  if (headers.some(value => !value) || new Set(headers).size !== headers.length) throw new Error("CSV column names must be present and unique.");
+  return rows.map((values, index) => {
+    if (values.length !== headers.length) throw new Error("CSV row " + (index + 2) + " has a different number of columns. Check commas and quotation marks.");
+    return Object.fromEntries(headers.map((header, index) => [header, values[index].trim()]));
   });
 }
 
@@ -1677,9 +1683,25 @@ function updateSendRecipientSummary() {
   }
 }
 
+async function requestAllPages(path, field) {
+  const items = [], cursors = new Set();
+  let after = "", data;
+  do {
+    const url = new URL(path, window.location.origin);
+    url.searchParams.set("limit", "500");
+    if (after) url.searchParams.set("after", after);
+    data = await requestJson(url.pathname + url.search);
+    items.push(...(data[field] || []));
+    after = data.nextCursor || "";
+    if (after && cursors.has(after)) throw new Error("The next page could not be loaded. Please refresh.");
+    cursors.add(after);
+  } while (after);
+  return { ...data, [field]: items };
+}
+
 async function loadContacts() {
   if (!contactList) return;
-  const data = await requestJson("/api/contacts");
+  const data = await requestAllPages("/api/contacts", "contacts");
   setupState.contacts = data.contacts || [];
   renderContactRows(data.contacts || []);
   renderSendContactOptions(data.contacts || []);
@@ -1995,6 +2017,7 @@ function parseCsvMatrix(text) {
       value += character;
     }
   }
+  if (quoted) throw new Error("CSV contains an unfinished quoted value. Close the quotation mark and try again.");
   row.push(value.replace(/\r$/, ""));
   if (row.some((cell) => String(cell).trim()) || rows.length === 0) rows.push(row);
   return rows;
@@ -3553,7 +3576,7 @@ if (contactFileInput) {
         method: "POST",
         body: JSON.stringify({ contacts })
       });
-      setContactMessage(`Imported ${data.result.imported} contacts. Skipped ${data.result.skipped}.`);
+      setContactMessage(`Imported ${data.result.imported} contacts. Skipped ${data.result.skipped}. ${(data.result.errors || []).join(" ")}`, Boolean(data.result.errors?.length));
       await loadContacts();
     } catch (error) {
       setContactMessage(error.message, true);
@@ -3599,15 +3622,18 @@ if (sendMessageForm) {
 
       if (sendSubmitButton) sendSubmitButton.disabled = true;
       setSendMessage("Resolving recipients and queueing WhatsApp messages...");
+      const payload = { ...formData, recipientVariables, contactIds: [...sendRecipientState.contactIds].sort(), groupIds: [...sendRecipientState.groupIds].sort() };
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(payload)));
+      const fingerprint = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+      const storageKey = "intercon_pending_batch_" + setupState.user?.tenantId;
+      let pending;
+      try { pending = JSON.parse(sessionStorage.getItem(storageKey)); } catch {}
+      if (pending?.fingerprint !== fingerprint) pending = { fingerprint, key: crypto.randomUUID() };
+      sessionStorage.setItem(storageKey, JSON.stringify(pending));
       const result = await requestJson("/api/messages/send-template-bulk", {
-        method: "POST",
-        body: JSON.stringify({
-          ...formData,
-          recipientVariables,
-          contactIds: [...sendRecipientState.contactIds],
-          groupIds: [...sendRecipientState.groupIds]
-        })
+        method: "POST", body: JSON.stringify({ ...payload, idempotencyKey: pending.key })
       });
+      sessionStorage.removeItem(storageKey);
       sendRecipientState.contactIds.clear();
       sendRecipientState.groupIds.clear();
       sendRecipientState.search = "";
@@ -3989,13 +4015,12 @@ if (logoutButton) {
     logoutButton.textContent = "Logging out...";
 
     try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "include"
-      });
-    } finally {
+      await requestJson("/api/auth/logout", { method: "POST" });
       localStorage.removeItem("intercon_customer_portal_view");
       window.location.replace("/");
+    } catch (error) {
+      window.alert("Logout failed. You are still signed in. " + error.message);
+    } finally {
       logoutButton.disabled = false;
       logoutButton.textContent = originalText;
     }
@@ -4112,7 +4137,7 @@ async function loadMediaLibrary(force = false) {
   setMediaStatus("");
 
   try {
-    const data = await requestJson("/api/media");
+    const data = await requestAllPages("/api/media", "media");
     mediaState.assets = data.media || [];
     mediaState.loaded = true;
     renderMediaLibrary();
@@ -4280,6 +4305,7 @@ const inboxState = {
   realtimeReconnectTimer: null,
   realtimeReconnectDelay: 1000,
   realtimeStarted: false,
+  sessionEnded: false,
   realtimePulseTimer: null,
   loadingActive: false,
   polling: false
@@ -4480,6 +4506,45 @@ function markActiveConversationReadInList() {
   updateInboxRailBadge(totalUnread);
 }
 
+function mergeInboxMessages(data, older = false) {
+  const existing = inboxState.messages || [];
+  if (older || !existing.length) inboxState.olderCursor = data.nextCursor || null;
+  const byId = new Map(existing.map(message => [message.id, message]));
+  for (const message of data.messages || []) {
+    const known = byId.get(message.id);
+    if (known?.direction === "out" && !canAdvanceInboxStatus(known.status, message.status)) {
+      byId.set(message.id, { ...message, status: known.status, error: known.error });
+    } else byId.set(message.id, message);
+  }
+  inboxState.messages = Array.from(byId.values()).sort((a, b) => new Date(a.sentAt) - new Date(b.sentAt) || a.id.localeCompare(b.id));
+  const previousHeight = inboxMessagesEl?.scrollHeight || 0, previousTop = inboxMessagesEl?.scrollTop || 0;
+  const wasNearBottom = previousHeight - previousTop - (inboxMessagesEl?.clientHeight || 0) < 80;
+  renderInboxMessages(inboxState.messages);
+  if (older && inboxMessagesEl) inboxMessagesEl.scrollTop = previousTop + inboxMessagesEl.scrollHeight - previousHeight;
+  else if (existing.length && !wasNearBottom && inboxMessagesEl) inboxMessagesEl.scrollTop = previousTop;
+  const button = document.querySelector("[data-inbox-older]");
+  if (button) button.hidden = !inboxState.olderCursor;
+}
+
+async function acknowledgeInboxMessages(conversationId, messages) {
+  if (document.hidden || document.getElementById("inbox")?.hidden || inboxState.activeId !== conversationId || !messages?.length) return;
+  const data = await requestJson("/api/inbox/conversations/" + conversationId + "/read", {
+    method: "POST", body: JSON.stringify({ throughMessageId: messages.at(-1).id })
+  });
+  if (inboxState.activeId === conversationId && data.conversation?.unreadCount === 0) markActiveConversationReadInList();
+}
+
+document.querySelector("[data-inbox-older]")?.addEventListener("click", async (event) => {
+  const button = event.currentTarget, conversationId = inboxState.activeId;
+  if (!conversationId || !inboxState.olderCursor) return;
+  button.disabled = true;
+  try {
+    const data = await requestJson("/api/inbox/conversations/" + conversationId + "/messages?before=" + encodeURIComponent(inboxState.olderCursor));
+    if (inboxState.activeId === conversationId) mergeInboxMessages(data, true);
+  } catch (error) { setInboxStatus(error.message, true); }
+  finally { button.disabled = false; }
+});
+
 function renderInboxMessages(messages) {
   if (!inboxMessagesEl) return;
 
@@ -4491,8 +4556,10 @@ function renderInboxMessages(messages) {
   inboxMessagesEl.innerHTML = messages.map((message) => {
     const outbound = message.direction === "out";
     const caption = message.caption || message.mediaCaption || "";
+    const statusLabel = message.status === "failed" ? "Delivery failed" : message.status || "sent";
+    const tickText = message.status === "failed" ? "!" : ["delivered", "read"].includes(message.status) ? "&#10003;&#10003;" : message.status === "queued" ? "&#9695;" : "&#10003;";
     const ticks = outbound
-      ? `<i class="inbox-ticks ${message.status === "read" ? "is-read" : ""}" aria-hidden="true">${["delivered", "read"].includes(message.status) ? "✓✓" : "✓"}</i>`
+      ? '<i class="inbox-ticks ' + (message.status === "read" ? "is-read" : "") + ' ' + (message.status === "failed" ? "is-failed" : "") + '" role="img" aria-label="' + escapeHtml(statusLabel) + '" title="' + escapeHtml(statusLabel) + '">' + tickText + '</i>'
       : "";
 
     if (message.revoked) {
@@ -4622,8 +4689,9 @@ function showInboxEmptyPane() {
 async function loadInboxConversations(silent = false) {
   if (!inboxThreads) return;
   try {
-    const data = await requestJson("/api/inbox/conversations");
-    inboxState.conversations = data.conversations || [];
+    const data = await requestAllPages("/api/inbox/conversations", "conversations");
+    if (inboxState.sessionEnded) return;
+    inboxState.conversations = (data.conversations || []).sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
     updateInboxRailBadge(data.totalUnread || 0);
     renderInboxConversations();
   } catch (error) {
@@ -4637,6 +4705,8 @@ async function openInboxConversation(conversationId) {
   if (!conversationId) return;
   const loadToken = ++inboxState.activeLoadToken;
   inboxState.activeId = conversationId;
+  inboxState.messages = [];
+  inboxState.olderCursor = null;
   inboxState.loadingActive = true;
   setInboxStatus("");
   setInboxPane("chat");
@@ -4656,13 +4726,11 @@ async function openInboxConversation(conversationId) {
     const data = await requestJson(`/api/inbox/conversations/${conversationId}/messages`);
     if (inboxState.activeId !== conversationId || inboxState.activeLoadToken !== loadToken) return;
     if (inboxMessagesEl) inboxMessagesEl.setAttribute("aria-busy", "false");
-    renderInboxMessages(data.messages || []);
+    mergeInboxMessages(data);
     applyInboxWindowState(data.conversation);
     inboxState.activeLastMessageAt = data.conversation?.lastMessageAt || "";
     inboxState.lastMessageRefreshAt = Date.now();
-    // The server clears unread on open. Update the existing row without
-    // replacing the left-pane DOM.
-    markActiveConversationReadInList();
+    await acknowledgeInboxMessages(conversationId, data.messages);
   } catch (error) {
     if (inboxState.activeId !== conversationId || inboxState.activeLoadToken !== loadToken) return;
     if (inboxMessagesEl) inboxMessagesEl.setAttribute("aria-busy", "false");
@@ -4681,8 +4749,9 @@ async function refreshActiveConversation() {
   try {
     const data = await requestJson(`/api/inbox/conversations/${conversationId}/messages`);
     if (!data.conversation || inboxState.activeId !== conversationId || inboxState.loadingActive) return;
-    renderInboxMessages(data.messages || []);
+    mergeInboxMessages(data);
     applyInboxWindowState(data.conversation);
+    await acknowledgeInboxMessages(conversationId, data.messages);
     inboxState.activeLastMessageAt = data.conversation.lastMessageAt || "";
     inboxState.lastMessageRefreshAt = Date.now();
   } catch (error) {
@@ -4830,7 +4899,6 @@ async function refreshInboxFromRealtime(event) {
   if (activeConversationUpdated) {
     await refreshActiveConversation();
     await loadInboxConversations(true);
-    markActiveConversationReadInList();
     pulseInboxRealtimeUpdate(event?.action === "message_sent" ? "Message sent" : "New message");
     return;
   }
@@ -4844,15 +4912,59 @@ async function refreshInboxFromRealtime(event) {
   }
 }
 
+let inboxRealtimeRefreshTimer = null;
+let inboxRealtimeRefreshNeeded = false;
+let inboxRealtimeRefreshing = false;
+let inboxStatusRenderFrame = null;
+
+function queueInboxRealtimeRefresh() {
+  if (inboxState.sessionEnded) return;
+  inboxRealtimeRefreshNeeded = true;
+  if (inboxRealtimeRefreshing || inboxRealtimeRefreshTimer) return;
+  inboxRealtimeRefreshTimer = setTimeout(async () => {
+    inboxRealtimeRefreshTimer = null;
+    if (inboxState.loadingActive) { queueInboxRealtimeRefresh(); return; }
+    inboxRealtimeRefreshNeeded = false;
+    inboxRealtimeRefreshing = true;
+    try { await refreshInboxFromRealtime(); }
+    catch { if (isInboxViewVisible()) await pollInboxView(); }
+    finally {
+      inboxRealtimeRefreshing = false;
+      if (inboxRealtimeRefreshNeeded) queueInboxRealtimeRefresh();
+    }
+  }, 100);
+}
+
+function canAdvanceInboxStatus(current, next) {
+  const predecessors = {
+    queued: ["queued"], sent: ["queued", "sent"],
+    delivered: ["queued", "sent", "delivered", "failed"],
+    read: ["queued", "sent", "delivered", "read", "failed"],
+    failed: ["queued", "sent", "failed"]
+  }[next];
+  return Boolean(predecessors?.includes(current));
+}
+
+function applyInboxDeliveryStatus(event) {
+  if (event.conversationId !== inboxState.activeId) return true;
+  const message = inboxState.messages?.find(item => item.id === event.messageId && item.direction === "out");
+  if (!message) return false;
+  if (!canAdvanceInboxStatus(message.status, event.status)) return true;
+  message.status = event.status;
+  if (event.status !== "failed") message.error = "";
+  if (inboxStatusRenderFrame === null) inboxStatusRenderFrame = requestAnimationFrame(() => {
+    inboxStatusRenderFrame = null;
+    const scrollTop = inboxMessagesEl?.scrollTop || 0;
+    renderInboxMessages(inboxState.messages || []);
+    if (inboxMessagesEl) inboxMessagesEl.scrollTop = scrollTop;
+  });
+  return true;
+}
+
 function handleInboxRealtimeEvent(event) {
   if (event?.type !== "inbox:updated") return;
-  refreshInboxFromRealtime(event).catch(() => {
-    if (isInboxViewVisible()) {
-      pollInboxView();
-    } else {
-      pollInboxUnread();
-    }
-  });
+  if (event.action === "status_updated" && applyInboxDeliveryStatus(event)) return;
+  queueInboxRealtimeRefresh();
 }
 
 function connectInboxRealtime() {
@@ -4869,6 +4981,8 @@ function connectInboxRealtime() {
   socket.addEventListener("open", () => {
     inboxState.realtimeReconnectDelay = 1000;
     setInboxRealtimeState("live", "Live");
+    // Fetch durable state after reconnect; the notification channel has no replay.
+    queueInboxRealtimeRefresh();
   });
 
   socket.addEventListener("message", (message) => {
@@ -4881,8 +4995,22 @@ function connectInboxRealtime() {
     handleInboxRealtimeEvent(event);
   });
 
-  socket.addEventListener("close", () => {
+  socket.addEventListener("close", (event) => {
     if (inboxState.realtimeSocket === socket) inboxState.realtimeSocket = null;
+    if (event.code === 1008) {
+      inboxState.realtimeStarted = false;
+      inboxState.sessionEnded = true;
+      clearTimeout(inboxRealtimeRefreshTimer); inboxRealtimeRefreshTimer = null;
+      clearTimeout(inboxState.realtimeReconnectTimer); inboxState.realtimeReconnectTimer = null;
+      inboxRealtimeRefreshNeeded = false;
+      inboxState.activeLoadToken++;
+      inboxState.activeId = null; inboxState.messages = []; inboxState.conversations = [];
+      inboxMessagesEl?.replaceChildren(); inboxThreads?.replaceChildren();
+      stopInboxPolling();
+      setInboxRealtimeState("fallback", "Sign in again");
+      setInboxStatus("Your session ended. Sign in again to receive messages.", true);
+      return;
+    }
     if (inboxState.realtimeStarted) setInboxRealtimeState("reconnecting", "Reconnecting");
     scheduleInboxRealtimeReconnect();
   });
@@ -4900,6 +5028,7 @@ function startInboxRealtime() {
 }
 
 function startInboxView() {
+  if (inboxState.sessionEnded) return;
   loadInboxConversations();
   if (inboxState.activeId) refreshActiveConversation();
 
@@ -4915,6 +5044,7 @@ function stopInboxPolling() {
 }
 
 function onPortalViewShown(viewId) {
+  if (["blacklist", "optout"].includes(viewId)) loadSuppressionList(viewId === "blacklist" ? "blocked" : "opted_out");
   if (viewId === "inbox") {
     startInboxView();
   } else {
@@ -5175,7 +5305,7 @@ async function viewGroupMembers(segmentId, label) {
   groupMembers.scrollIntoView({ behavior: "smooth", block: "nearest" });
 
   try {
-    const data = await requestJson(`/api/contacts/segments/${segmentId}/members`);
+    const data = await requestAllPages(`/api/contacts/segments/${segmentId}/members`, "members");
     renderGroupMembers(data.members || []);
   } catch (error) {
     if (groupMembersList) groupMembersList.innerHTML = `<div class="empty-row">${escapeHtml(error.message)}</div>`;
@@ -5414,6 +5544,7 @@ async function saveContactEdit() {
       };
     }
     await loadContacts();
+    if (["#blacklist", "#optout"].includes(location.hash)) await loadSuppressionList(location.hash === "#blacklist" ? "blocked" : "opted_out");
     loadInboxConversations(true);
     contactEditState.saving = false;
     closeContactEditModal();
@@ -5525,7 +5656,7 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-showPortalView(getInitialViewId(), true);
+showPortalView(getInitialViewId(), false);
 renderApiBaseUrl();
 loadAuthenticatedProfile()
   .then(startInboxRealtime)
@@ -5553,3 +5684,31 @@ pollInboxUnread();
 if (inboxRailBadge) {
   inboxState.unreadTimer = setInterval(pollInboxUnread, INBOX_UNREAD_POLL_MS);
 }
+
+async function loadSuppressionList(status) {
+  const host = document.querySelector('[data-suppression-list="' + status + '"]');
+  try {
+    const data = await requestAllPages('/api/contacts?status=' + status, 'contacts');
+    host.replaceChildren();
+    if (!data.contacts.length) { host.textContent = 'No contacts in this list.'; return; }
+    for (const contact of data.contacts) {
+      const row = document.createElement('div'), text = document.createElement('p'), button = document.createElement('button');
+      text.textContent = contact.name + ' ? +' + contact.phone + ' ? ' + (contact.optIn?.proof || 'No reason recorded');
+      button.type = 'button'; button.className = 'btn-link'; button.textContent = 'Edit contact';
+      button.addEventListener('click', async () => { await loadContacts(); openContactEditModal(contact._id); });
+      row.append(text, button); host.append(row);
+    }
+  } catch (error) { host.textContent = error.message; }
+}
+document.querySelectorAll('[data-suppression-form]').forEach(form => form.addEventListener('submit', async event => {
+  event.preventDefault();
+  const status = form.dataset.suppressionForm, button = form.querySelector('button[type=submit]');
+  const note = document.querySelector('[data-suppression-status="' + status + '"]');
+  button.disabled = true; note.textContent = 'Saving?';
+  try {
+    await requestJson('/api/contacts/suppress', { method: 'POST', body: JSON.stringify({ ...Object.fromEntries(new FormData(form)), status }) });
+    form.reset(); note.textContent = 'Saved. This number is excluded from sending.';
+    await loadSuppressionList(status); await loadContacts();
+  } catch (error) { note.textContent = error.message; }
+  finally { button.disabled = false; }
+}));

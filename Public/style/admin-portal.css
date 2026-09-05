@@ -2610,3 +2610,6 @@ address {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   }
 }
+
+/* Hidden panels and controls must stay outside the rendered layout. */
+[hidden] { display: none !important; }

@@ -29,7 +29,7 @@ const getConversationMessages = asyncHandler(async (req, res) => {
 });
 
 const markConversationRead = asyncHandler(async (req, res) => {
-  const conversation = await inboxService.markConversationRead(req.tenantId, req.params.conversationId);
+  const conversation = await inboxService.markConversationRead(req.tenantId, req.params.conversationId, req.body);
 
   res.json({
     success: true,

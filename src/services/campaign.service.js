@@ -35,6 +35,7 @@ async function listCampaigns(tenantId) {
 
 async function createCampaign(tenantId, body) {
   const payload = normalizeCampaign(body);
+  if (payload.scheduledAt) throw new HttpError(501, "Scheduled campaigns are not available yet. Use Send WhatsApp to queue a bulk message now.");
 
   if (!payload.name || !payload.templateName || !payload.category) {
     throw new HttpError(400, "Campaign name, template name, and category are required");
@@ -97,6 +98,7 @@ async function createCampaign(tenantId, body) {
 }
 
 async function updateCampaignStatus(tenantId, campaignId, status) {
+  if (!["draft", "paused"].includes(status)) throw new HttpError(501, "Campaign execution is not available yet. Campaigns can only be saved as drafts or paused.");
   if (!["draft", "scheduled", "sending", "sent", "paused", "failed"].includes(status)) {
     throw new HttpError(400, "Invalid campaign status");
   }

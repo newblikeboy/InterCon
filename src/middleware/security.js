@@ -6,6 +6,7 @@ const { RedisStore } = require("rate-limit-redis");
 const env = require("../config/env");
 const { getRedisClient, connectRedis } = require("../config/redis");
 const HttpError = require("../utils/httpError");
+const { verifyAuthToken } = require("../services/authToken.service");
 
 function getAllowedOrigins() {
   const origins = new Set();
@@ -22,17 +23,18 @@ function hashKey(value) {
 }
 
 function requestIdentity(req) {
-  const apiKey = req.headers["x-api-key"]
-    || (req.originalUrl.startsWith("/api/v1") && req.headers.authorization?.startsWith("Bearer ")
-      ? req.headers.authorization.slice(7)
-      : "");
-  if (apiKey) return `api:${hashKey(apiKey)}`;
-
+  // Authentication attempts must share a bucket regardless of supplied credentials.
+  if (/^\/api\/auth(?:\/|$)/.test(req.originalUrl)) return `ip:${ipKeyGenerator(req.ip)}`;
   const cookie = String(req.headers.cookie || "")
     .split(";")
     .map((part) => part.trim())
     .find((part) => part.startsWith(`${env.authCookieName}=`));
-  if (cookie) return `session:${hashKey(cookie)}`;
+  if (cookie) {
+    try {
+      const payload = verifyAuthToken(decodeURIComponent(cookie.slice(cookie.indexOf("=") + 1)));
+      return `user:${hashKey(`${payload.tenantId}:${payload.sub}`)}`;
+    } catch { /* Invalid credentials never create a new rate-limit identity. */ }
+  }
   return `ip:${ipKeyGenerator(req.ip)}`;
 }
 
@@ -174,3 +176,9 @@ function securityMiddleware(app) {
 }
 
 module.exports = securityMiddleware;
+
+module.exports.accountLimiter = limiter("auth-account", {
+  windowMs: 15 * 60 * 1000, max: 20, skipSuccessfulRequests: true,
+  keyGenerator: req => "account:" + hashKey(String(req.body?.email || req.body?.login_id || "").trim().toLowerCase())
+});
+module.exports.passwordLimiter = limiter("auth-password", { windowMs: 60 * 60 * 1000, max: 10 });

@@ -15,7 +15,12 @@
     "load:smoke": "node src/scripts/loadSmoke.js",
     "encrypt:tenant-tokens": "node src/scripts/encryptTenantTokens.js",
     "backfill:unsupported-messages": "node src/scripts/backfillUnsupportedMessages.js",
-    "billing:activate": "node src/scripts/activateTenantPlan.js"
+    "billing:activate": "node src/scripts/activateTenantPlan.js",
+    "worker:billing": "node src/workers/billing.worker.js",
+    "check:ui": "node src/scripts/checkUi.js",
+    "admin:access": "node src/scripts/setPlatformAdmin.js",
+    "db:indexes": "node src/scripts/ensureIndexes.js",
+    "check:realtime": "node src/scripts/checkInboxRealtime.js"
   },
   "repository": {
     "type": "git",
@@ -53,10 +58,12 @@
     "rate-limit-redis": "^4.3.1",
     "redis": "^5.12.1",
     "ws": "^8.21.3",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
+    "mongodb-memory-server": "^11.2.0",
     "nodemon": "^3.1.14",
+    "playwright": "^1.63.0",
     "supertest": "^7.2.2"
   }
 }

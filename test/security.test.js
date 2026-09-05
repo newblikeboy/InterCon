@@ -5,6 +5,7 @@ const request = require("supertest");
 process.env.NODE_ENV = "test";
 process.env.CLIENT_ORIGIN = "http://localhost:5000";
 process.env.REDIS_URL = "";
+process.env.AUTH_LOGIN_RATE_LIMIT_MAX = "3";
 process.env.FB_APP_SECRET = "test-app-secret-that-is-not-production";
 process.env.META_APP_SECRET = "";
 
@@ -60,4 +61,13 @@ test("Meta webhooks reject missing signatures", async () => {
     .post("/api/webhooks/meta")
     .send({ object: "whatsapp_business_account", entry: [] })
     .expect(403);
+});
+
+
+test("changing bogus API keys and cookies cannot bypass the login IP limit", async () => {
+  for (let index = 0; index < 6; index++) {
+    await request(app).post("/api/auth/login").set("Origin", "http://localhost:5000")
+      .set("X-API-Key", "bogus-" + index).set("Cookie", require("../src/config/env").authCookieName + "=bogus-" + index)
+      .send({ email: "attempt" + index + "@example.test" }).expect(index < 3 ? 400 : 429);
+  }
 });

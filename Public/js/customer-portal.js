@@ -174,6 +174,8 @@ const chatbotMessage = document.querySelector("[data-chatbot-message]");
 const chatbotFlowList = document.querySelector("[data-chatbot-flow-list]");
 const chatbotSaveButton = document.querySelector("[data-chatbot-save]");
 const chatbotLaunchButton = document.querySelector("[data-chatbot-launch]");
+const chatbotStopButton = document.querySelector("[data-chatbot-stop]");
+const chatbotEditButton = document.querySelector("[data-chatbot-edit]");
 const chatbotNewButton = document.querySelector("[data-chatbot-new]");
 const chatbotRefreshButton = document.querySelector("[data-chatbot-refresh]");
 const chatbotAutoLayoutButton = document.querySelector("[data-chatbot-auto-layout]");
@@ -247,6 +249,7 @@ const reportState = {
 };
 const chatbotState = {
   currentId: null,
+  restoreSelection: true,
   status: "draft",
   loaded: false,
   selectedNodeId: "trigger",
@@ -5443,8 +5446,9 @@ function defaultChatbotNodes() {
   ];
 }
 
-function resetChatbotBuilder() {
+function resetChatbotBuilder({ restoreSelection = false } = {}) {
   chatbotState.currentId = null;
+  chatbotState.restoreSelection = restoreSelection;
   chatbotState.status = "draft";
   chatbotState.selectedNodeId = "trigger";
   chatbotState.nodes = defaultChatbotNodes();
@@ -5684,6 +5688,16 @@ function renderChatbotBuilder() {
 
 function updateChatbotStatus(status = "draft") {
   chatbotState.status = status || "draft";
+  const isLive = chatbotState.status === "active";
+  if (chatbotStopButton) chatbotStopButton.hidden = !isLive;
+  if (chatbotEditButton) chatbotEditButton.hidden = !chatbotState.currentId;
+  if (chatbotLaunchButton) {
+    chatbotLaunchButton.hidden = isLive;
+    chatbotLaunchButton.querySelector("[data-chatbot-launch-label]").textContent = chatbotState.status === "paused" ? "Resume" : "Launch";
+  }
+  if (chatbotSaveButton) {
+    chatbotSaveButton.querySelector("[data-chatbot-save-label]").textContent = chatbotState.currentId ? "Save changes" : "Save";
+  }
   if (!chatbotStatus) return;
   const label = chatbotState.status === "active" ? "Live" : chatbotState.status === "paused" ? "Paused" : "Draft";
   chatbotStatus.textContent = label;
@@ -5727,14 +5741,14 @@ function chatbotPayload() {
 function renderChatbotFlowList() {
   if (!chatbotFlowList) return;
   if (!chatbotState.flows.length) {
-    chatbotFlowList.innerHTML = `<div class="empty-row">No chatbot drafts yet.</div>`;
+    chatbotFlowList.innerHTML = `<div class="empty-row">No saved chatbot flows yet.</div>`;
     return;
   }
   chatbotFlowList.innerHTML = chatbotState.flows.map((flow) => `
     <button type="button" class="chatbot-flow-item" data-chatbot-load-flow="${escapeHtml(flow._id)}">
       <strong>${escapeHtml(flow.name || "Untitled flow")}</strong>
       <span>${escapeHtml(flow.triggerValue || "hi")} -> ${escapeHtml(flow.firstReply || "Draft reply")}</span>
-      <em>${escapeHtml(flow.status || "draft")}</em>
+      <em>${flow.status === "active" ? "Live" : flow.status === "paused" ? "Paused" : "Draft"} · Edit flow</em>
     </button>
   `).join("");
 }
@@ -5745,9 +5759,18 @@ async function loadChatbotFlows() {
   chatbotState.flows = data.flows || [];
   chatbotState.loaded = true;
   renderChatbotFlowList();
+  if (chatbotState.restoreSelection && !chatbotState.currentId) {
+    chatbotState.restoreSelection = false;
+    const flow = chatbotState.flows.find((item) => item.status === "active") || chatbotState.flows[0];
+    if (flow) loadChatbotFlowIntoBuilder(flow);
+  } else if (chatbotState.currentId) {
+    const flow = chatbotState.flows.find((item) => item._id === chatbotState.currentId);
+    if (flow) updateChatbotStatus(flow.status);
+  }
 }
 
 function loadChatbotFlowIntoBuilder(flow) {
+  chatbotState.restoreSelection = false;
   chatbotState.currentId = flow._id || null;
   chatbotState.status = flow.status || "draft";
   chatbotState.selectedNodeId = "trigger";
@@ -5759,8 +5782,8 @@ function loadChatbotFlowIntoBuilder(flow) {
         keyword: node.keyword || "",
         message: node.message || "",
         routeTo: node.routeTo || "human_agent",
-        options: node.options || [],
-        position: node.position || { x: 32 + index * 260, y: 48 }
+        options: (node.options || []).map((option) => ({ ...option })),
+        position: node.position ? { ...node.position } : { x: 32 + index * 260, y: 48 }
       }))
     : [
         {
@@ -5787,6 +5810,7 @@ function loadChatbotFlowIntoBuilder(flow) {
   chatbotState.edges = buildChatbotEdges();
   if (chatbotNameInput) chatbotNameInput.value = flow.name || "Welcome menu";
   updateChatbotStatus(flow.status || "draft");
+  setChatbotMessage("");
   renderChatbotBuilder();
 }
 
@@ -5801,7 +5825,7 @@ async function saveChatbotFlow() {
     return null;
   }
 
-  setChatbotMessage("Saving chatbot draft...");
+  setChatbotMessage("Saving chatbot flow...");
   if (chatbotSaveButton) chatbotSaveButton.disabled = true;
   try {
     const data = await requestJson(chatbotState.currentId ? `/api/automations/${chatbotState.currentId}` : "/api/automations", {
@@ -5839,6 +5863,28 @@ async function launchChatbotFlow() {
     setChatbotMessage(error.message, true);
   } finally {
     if (chatbotLaunchButton) chatbotLaunchButton.disabled = false;
+  }
+}
+
+async function stopChatbotFlow() {
+  const flowId = chatbotState.currentId;
+  if (!flowId || chatbotState.status !== "active" || chatbotStopButton?.disabled) return;
+  if (chatbotStopButton) chatbotStopButton.disabled = true;
+  setChatbotMessage("Stopping chatbot...");
+  try {
+    const data = await requestJson(`/api/automations/${flowId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "paused" })
+    });
+    if (chatbotState.currentId === flowId) {
+      updateChatbotStatus(data.flow?.status || "paused");
+      setChatbotMessage("ChatBot is paused. Automatic replies are stopped. Select Resume to go live again.");
+    }
+    await loadChatbotFlows();
+  } catch (error) {
+    setChatbotMessage(error.message, true);
+  } finally {
+    if (chatbotStopButton) chatbotStopButton.disabled = false;
   }
 }
 
@@ -6062,6 +6108,17 @@ chatbotRefreshButton?.addEventListener("click", () => {
 
 chatbotSaveButton?.addEventListener("click", saveChatbotFlow);
 chatbotLaunchButton?.addEventListener("click", launchChatbotFlow);
+chatbotStopButton?.addEventListener("click", stopChatbotFlow);
+chatbotEditButton?.addEventListener("click", () => {
+  chatbotState.selectedNodeId = getChatbotFirstReplyNode()?.id || "trigger";
+  renderChatbotBuilder();
+  chatbotInspector?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  const field = chatbotInspector?.querySelector("[data-chatbot-field='message']") || chatbotInspector?.querySelector("[data-chatbot-field]");
+  field?.focus({ preventScroll: true });
+  setChatbotMessage(chatbotState.status === "active"
+    ? "Edit the blocks, then select Save changes to update the live chatbot."
+    : "Edit the blocks, then select Save changes.");
+});
 chatbotPanButton?.addEventListener("click", () => setChatbotPanMode(!chatbotState.panMode));
 chatbotPlusButton?.addEventListener("click", (event) => {
   event.stopPropagation();
@@ -6081,7 +6138,7 @@ chatbotZoomInButton?.addEventListener("click", () => {
   chatbotState.zoom = Math.min(1.5, Number((chatbotState.zoom + 0.1).toFixed(2)));
   renderChatbotCanvas();
 });
-if (chatbotCanvas) resetChatbotBuilder();
+if (chatbotCanvas) resetChatbotBuilder({ restoreSelection: true });
 
 if (groupList) {
   groupList.addEventListener("click", (event) => {

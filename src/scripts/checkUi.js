@@ -21,6 +21,17 @@ async function run() {
   browser = await chromium.launch({ headless: true, ...(fs.existsSync(chrome) ? { executablePath: chrome } : {}) });
   const context = await browser.newContext();
   let signedIn = false;
+  let logoutFails = true, stopFails = false;
+  const liveFlow = {
+    _id: "000000000000000000000123", name: "Live welcome bot", status: "active",
+    triggerType: "keyword", triggerValue: "hi", firstReply: "Welcome back!",
+    nodes: [
+      { id: "trigger", type: "trigger", keyword: "hi", position: { x: 40, y: 40 } },
+      { id: "reply", type: "message", title: "Welcome reply", message: "Welcome back!", position: { x: 350, y: 40 } }
+    ]
+  };
+  const flows = [{ ...liveFlow, _id: "000000000000000000000124", name: "Newer draft", status: "draft" }, liveFlow];
+  const automationMutations = [];
   await context.route("**/*", async route => {
     const url = new URL(route.request().url());
     if (url.origin !== origin) return route.abort();
@@ -33,7 +44,23 @@ async function run() {
       if (!signedIn) return route.fulfill({ status: 401, json: { message: "Authentication required" } });
       data.user = user;
     }
-    if (url.pathname === "/api/auth/logout") return route.fulfill({ status: 503, json: { message: "Temporary server failure" } });
+    if (url.pathname === "/api/auth/login") { signedIn = true; data.user = user; }
+    if (url.pathname === "/api/auth/logout") {
+      if (logoutFails) return route.fulfill({ status: 503, json: { message: "Temporary server failure" } });
+      signedIn = false;
+    }
+    if (url.pathname.startsWith("/api/automations")) {
+      const method = route.request().method();
+      if (method === "GET") data.flows = flows;
+      else {
+        const body = route.request().postDataJSON();
+        automationMutations.push({ method, path: url.pathname, body });
+        if (stopFails && body.status === "paused") return route.fulfill({ status: 503, json: { message: "Could not stop chatbot" } });
+        assert.ok(url.pathname.startsWith("/api/automations/" + liveFlow._id), "Must update the restored bot, not create a duplicate");
+        Object.assign(liveFlow, body);
+        data.flow = liveFlow;
+      }
+    }
     if (url.pathname === "/api/billing") Object.assign(data, { billing: tenant.billing, plans: [{ id: "monthly", name: "Monthly", amount: 1000, currency: "INR", interval: "month" }], payments: [] });
     if (url.pathname === "/api/meta/onboarding") data.tenant = tenant;
     if (url.pathname === "/api/contacts" && !url.searchParams.has("status")) {
@@ -111,6 +138,63 @@ async function run() {
   assert.ok(logoutWarning.includes("still signed in"));
   assert.ok(page.url().includes("/customer"));
   results.push({ check: "failed logout retains the session and displays an error", passed: true });
+  await page.evaluate(() => showPortalView("chatbot"));
+  await page.waitForFunction(() => chatbotState.currentId === "000000000000000000000123");
+  assert.equal(await page.locator("[data-chatbot-status]").innerText(), "Live");
+  assert.equal(await page.locator("[data-chatbot-stop]").isVisible(), true);
+  assert.equal(await page.locator("[data-chatbot-edit]").isVisible(), true);
+  assert.equal(await page.locator("[data-chatbot-launch]").isVisible(), false);
+  logoutFails = false;
+  await page.evaluate(() => document.querySelector("[data-logout]").click());
+  await page.waitForURL(origin + "/");
+  await page.evaluate(() => openAuth("login"));
+  await page.locator('[data-auth-form="login"] [name="login_id"]').fill("test@example.test");
+  await page.locator('[data-auth-form="login"] [name="password"]').fill("TestPassword123!");
+  await page.locator('[data-auth-form="login"] button[type="submit"]').click();
+  await page.waitForURL(origin + "/customer");
+  await page.waitForFunction(() => setupState.user?.id);
+  await page.evaluate(() => showPortalView("chatbot"));
+  await page.waitForFunction(() => chatbotState.currentId === "000000000000000000000123");
+  assert.equal(await page.locator("[data-chatbot-name]").inputValue(), "Live welcome bot");
+  assert.equal(await page.locator("[data-chatbot-status]").innerText(), "Live");
+  await page.locator("[data-chatbot-edit]").click();
+  await page.locator('[data-chatbot-field="message"]').fill("Updated welcome!");
+  await page.locator("[data-chatbot-refresh]").click();
+  assert.equal(await page.locator('[data-chatbot-field="message"]').inputValue(), "Updated welcome!");
+  await page.locator("[data-chatbot-save]").click();
+  await page.waitForFunction(() => !document.querySelector("[data-chatbot-save]").disabled);
+  assert.equal(liveFlow.firstReply, "Updated welcome!");
+  assert.equal(liveFlow.status, "active");
+  stopFails = true;
+  await page.locator("[data-chatbot-stop]").click();
+  await page.waitForFunction(() => document.querySelector("[data-chatbot-message]").textContent === "Could not stop chatbot");
+  assert.equal(await page.locator("[data-chatbot-status]").innerText(), "Live");
+  stopFails = false;
+  await page.locator("[data-chatbot-stop]").click();
+  await page.waitForFunction(() => chatbotState.status === "paused");
+  assert.equal(liveFlow.status, "paused");
+  assert.equal(await page.locator("[data-chatbot-stop]").isVisible(), false);
+  assert.equal(await page.locator("[data-chatbot-launch-label]").textContent(), "Resume");
+  await page.locator("[data-chatbot-launch]").click();
+  await page.waitForFunction(() => chatbotState.status === "active" && !document.querySelector("[data-chatbot-launch]").disabled);
+  assert.equal(liveFlow.status, "active");
+  assert.ok(automationMutations.every(call => call.method !== "POST"));
+  await page.reload();
+  await page.waitForFunction(() => chatbotState.currentId === "000000000000000000000123");
+  assert.equal(await page.locator("[data-chatbot-status]").innerText(), "Live");
+  await page.locator("[data-chatbot-new]").click();
+  await page.locator("[data-chatbot-name]").fill("Unsaved flow");
+  await page.evaluate(() => loadChatbotFlows());
+  assert.equal(await page.evaluate(() => chatbotState.currentId), null);
+  assert.equal(await page.locator("[data-chatbot-name]").inputValue(), "Unsaved flow");
+  await page.locator('[data-chatbot-load-flow="000000000000000000000123"]').click();
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Chatbot overflows at " + width);
+    assert.equal(await page.locator("[data-chatbot-stop]").isVisible(), true);
+    assert.equal(await page.locator("[data-chatbot-edit]").isVisible(), true);
+  }
+  results.push({ check: "live chatbot survives logout/login and reload; editing updates same flow; stop failure keeps Live; stop/resume persists; refresh preserves drafts; mobile controls fit", passed: true });
   await page.goto(origin + "/admin");
   await page.waitForFunction(() => document.querySelector("[data-admin-records]")?.textContent.includes("Test Shop"));
   await page.screenshot({ path: path.join(output, "admin-mobile.png") });

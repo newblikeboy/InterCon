@@ -173,6 +173,7 @@ const chatbotInspector = document.querySelector("[data-chatbot-inspector]");
 const chatbotMessage = document.querySelector("[data-chatbot-message]");
 const chatbotFlowList = document.querySelector("[data-chatbot-flow-list]");
 const chatbotSaveButton = document.querySelector("[data-chatbot-save]");
+const chatbotLaunchButton = document.querySelector("[data-chatbot-launch]");
 const chatbotNewButton = document.querySelector("[data-chatbot-new]");
 const chatbotRefreshButton = document.querySelector("[data-chatbot-refresh]");
 const chatbotAutoLayoutButton = document.querySelector("[data-chatbot-auto-layout]");
@@ -184,6 +185,7 @@ const chatbotZoomOutButton = document.querySelector("[data-chatbot-zoom-out]");
 const chatbotZoomInButton = document.querySelector("[data-chatbot-zoom-in]");
 const chatbotPanButton = document.querySelector("[data-chatbot-pan]");
 const chatbotZoomLabel = document.querySelector("[data-chatbot-zoom-label]");
+const chatbotStatus = document.querySelector("[data-chatbot-status]");
 const defaultPortalView = "home";
 let facebookSdkPromise;
 // Once resolved, holds { FB, config } synchronously so the Meta popup can be
@@ -245,6 +247,7 @@ const reportState = {
 };
 const chatbotState = {
   currentId: null,
+  status: "draft",
   loaded: false,
   selectedNodeId: "trigger",
   draggingNodeId: null,
@@ -5442,10 +5445,12 @@ function defaultChatbotNodes() {
 
 function resetChatbotBuilder() {
   chatbotState.currentId = null;
+  chatbotState.status = "draft";
   chatbotState.selectedNodeId = "trigger";
   chatbotState.nodes = defaultChatbotNodes();
   chatbotState.edges = buildChatbotEdges(chatbotState.nodes);
   if (chatbotNameInput) chatbotNameInput.value = "Welcome menu";
+  updateChatbotStatus("draft");
   renderChatbotBuilder();
 }
 
@@ -5677,6 +5682,15 @@ function renderChatbotBuilder() {
   renderChatbotInspector();
 }
 
+function updateChatbotStatus(status = "draft") {
+  chatbotState.status = status || "draft";
+  if (!chatbotStatus) return;
+  const label = chatbotState.status === "active" ? "Live" : chatbotState.status === "paused" ? "Paused" : "Draft";
+  chatbotStatus.textContent = label;
+  chatbotStatus.classList.toggle("is-live", chatbotState.status === "active");
+  chatbotStatus.classList.toggle("is-paused", chatbotState.status === "paused");
+}
+
 function chatbotPayload() {
   const nodes = chatbotState.nodes.map((node) => ({
     id: node.id,
@@ -5735,6 +5749,7 @@ async function loadChatbotFlows() {
 
 function loadChatbotFlowIntoBuilder(flow) {
   chatbotState.currentId = flow._id || null;
+  chatbotState.status = flow.status || "draft";
   chatbotState.selectedNodeId = "trigger";
   chatbotState.nodes = Array.isArray(flow.nodes) && flow.nodes.length
     ? flow.nodes.map((node, index) => ({
@@ -5771,6 +5786,7 @@ function loadChatbotFlowIntoBuilder(flow) {
       ];
   chatbotState.edges = buildChatbotEdges();
   if (chatbotNameInput) chatbotNameInput.value = flow.name || "Welcome menu";
+  updateChatbotStatus(flow.status || "draft");
   renderChatbotBuilder();
 }
 
@@ -5778,11 +5794,11 @@ async function saveChatbotFlow() {
   const payload = chatbotPayload();
   if (!payload.name) {
     setChatbotMessage("Flow name is required.", true);
-    return;
+    return null;
   }
   if (!payload.firstReply) {
     setChatbotMessage("Add at least one reply or menu message before saving.", true);
-    return;
+    return null;
   }
 
   setChatbotMessage("Saving chatbot draft...");
@@ -5793,12 +5809,36 @@ async function saveChatbotFlow() {
       body: JSON.stringify(payload)
     });
     chatbotState.currentId = data.flow?._id || chatbotState.currentId;
-    setChatbotMessage("ChatBot draft saved. Activation will be available after the live automation runner is connected.");
+    updateChatbotStatus(data.flow?.status || chatbotState.status || "draft");
+    setChatbotMessage("ChatBot flow saved.");
+    await loadChatbotFlows();
+    return data.flow;
+  } catch (error) {
+    setChatbotMessage(error.message, true);
+    return null;
+  } finally {
+    if (chatbotSaveButton) chatbotSaveButton.disabled = false;
+  }
+}
+
+async function launchChatbotFlow() {
+  if (chatbotLaunchButton) chatbotLaunchButton.disabled = true;
+  setChatbotMessage("Saving and launching chatbot...");
+  try {
+    const savedFlow = await saveChatbotFlow();
+    if (!savedFlow?._id) return;
+    const flowId = savedFlow._id;
+    const data = await requestJson(`/api/automations/${flowId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "active" })
+    });
+    updateChatbotStatus(data.flow?.status || "active");
+    setChatbotMessage("ChatBot is live. Incoming WhatsApp messages that match this trigger will receive automatic replies.");
     await loadChatbotFlows();
   } catch (error) {
     setChatbotMessage(error.message, true);
   } finally {
-    if (chatbotSaveButton) chatbotSaveButton.disabled = false;
+    if (chatbotLaunchButton) chatbotLaunchButton.disabled = false;
   }
 }
 
@@ -6021,6 +6061,7 @@ chatbotRefreshButton?.addEventListener("click", () => {
 });
 
 chatbotSaveButton?.addEventListener("click", saveChatbotFlow);
+chatbotLaunchButton?.addEventListener("click", launchChatbotFlow);
 chatbotPanButton?.addEventListener("click", () => setChatbotPanMode(!chatbotState.panMode));
 chatbotPlusButton?.addEventListener("click", (event) => {
   event.stopPropagation();

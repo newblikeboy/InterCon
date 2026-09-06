@@ -209,7 +209,7 @@
           <div class="chatbot-toolbar">
             <div class="chatbot-titlebar">
               <input type="text" maxlength="140" value="Welcome menu" aria-label="Flow name" data-chatbot-name>
-              <span class="chatbot-status-pill">Draft</span>
+              <span class="chatbot-status-pill" data-chatbot-status>Draft</span>
             </div>
             <div class="chatbot-toolbar-center" aria-label="Canvas controls">
               <button type="button" aria-label="Zoom out" data-chatbot-zoom-out>-</button>
@@ -225,7 +225,7 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h12l2 2v14H5Z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/></svg>
                 Save
               </button>
-              <button class="chatbot-toolbar-button is-disabled" type="button" disabled title="Live automation runner is still pending">
+              <button class="chatbot-toolbar-button" type="button" data-chatbot-launch>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M7 10l5-5 5 5"/><path d="M5 19h14"/></svg>
                 Launch
               </button>
@@ -272,7 +272,7 @@
         <div class="chatbot-editor-dock">
           <div class="chatbot-flow-list">
             <div class="chatbot-flow-list-head">
-              <strong>Saved drafts</strong>
+              <strong>Saved flows</strong>
               <button type="button" data-chatbot-refresh>Refresh</button>
             </div>
             <div data-chatbot-flow-list>

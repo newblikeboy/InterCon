@@ -263,6 +263,45 @@ test("chatbot automation drafts preserve visual menu nodes and can be updated", 
   assert.equal(updated.firstReply, "Choose an option");
 });
 
+test("active chatbot replies to trigger text and follows menu choices", async t => {
+  const tenant = await workspace();
+  const flow = await automation.createAutomationFlow(tenant._id, {
+    name: "Welcome bot",
+    triggerType: "keyword",
+    triggerValue: "hi",
+    nodes: [
+      { id: "trigger", type: "trigger", title: "Customer message", keyword: "hi", position: { x: 20, y: 20 } },
+      { id: "menu", type: "menu", title: "Main menu", message: "How can we help?", options: [{ label: "Sales", nextNodeId: "sales" }], position: { x: 280, y: 20 } },
+      { id: "sales", type: "handoff", title: "Sales", message: "Sales will continue.", routeTo: "sales", position: { x: 560, y: 20 } }
+    ],
+    edges: [
+      { from: "trigger", to: "menu", label: "match" },
+      { from: "menu", to: "sales", label: "Sales" }
+    ]
+  });
+  await automation.updateAutomationStatus(tenant._id, flow._id, "active");
+
+  const sentBodies = [];
+  t.mock.method(global, "fetch", async (url, options) => {
+    sentBodies.push(JSON.parse(options.body).text.body);
+    return response({ messages: [{ id: `bot-${sentBodies.length}` }] });
+  });
+
+  const now = Math.floor(Date.now() / 1000);
+  await webhook.processInboundMessages(tenant._id, { messages: [{ id: "in-1", from: "919999999999", timestamp: String(now), type: "text", text: { body: "hi" } }] }, tenant.meta.wabaId, tenant.meta.phoneNumberId);
+  let conversation = await Conversation.findOne({ tenantId: tenant._id, customerPhone: "919999999999" });
+  assert.equal(conversation.automation.status, "active");
+  assert.equal(conversation.automation.currentNodeId, "menu");
+  assert.deepEqual(sentBodies, ["How can we help?\n\n1. Sales"]);
+
+  await webhook.processInboundMessages(tenant._id, { messages: [{ id: "in-2", from: "919999999999", timestamp: String(now + 1), type: "text", text: { body: "1" } }] }, tenant.meta.wabaId, tenant.meta.phoneNumberId);
+  conversation = await Conversation.findOne({ tenantId: tenant._id, customerPhone: "919999999999" });
+  assert.equal(conversation.automation.status, "handoff");
+  assert.equal(conversation.automation.routeTo, "sales");
+  assert.deepEqual(sentBodies, ["How can we help?\n\n1. Sales", "Sales will continue."]);
+  assert.equal(await InboxMessage.countDocuments({ tenantId: tenant._id, direction: "out" }), 2);
+});
+
 test("platform admin pages and data reject ordinary tenant owners and static bypasses", async () => {
   const tenant = await workspace();
   const user = await User.create({ tenantId: tenant._id, name: "Owner", email: "admin@example.test", passwordHash: "unused", isVerified: true });
@@ -314,10 +353,10 @@ test("suppression is recorded and restoring a contact requires fresh consent evi
   assert.equal(await require("../src/models/ContactStatusEvent").countDocuments(), 2);
 });
 
-test("unfinished scheduled campaigns and automatic replies cannot falsely activate", async () => {
+test("unfinished scheduled campaigns cannot falsely activate", async () => {
   const tenant = await workspace();
   await assert.rejects(require("../src/services/campaign.service").createCampaign(tenant._id, { scheduledAt: "2027-01-01" }), /not available yet/);
-  await assert.rejects(require("../src/services/automation.service").updateAutomationStatus(tenant._id, new mongoose.Types.ObjectId(), "active"), /not available yet/);
+  await assert.rejects(require("../src/services/automation.service").updateAutomationStatus(tenant._id, new mongoose.Types.ObjectId(), "active"), /not found/);
 });
 
 test("unremembered login uses a session cookie and a shorter signed token", async () => {

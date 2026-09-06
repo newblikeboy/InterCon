@@ -262,10 +262,29 @@ async function sendReply(tenantId, conversationId, body = {}) {
   conversation.lastMessageText = text.slice(0, 1000);
   conversation.lastMessageAt = sentAt;
   conversation.lastDirection = "out";
+  if (!body.automationSend) {
+    conversation.automation = {
+      status: "idle",
+      currentNodeId: "",
+      routeTo: "",
+      updatedAt: sentAt
+    };
+  }
   await Conversation.updateOne({ _id: conversation._id, tenantId }, { $max: { lastStoredMessageId: message._id } });
-  await Conversation.updateOne({ _id: conversation._id, tenantId, lastMessageAt: { $lte: sentAt } }, { $set: {
-    lastMessageText: text.slice(0, 1000), lastMessageAt: sentAt, lastDirection: "out"
-  } });
+  const conversationUpdate = {
+    lastMessageText: text.slice(0, 1000),
+    lastMessageAt: sentAt,
+    lastDirection: "out",
+    ...(!body.automationSend ? {
+      automation: {
+        status: "idle",
+        currentNodeId: "",
+        routeTo: "",
+        updatedAt: sentAt
+      }
+    } : {})
+  };
+  await Conversation.updateOne({ _id: conversation._id, tenantId, lastMessageAt: { $lte: sentAt } }, { $set: conversationUpdate });
 
   await publishInboxUpdated(tenantId, {
     action: "message_sent",

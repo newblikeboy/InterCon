@@ -4519,6 +4519,14 @@ address {
   font-weight: 850;
 }
 
+.chatbot-status-pill.is-live {
+  background: #22a06b;
+}
+
+.chatbot-status-pill.is-paused {
+  background: #657080;
+}
+
 .chatbot-toolbar-center {
   display: inline-flex;
   align-items: center;

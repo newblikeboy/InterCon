@@ -61,6 +61,31 @@ const conversationSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0
+    },
+    automation: {
+      flowId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "AutomationFlow"
+      },
+      currentNodeId: {
+        type: String,
+        trim: true,
+        maxlength: 80,
+        default: ""
+      },
+      status: {
+        type: String,
+        enum: ["idle", "active", "handoff"],
+        default: "idle"
+      },
+      routeTo: {
+        type: String,
+        enum: ["sales", "support", "billing", "human_agent", ""],
+        default: ""
+      },
+      updatedAt: {
+        type: Date
+      }
     }
   },
   {
@@ -70,5 +95,6 @@ const conversationSchema = new mongoose.Schema(
 
 conversationSchema.index({ tenantId: 1, lastMessageAt: -1 });
 conversationSchema.index({ tenantId: 1, customerPhone: 1 }, { unique: true });
+conversationSchema.index({ tenantId: 1, "automation.flowId": 1, "automation.status": 1 });
 
 module.exports = mongoose.model("Conversation", conversationSchema);

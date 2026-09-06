@@ -10,6 +10,7 @@ const InboxMessage = require("../models/InboxMessage");
 const env = require("../config/env");
 const HttpError = require("../utils/httpError");
 const { publishInboxUpdated } = require("./realtime.service");
+const automationService = require("./automation.service");
 
 function getWebhookAppSecret() {
   return env.facebookAppSecret || env.metaAppSecret;
@@ -397,6 +398,16 @@ async function processInboundMessages(tenantId, value = {}, wabaId, phoneNumberI
       customerPhone: fromPhone,
       lastMessageAt: sentAt
     });
+
+    try {
+      await automationService.runAutomationForInboundMessage({
+        tenantId,
+        conversationId: conversation._id,
+        text: summary.text
+      });
+    } catch (error) {
+      console.error("Chatbot automation failed:", error.message);
+    }
   }
 }
 
@@ -477,7 +488,12 @@ async function processMessageEchoes(tenantId, value = {}, wabaId, phoneNumberId)
       direction: "out", type: summary.type, text: summary.text, mediaCaption: summary.caption,
       error: describeMessageError(echo), metaMessageId, status: "sent", sentAt
     });
-    if (stored) await publishInboxUpdated(tenantId, { action: "message_sent", conversationId: String(stored.conversation._id), messageId: String(stored.inboxMessage._id) });
+    if (stored) {
+      await Conversation.updateOne({ _id: stored.conversation._id, tenantId }, { $set: {
+        automation: { status: "idle", currentNodeId: "", routeTo: "", updatedAt: sentAt }
+      } });
+      await publishInboxUpdated(tenantId, { action: "message_sent", conversationId: String(stored.conversation._id), messageId: String(stored.inboxMessage._id) });
+    }
   }
 }
 

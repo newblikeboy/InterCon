@@ -287,6 +287,11 @@ async function resendVerificationEmail(identifier) {
   return generic;
 }
 
+function dispatchPasswordResetEmail(user, token) {
+  emailService.sendPasswordResetEmail(user, token)
+    .catch((error) => console.error("Password reset email failed:", error.message));
+}
+
 async function requestPasswordReset(identifier) {
   const generic = { message: "If this email belongs to an active account, a password reset link will arrive shortly." };
   const email = String(identifier || "").trim().toLowerCase();
@@ -299,10 +304,7 @@ async function requestPasswordReset(identifier) {
     passwordResetHash: crypto.createHash("sha256").update(token).digest("hex"),
     passwordResetExpires: new Date(Date.now() + 30 * 60000), passwordResetSentAt: new Date()
   } }, { returnDocument: "after" });
-  if (user) {
-    try { await emailService.sendPasswordResetEmail(user, token); }
-    catch (error) { console.error("Password reset email failed:", error.message); }
-  }
+  if (user) dispatchPasswordResetEmail(user, token);
   return generic;
 }
 

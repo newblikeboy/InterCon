@@ -213,6 +213,22 @@ test("password recovery uses a one-time token and invalidates existing sessions"
   assert.ok((await auth.loginCustomer({ email: user.email, password: "newPassword2" })).user);
 });
 
+test("password reset request does not wait for SMTP delivery", async t => {
+  const tenant = await workspace();
+  const user = await User.create({ tenantId: tenant._id, name: "Owner", email: "slow-reset@example.test", passwordHash: "unused", isVerified: true });
+  let releaseEmail;
+  t.mock.method(require("../src/services/email.service"), "sendPasswordResetEmail", () => new Promise((resolve) => { releaseEmail = resolve; }));
+
+  const completed = await Promise.race([
+    auth.requestPasswordReset(user.email).then(() => true),
+    new Promise((resolve) => setTimeout(() => resolve(false), 100))
+  ]);
+
+  assert.equal(completed, true);
+  assert.ok((await User.findById(user._id).select("+passwordResetHash")).passwordResetHash);
+  releaseEmail();
+});
+
 test("chatbot automation drafts preserve visual menu nodes and can be updated", async () => {
   const tenant = await workspace();
   const flow = await automation.createAutomationFlow(tenant._id, {

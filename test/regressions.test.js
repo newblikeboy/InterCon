@@ -109,6 +109,7 @@ const auth = require("../src/services/auth.service");
 const automation = require("../src/services/automation.service");
 const request = require("supertest");
 const app = require("../src/app");
+const access = require("../src/services/platformAccess.service");
 const { signAuthToken } = require("../src/services/authToken.service");
 
 test("newest inbox page, older cursor, and explicit read acknowledgement", async () => {
@@ -561,4 +562,186 @@ test("socket resource limits reject excessive tabs and oversized frames", async 
   const closed = waitForSocket(sockets[0], "close");
   sockets[0].send(Buffer.alloc(2048));
   assert.ok([1009, 1006].includes((await closed)[0]));
+});
+
+async function freeWorkspace(used = 0) {
+  const tenant = await workspace();
+  await Tenant.updateOne({ _id: tenant._id }, { $set: {
+    "billing.plan": "none", "billing.status": "not_started",
+    "meta.wabaId": String(tenant._id), "meta.phoneNumberId": String(tenant._id),
+    ...(used ? { "trial.initializedAt": new Date(), "trial.recipients": Array.from({ length: used }, (_, i) => String(919800000000 + i)) } : {})
+  } });
+  return Tenant.findById(tenant._id);
+}
+
+function trialSend(tenantId, phone) {
+  return access.sendWhatsAppWithAccess(tenantId, phone, "https://trial-provider.example.test/messages", {
+    method: "POST", body: JSON.stringify({ to: phone })
+  });
+}
+
+test("free allowance ignores contacts and counts repeated normalized recipients once", async t => {
+  const tenant = await freeWorkspace();
+  await Contact.insertMany(Array.from({ length: 100 }, (_, i) => ({ tenantId: tenant._id, name: "Imported", phone: String(919900000000 + i) })));
+  assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 0);
+  assert.equal((await billing.getBillingStatus(tenant._id)).platformAccess, true);
+  let sent = 0;
+  t.mock.method(global, "fetch", async () => response({ messages: [{ id: `trial-${++sent}` }] }));
+  await trialSend(tenant._id, "+91 99999 99999");
+  await trialSend(tenant._id, "9999999999");
+  assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 1);
+  await Contact.deleteMany({ tenantId: tenant._id });
+  await Tenant.updateOne({ _id: tenant._id }, { $set: { "meta.phoneNumberId": "new-sender" } });
+  const reloaded = await billing.getBillingStatus(tenant._id);
+  assert.equal(reloaded.trial.used, 1);
+  assert.equal(reloaded.trial.remaining, 19);
+  assert.equal(reloaded.active, false);
+});
+
+test("free allowance permits recipient 20 and blocks every further send until payment", async t => {
+  const tenant = await freeWorkspace(19);
+  const provider = t.mock.method(global, "fetch", async () => response({ messages: [{ id: "twentieth" }] }));
+  await trialSend(tenant._id, "919999999999");
+  assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 20);
+  for (const phone of ["919999999999", "919800000000", "919777777777"]) {
+    await assert.rejects(trialSend(tenant._id, phone), error => error.statusCode === 402);
+  }
+  assert.equal(provider.mock.callCount(), 1);
+  await Tenant.updateOne({ _id: tenant._id }, { $set: { "billing.plan": "monthly", "billing.status": "active", "billing.currentPeriodEnd": new Date(Date.now() + 86400000) } });
+  await trialSend(tenant._id, "919777777777");
+  assert.equal(provider.mock.callCount(), 2);
+  await Tenant.updateOne({ _id: tenant._id }, { $set: { "billing.currentPeriodEnd": new Date(0) } });
+  await assert.rejects(trialSend(tenant._id, "919777777777"), error => error.statusCode === 402);
+  const other = await freeWorkspace();
+  await trialSend(other._id, "919999999999");
+  assert.equal((await billing.getBillingStatus(other._id)).trial.used, 1);
+});
+
+test("free allowance reservations prevent concurrent sends from exceeding 20 recipients", async t => {
+  const tenant = await freeWorkspace();
+  const provider = t.mock.method(global, "fetch", async (_url, options) => {
+    await new Promise(resolve => setTimeout(resolve, 40));
+    return response({ messages: [{ id: JSON.parse(options.body).to }] });
+  });
+  const results = await Promise.allSettled(Array.from({ length: 35 }, (_, i) => trialSend(tenant._id, String(919700000000 + i))));
+  assert.equal(results.filter(result => result.status === "fulfilled").length, 20);
+  assert.equal(provider.mock.callCount(), 20);
+  assert.ok(results.filter(result => result.status === "rejected").every(result => [402, 409].includes(result.reason.statusCode)));
+  const state = await billing.getBillingStatus(tenant._id);
+  assert.equal(state.trial.used, 20);
+  assert.equal(state.trial.reserved, 0);
+  assert.equal(state.platformAccess, false);
+});
+
+test("free allowance releases rejected sends and holds unknown delivery outcomes", async t => {
+  const tenant = await freeWorkspace(19);
+  const provider = t.mock.method(global, "fetch", async () => ({ ok: false, status: 400, headers: new Headers(), json: async () => ({ error: { message: "Rejected" } }) }));
+  await trialSend(tenant._id, "919999999999");
+  assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 19);
+  assert.equal((await billing.getBillingStatus(tenant._id)).trial.reserved, 0);
+  provider.mock.mockImplementation(async () => { throw new Error("Connection lost after request"); });
+  await assert.rejects(trialSend(tenant._id, "919999999999"), /could not be reached/);
+  assert.equal((await billing.getBillingStatus(tenant._id)).trial.reserved, 1);
+  assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 19);
+  await assert.rejects(trialSend(tenant._id, "919777777777"), error => error.details.code === "INTERCON_TRIAL_BUSY");
+  await assert.rejects(trialSend(tenant._id, "919800000000"), error => error.details.code === "INTERCON_TRIAL_BUSY");
+  assert.equal(provider.mock.callCount(), 2);
+});
+
+test("free allowance seeds historical outbound recipients and preserves usage when chats are deleted", async () => {
+  const tenant = await freeWorkspace();
+  const conversation = await Conversation.create({ tenantId: tenant._id, customerPhone: "919900000001" });
+  await Message.insertMany([
+    { tenantId: tenant._id, to: "919900000000", templateName: "hello", status: "accepted", acceptedAt: new Date() },
+    { tenantId: tenant._id, to: "919900000002", templateName: "hello", status: "queued" },
+    { tenantId: tenant._id, to: "919900000003", templateName: "hello", status: "failed" }
+  ]);
+  await InboxMessage.insertMany([
+    { tenantId: tenant._id, conversationId: conversation._id, customerPhone: "919900000000", direction: "out", status: "sent" },
+    { tenantId: tenant._id, conversationId: conversation._id, customerPhone: "919900000001", direction: "out", status: "sent" },
+    { tenantId: tenant._id, conversationId: conversation._id, customerPhone: "919900000004", direction: "in", status: "received" }
+  ]);
+  await inbox.deleteConversation(tenant._id, conversation._id);
+  assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 2);
+  assert.equal(await InboxMessage.countDocuments({ tenantId: tenant._id }), 0);
+});
+
+test("free allowance bulk queue sends only 20 and enforces the limit again at delivery", async t => {
+  const config = require("../src/config/env");
+  const originalMps = config.whatsappDefaultMps;
+  config.whatsappDefaultMps = 10000;
+  t.after(() => { config.whatsappDefaultMps = originalMps; });
+  const tenant = await freeWorkspace();
+  await Template.create({ tenantId: tenant._id, name: "trial_update", category: "utility", language: "en", status: "approved", body: "Ready", parameterCount: 0 });
+  const selected = await Contact.insertMany(Array.from({ length: 23 }, (_, i) => ({ tenantId: tenant._id, name: "Recipient", phone: String(919600000000 + i), optIn: { status: true } })));
+  const queued = await messages.sendTemplateMessages(tenant._id, { templateName: "trial_update", contactIds: selected.map(item => String(item._id)), idempotencyKey: "free-bulk" });
+  assert.equal(queued.queuedCount, 23);
+  assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 0);
+  let sent = 0;
+  t.mock.method(global, "fetch", async (_url, options) => response(options.method === "POST" ? { messages: [{ id: `bulk-trial-${++sent}` }] } : {}));
+  for (let i = 0; i < 23; i++) await messages.processNextQueuedMessage("trial-worker");
+  assert.equal(sent, 20);
+  assert.equal(await Message.countDocuments({ tenantId: tenant._id, status: "accepted" }), 20);
+  assert.equal(await Message.countDocuments({ tenantId: tenant._id, status: "failed", error: /free allowance/ }), 3);
+  assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 20);
+  await assert.rejects(messages.sendTemplateMessage(tenant._id, { contactId: String(selected[0]._id), templateName: "trial_update" }), error => error.statusCode === 402);
+  const { key } = await require("../src/services/apiKey.service").createApiKey(tenant._id);
+  const apiResult = await request(app).post("/api/v1/messages/send-template").set("x-api-key", key).send({ contactId: String(selected[0]._id), templateName: "trial_update" });
+  assert.equal(apiResult.status, 402);
+  assert.equal(apiResult.body.details.code, "INTERCON_PLAN_REQUIRED");
+});
+
+test("free allowance covers chatbot activation and inbox replies without counting inbound contacts", async t => {
+  const tenant = await freeWorkspace(19);
+  const flow = await automation.createAutomationFlow(tenant._id, {
+    name: "Free bot", triggerType: "keyword", triggerValue: "hi", firstReply: "Hello",
+    nodes: [{ id: "trigger", type: "trigger", keyword: "hi" }, { id: "reply", type: "message", message: "Hello" }],
+    edges: [{ from: "trigger", to: "reply" }]
+  });
+  await automation.updateAutomationStatus(tenant._id, flow._id, "active");
+  const provider = t.mock.method(global, "fetch", async () => response({ messages: [{ id: "free-bot-send" }] }));
+  await webhook.processInboundMessages(tenant._id, { messages: [{ id: "free-bot-in", from: "919999999999", timestamp: String(Math.floor(Date.now() / 1000)), type: "text", text: { body: "hi" } }] }, tenant.meta.wabaId, tenant.meta.phoneNumberId);
+  assert.equal(provider.mock.callCount(), 1);
+  assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 20);
+  const conversation = await Conversation.findOne({ tenantId: tenant._id });
+  await assert.rejects(inbox.sendReply(tenant._id, conversation._id, { text: "Another reply" }), error => error.statusCode === 402);
+  await assert.rejects(automation.updateAutomationStatus(tenant._id, flow._id, "active"), error => error.statusCode === 402);
+  await automation.updateAutomationStatus(tenant._id, flow._id, "paused");
+  assert.equal(provider.mock.callCount(), 1);
+});
+
+test("free allowance enables template review but never bypasses workspace suspension", async t => {
+  const tenant = await freeWorkspace();
+  const provider = t.mock.method(global, "fetch", async () => response({ id: "free-template", status: "PENDING", category: "UTILITY" }));
+  await require("../src/services/template.service").submitTemplateForMetaReview(tenant._id, { name: "free_template", category: "utility", language: "en", body: "Your order is ready." });
+  assert.equal(provider.mock.callCount(), 1);
+  assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 0);
+  await Tenant.updateOne({ _id: tenant._id }, { $set: { status: "suspended" } });
+  await assert.rejects(trialSend(tenant._id, "919999999999"), error => error.statusCode === 403);
+  assert.equal(provider.mock.callCount(), 1);
+});
+
+test("free allowance recovers a failed usage write without repeating accepted delivery", async t => {
+  const tenant = await freeWorkspace(19);
+  await Template.create({ tenantId: tenant._id, name: "trial_recovery", category: "utility", language: "en", status: "approved", body: "Ready", parameterCount: 0 });
+  const contact = await Contact.create({ tenantId: tenant._id, name: "Customer", phone: "919999999999", optIn: { status: true } });
+  await messages.sendTemplateMessage(tenant._id, { contactId: String(contact._id), templateName: "trial_recovery" });
+  const provider = t.mock.method(global, "fetch", async () => response({ messages: [{ id: "trial-recovered" }] }));
+  const original = Tenant.updateOne.bind(Tenant);
+  let failedWrite = false;
+  t.mock.method(Tenant, "updateOne", (filter, update, ...rest) => {
+    if (update.$addToSet?.["trial.recipients"] && !failedWrite) {
+      failedWrite = true;
+      throw new Error("Simulated quota bookkeeping failure");
+    }
+    return original(filter, update, ...rest);
+  });
+  assert.equal((await messages.processNextQueuedMessage("trial-recovery")).action, "accepted");
+  assert.equal(failedWrite, true);
+  const status = await billing.getBillingStatus(tenant._id);
+  assert.equal(status.trial.used, 20);
+  assert.equal(status.trial.reserved, 0);
+  assert.equal(status.platformAccess, false);
+  assert.equal(await messages.processNextQueuedMessage("trial-recovery"), null);
+  assert.equal(provider.mock.calls.filter(call => call.arguments[1]?.method === "POST").length, 1);
 });

@@ -2,7 +2,7 @@ const AutomationFlow = require("../models/AutomationFlow");
 const Conversation = require("../models/Conversation");
 const Tenant = require("../models/Tenant");
 const HttpError = require("../utils/httpError");
-const { hasActivePaidPlan } = require("./billing.service");
+const { requirePlatformAccess } = require("./platformAccess.service");
 const inboxService = require("./inbox.service");
 
 const TRIGGER_TYPES = ["keyword", "ad_click", "qr_scan", "after_hours", "unknown_reply"];
@@ -274,9 +274,7 @@ async function activateAutomationFlow(tenantId, flowId) {
 
   if (!tenant) throw new HttpError(404, "Tenant not found");
   if (!flow) throw new HttpError(404, "Automation flow not found");
-  if (tenant.status !== "active" || !hasActivePaidPlan(tenant)) {
-    throw new HttpError(402, "Activate an InterCon paid plan before launching a chatbot");
-  }
+  await requirePlatformAccess(tenantId);
   if (!tenant.meta?.phoneNumberId || !tenant.getMetaAccessToken()) {
     throw new HttpError(409, "Connect WhatsApp before launching a chatbot");
   }

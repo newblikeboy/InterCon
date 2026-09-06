@@ -6,7 +6,7 @@ const env = require("../config/env");
 const HttpError = require("../utils/httpError");
 const { fetchWithPolicy } = require("../utils/httpClient");
 const { getRedisClient } = require("../config/redis");
-const { requireActivePaidPlan } = require("./billing.service");
+const { requirePlatformAccess } = require("./platformAccess.service");
 
 const templateSyncCache = new Map();
 const TEMPLATE_SYNC_TTL_MS = 30 * 1000;
@@ -543,7 +543,7 @@ async function createTemplateDraft(tenantId, body) {
 }
 
 async function submitTemplateForMetaReview(tenantId, body) {
-  await requireActivePaidPlan(tenantId);
+  await requirePlatformAccess(tenantId);
 
   const payload = buildMetaTemplatePayload(body);
   const tenant = await Tenant.findById(tenantId).select("+meta.accessToken");
@@ -718,7 +718,7 @@ function buildLibraryButtonInputs(body) {
 }
 
 async function createTemplateFromLibrary(tenantId, body) {
-  await requireActivePaidPlan(tenantId);
+  await requirePlatformAccess(tenantId);
 
   const libraryTemplateName = String(body.libraryTemplateName || body.library_template_name || "").trim().toLowerCase();
   if (!libraryTemplateName) {

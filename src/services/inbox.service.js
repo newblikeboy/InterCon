@@ -6,8 +6,7 @@ const ContactSegment = require("../models/ContactSegment");
 const Tenant = require("../models/Tenant");
 const env = require("../config/env");
 const HttpError = require("../utils/httpError");
-const { requireActivePaidPlan } = require("./billing.service");
-const { fetchWithPolicy } = require("../utils/httpClient");
+const { requirePlatformAccess, sendWhatsAppWithAccess, getAccessTenant } = require("./platformAccess.service");
 const { publishInboxUpdated } = require("./realtime.service");
 const { cursorFilter, pageSize } = require("../utils/pagination");
 
@@ -164,6 +163,7 @@ async function markConversationRead(tenantId, conversationId, body = {}) {
 }
 
 async function deleteConversation(tenantId, conversationId) {
+  await getAccessTenant(tenantId);
   if (!mongoose.Types.ObjectId.isValid(conversationId)) {
     throw new HttpError(400, "Conversation ID is invalid");
   }
@@ -188,7 +188,7 @@ async function deleteConversation(tenantId, conversationId) {
 }
 
 async function sendReply(tenantId, conversationId, body = {}) {
-  await requireActivePaidPlan(tenantId);
+  await requirePlatformAccess(tenantId);
 
   const text = String(body.text || body.message || "").trim();
   if (!text) {
@@ -218,7 +218,7 @@ async function sendReply(tenantId, conversationId, body = {}) {
     throw new HttpError(409, "Connect WhatsApp first. Phone number ID and Meta access token are required before replying.");
   }
 
-  const response = await fetchWithPolicy(`https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.phoneNumberId}/messages`, {
+  const { response, metaResponse } = await sendWhatsAppWithAccess(tenantId, conversation.customerPhone, `https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.phoneNumberId}/messages`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${accessToken}`,
@@ -236,14 +236,13 @@ async function sendReply(tenantId, conversationId, body = {}) {
     })
   });
 
-  const metaResponse = await response.json().catch(() => ({}));
-
   if (!response.ok || metaResponse.error) {
     const metaError = metaResponse.error || {};
     throw new HttpError(response.status || 400, metaError.message || "Failed to send WhatsApp reply", metaError);
   }
 
   const metaMessageId = metaResponse.messages?.[0]?.id || "";
+  if (!metaMessageId) throw new HttpError(502, "WhatsApp delivery outcome is unknown. Check the conversation before retrying.");
   const sentAt = new Date();
 
   const message = await InboxMessage.create({

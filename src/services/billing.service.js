@@ -6,6 +6,7 @@ const Payment = require("../models/Payment");
 const BillingOrder = require("../models/BillingOrder");
 const HttpError = require("../utils/httpError");
 const { fetchWithPolicy } = require("../utils/httpClient");
+const { hasActivePaidPlan, publicTrial, getAccessTenant } = require("./platformAccess.service");
 
 const plans = [
   {
@@ -53,25 +54,14 @@ function publicBilling(tenant) {
     currentPeriodEnd: tenant.billing?.currentPeriodEnd,
     razorpayOrderId: tenant.billing?.razorpayOrderId,
     receipt: tenant.billing?.receipt,
-    active: hasActivePaidPlan(tenant)
+    active: hasActivePaidPlan(tenant),
+    trial: publicTrial(tenant),
+    platformAccess: tenant.status === "active" && (hasActivePaidPlan(tenant) || publicTrial(tenant).active)
   };
 }
 
-function hasActivePaidPlan(tenant) {
-  if (!tenant?.billing) return false;
-  if (!["monthly", "quarterly", "yearly"].includes(tenant.billing.plan)) return false;
-  if (tenant.billing.status !== "active") return false;
-  if (!tenant.billing.currentPeriodEnd) return true;
-
-  return new Date(tenant.billing.currentPeriodEnd).getTime() > Date.now();
-}
-
 async function getBillingStatus(tenantId) {
-  const tenant = await Tenant.findById(tenantId).select("billing status");
-  if (!tenant) {
-    throw new HttpError(404, "Tenant not found");
-  }
-
+  const tenant = await getAccessTenant(tenantId);
   return publicBilling(tenant);
 }
 
@@ -125,7 +115,8 @@ async function selectPlan(tenantId, planId) {
 
   requireRazorpayConfig();
 
-  const existingTenant = await Tenant.findById(tenantId).select("businessName businessEmail contactPerson whatsappNumber billing");
+  await getAccessTenant(tenantId);
+  const existingTenant = await Tenant.findById(tenantId).select("businessName businessEmail contactPerson whatsappNumber billing status trial");
   if (!existingTenant) {
     throw new HttpError(404, "Tenant not found");
   }
@@ -252,7 +243,7 @@ async function settlePayment(order, providerPaymentId, signature = "") {
   try {
     await session.withTransaction(async () => {
       const existing = await Payment.findOne({ provider: "razorpay", providerOrderId: order.providerOrderId }).session(session);
-      const tenant = await Tenant.findById(order.tenantId).select("billing").session(session);
+      const tenant = await Tenant.findById(order.tenantId).select("billing status trial").session(session);
       if (!tenant) throw new HttpError(404, "Workspace not found");
       const plan = getPlan(order.plan);
       if (existing) {
@@ -335,23 +326,6 @@ async function listPaymentHistory(tenantId) {
   return Payment.find({ tenantId }).select("providerOrderId providerPaymentId plan amount currency status capturedAt").sort({ capturedAt: -1 }).limit(100).lean();
 }
 
-async function requireActivePaidPlan(tenantId) {
-  const tenant = await Tenant.findById(tenantId).select("billing status");
-  if (!tenant) {
-    throw new HttpError(404, "Tenant not found");
-  }
-
-  if (tenant.status !== "active" || !hasActivePaidPlan(tenant)) {
-    throw new HttpError(402, "Choose and activate an InterCon paid plan before submitting templates or sending WhatsApp messages.", {
-      code: "INTERCON_PLAN_REQUIRED",
-      billing: publicBilling(tenant),
-      plans
-    });
-  }
-
-  return publicBilling(tenant);
-}
-
 module.exports = {
   addMonths,
   periodEnd,
@@ -364,7 +338,6 @@ module.exports = {
   selectPlan,
   activatePlan,
   verifyPayment,
-  requireActivePaidPlan,
   hasActivePaidPlan,
   publicBilling
 };

@@ -11,7 +11,7 @@ const crypto = require("crypto");
 const env = require("../config/env");
 const HttpError = require("../utils/httpError");
 const { isMetaSampleTemplate } = require("./template.service");
-const { requireActivePaidPlan, hasActivePaidPlan } = require("./billing.service");
+const { requirePlatformAccess, sendWhatsAppWithAccess } = require("./platformAccess.service");
 const { acquireSlot, releaseDailyRecipient, reserveDailyRecipient } = require("./distributedLimit.service");
 const { fetchWithPolicy } = require("../utils/httpClient");
 
@@ -164,7 +164,7 @@ function hasResolvedTemplateVariables(variables, contact) {
 }
 
 async function resolveTemplateSendContext(tenantId, body = {}, options = {}) {
-  await requireActivePaidPlan(tenantId);
+  await requirePlatformAccess(tenantId);
 
   const templateName = String(body.templateName || body.template_name || "").trim();
   const language = String(body.language || "").trim();
@@ -1034,9 +1034,7 @@ async function processQueuedMessage(message) {
   if (!tenant) {
     return failMessage(message, "Tenant not found for queued message.");
   }
-  if (tenant.status !== "active" || !hasActivePaidPlan(tenant)) {
-    return failMessage(message, "Workspace is suspended or its paid plan is no longer active.");
-  }
+  await requirePlatformAccess(message.tenantId);
   if (!contact || contact.status !== "active" || !contact.optIn?.status) {
     return failMessage(message, "Recipient is no longer active and opted in. Message was not sent.");
   }
@@ -1086,16 +1084,16 @@ async function processQueuedMessage(message) {
     }
   );
 
-  let response;
+  let response, metaResponse;
   try {
-    response = await fetchWithPolicy(`https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.phoneNumberId}/messages`, {
+    ({ response, metaResponse } = await sendWhatsAppWithAccess(message.tenantId, message.to, `https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.phoneNumberId}/messages`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${accessToken}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify(buildMetaMessagePayload(message, template))
-    });
+    }));
   } catch (error) {
     if (["UPSTREAM_TIMEOUT", "UPSTREAM_UNAVAILABLE"].includes(error.details?.code)) {
       return markMessageUncertain(
@@ -1106,9 +1104,7 @@ async function processQueuedMessage(message) {
     throw error;
   }
 
-  const metaResponse = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
+  if (!response.ok || metaResponse.error) {
     const metaError = metaResponse.error || {};
     const errorMessage = getMetaSendErrorMessage(metaError, tenant);
 
@@ -1149,6 +1145,9 @@ async function processNextQueuedMessage(workerId) {
   } catch (error) {
     if (message.providerAccepted) {
       return markMessageUncertain(message, "Provider accepted delivery, but saving the result failed. Do not resend automatically.");
+    }
+    if (error.details?.code === "INTERCON_TRIAL_BUSY") {
+      return rescheduleMessage(message, 15000, error.message);
     }
     const attempts = Number(message.attempts || 0) + 1;
     const errorDetails = error.details || {};

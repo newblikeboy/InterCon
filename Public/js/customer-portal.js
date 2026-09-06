@@ -545,7 +545,7 @@ function getSetupSteps() {
   const contactsReady = optedInContacts.length > 0;
   const templatesReady = approvedTemplates.length > 0;
   const paymentReady = isPaymentReady(meta);
-  const paidPlanReady = isInterconPlanActive(setupState.billing);
+  const paidPlanReady = hasInterconPlatformAccess(setupState.billing);
   const messagingReady = phoneRegistered && webhookSubscribed && contactsReady && templatesReady && paymentReady && paidPlanReady;
 
   return [
@@ -575,11 +575,11 @@ function getSetupSteps() {
     },
     {
       key: "plan",
-      label: "InterCon paid plan",
+      label: "InterCon access",
       href: "#billing",
-      action: "Choose plan",
+      action: "View usage and plans",
       done: paidPlanReady,
-      message: "Activate a paid InterCon plan before template approval and sending."
+      message: "Use InterCon free until you send to 20 unique WhatsApp recipients. Adding contacts does not count."
     },
     {
       key: "templates",
@@ -598,7 +598,7 @@ function getSetupSteps() {
       action: "Open sender",
       done: messagingReady,
       message: !paidPlanReady
-        ? "Activate an InterCon plan before sending messages."
+        ? "Your free allowance is complete. Activate an InterCon plan to continue sending."
         : !paymentReady
         ? "Fix Meta WABA health before sending messages."
         : "Send approved templates to opted-in contacts."
@@ -612,6 +612,11 @@ function isInterconPlanActive(billing = {}) {
   if (!billing.currentPeriodEnd) return true;
 
   return new Date(billing.currentPeriodEnd).getTime() > Date.now();
+}
+
+function hasInterconPlatformAccess(billing = {}) {
+  if (billing.platformAccess === false) return false;
+  return isInterconPlanActive(billing) || billing.trial?.active === true;
 }
 
 function formatCurrency(amount, currency = "INR") {
@@ -852,26 +857,36 @@ function renderBilling() {
   const billing = setupState.billing || {};
   const active = isInterconPlanActive(billing);
   const selectedPlan = setupState.plans.find((plan) => plan.id === billing.plan);
+  const trial = billing.trial;
+  const trialText = trial
+    ? `${trial.used} of ${trial.limit} unique WhatsApp recipients used. `
+      + (trial.active ? `${trial.remaining} remaining before a paid plan is required.` : "Free allowance complete. Activate a plan to continue sending.")
+      + (trial.reserved ? ` ${trial.reserved} recipient send(s) awaiting confirmation.` : "")
+      + " Adding contacts does not count. Meta WhatsApp charges are separate."
+    : "";
+  const trialUsage = document.querySelector("[data-trial-usage]");
+  if (trialUsage) {
+    trialUsage.hidden = active || !trial;
+    trialUsage.textContent = trialText;
+  }
 
   if (billingStatus) {
-    billingStatus.textContent = active ? "Active" : formatBillingStatus(billing.status);
-    billingStatus.classList.toggle("approved", active);
-    billingStatus.classList.toggle("warning", !active);
+    billingStatus.textContent = active ? "Active" : trial?.active ? "Free access" : trial ? "Free allowance used" : formatBillingStatus(billing.status);
+    billingStatus.classList.toggle("approved", active || trial?.active === true);
+    billingStatus.classList.toggle("warning", !hasInterconPlatformAccess(billing));
   }
 
   if (billingCurrentPlan) {
     billingCurrentPlan.textContent = selectedPlan
       ? `${selectedPlan.name} - ${formatCurrency(selectedPlan.amount, selectedPlan.currency)}`
-      : "No active plan";
+      : trial?.active ? "Free access · 20 unique recipients" : "No active plan";
   }
 
   if (billingMessage) {
     billingMessage.classList.remove("error");
     billingMessage.textContent = active
       ? "Your plan is active" + (billing.currentPeriodEnd ? " through " + new Date(billing.currentPeriodEnd).toLocaleDateString() : "") + ". Renewals add time after your current paid period."
-      : billing.status === "pending_payment"
-        ? "Plan selected. Complete payment confirmation with InterCon to activate template submission and WhatsApp sending."
-        : "Choose a paid InterCon plan when you are ready to submit templates or send WhatsApp messages.";
+      : trialText || "Start free with 20 unique WhatsApp recipients. A paid plan is required for further sends after your 20th recipient.";
   }
 
   if (billingPlanGrid) {
@@ -1004,10 +1019,16 @@ async function startRazorpayPayment(planId) {
   });
 }
 
-function requirePaidPlanBeforeAction(messageSetter) {
-  if (isInterconPlanActive(setupState.billing)) return true;
+async function requirePlatformAccessBeforeAction(messageSetter) {
+  try {
+    await loadBilling();
+  } catch (error) {
+    messageSetter(error.message, true);
+    return false;
+  }
+  if (hasInterconPlatformAccess(setupState.billing)) return true;
 
-  const message = "Choose and activate an InterCon paid plan before using this action.";
+  const message = "Your free allowance of 20 unique WhatsApp recipients is complete. Activate a paid InterCon plan to continue.";
   messageSetter(message, true);
   showPortalView("billing");
   return false;
@@ -1028,6 +1049,11 @@ async function requestJson(url, options = {}) {
 
   if (!response.ok) {
     const error = new Error(data.message || "Request failed");
+    if (data.details?.code === "INTERCON_PLAN_REQUIRED" && data.details.trial) {
+      setupState.billing.trial = data.details.trial;
+      setupState.billing.platformAccess = false;
+      renderBilling();
+    }
     error.details = data.details || data.error || null;
     throw error;
   }
@@ -3289,7 +3315,7 @@ function validateTemplateBuilder() {
 }
 
 async function submitTemplateForReview() {
-  if (!requirePaidPlanBeforeAction(setTemplateMessage)) return false;
+  if (!await requirePlatformAccessBeforeAction(setTemplateMessage)) return false;
   updateTemplateSamplesValue();
 
   // Unchanged library templates keep their pre-approved fast path; any edit
@@ -3639,7 +3665,7 @@ if (sendMessageForm) {
     const estimatedCount = getSendRecipientEstimate();
 
     try {
-      if (!requirePaidPlanBeforeAction(setSendMessage)) return;
+      if (!await requirePlatformAccessBeforeAction(setSendMessage)) return;
       if (!sendRecipientState.contactIds.size && !sendRecipientState.groupIds.size) {
         setSendMessage("Select at least one contact or group.", true);
         return;
@@ -3649,7 +3675,9 @@ if (sendMessageForm) {
       const confirmed = await showConfirmModal({
         eyebrow: "Bulk WhatsApp",
         title: `Queue this template for ${estimatedCount || "the selected"} recipient${estimatedCount === 1 ? "" : "s"}?`,
-        message: "Each customer receives variables from the CSV row matching their unique phone number. Duplicate selections are deduplicated, and the batch is blocked if any eligible selected phone has no row. Meta messaging charges may apply.",
+        message: "Each customer receives variables from the CSV row matching their unique phone number. Duplicate selections are deduplicated, and the batch is blocked if any eligible selected phone has no row. "
+          + (!isInterconPlanActive(setupState.billing) ? "Free sending stops after your 20th unique WhatsApp recipient; remaining queued messages will require a paid plan. " : "")
+          + "Meta messaging charges may apply.",
         confirmText: "Queue messages"
       });
       if (!confirmed) return;
@@ -4813,6 +4841,7 @@ async function sendInboxReply() {
     if (data.conversation) applyInboxWindowState(data.conversation);
     await refreshActiveConversation();
     await loadInboxConversations(true);
+    await loadBilling().catch(() => null);
   } catch (error) {
     setInboxStatus(error.message, true);
   } finally {
@@ -5116,7 +5145,7 @@ function onPortalViewShown(viewId) {
     loadFacebookSdk().catch(() => {});
     loadMetaOnboardingSession().catch(() => {});
   }
-  if (viewId === "billing" || viewId === "payments") {
+  if (["billing", "payments", "send-whatsapp", "inbox", "chatbot"].includes(viewId)) {
     loadBilling().catch((error) => {
       if (billingMessage) {
         billingMessage.textContent = error.message;

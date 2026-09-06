@@ -157,6 +157,15 @@ const tenantSchema = new mongoose.Schema(
         select: false
       }
     },
+    trial: {
+      initializedAt: Date,
+      // Lifetime usage survives contact deletion, login, and sender-number changes.
+      recipients: { type: [String], default: [] },
+      reservations: {
+        type: [{ _id: false, token: String, recipient: String, createdAt: Date }],
+        default: []
+      }
+    },
     billing: {
       plan: {
         type: String,

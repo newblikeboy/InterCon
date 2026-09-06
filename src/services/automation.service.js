@@ -268,13 +268,13 @@ async function updateAutomationStatus(tenantId, flowId, status) {
 
 async function activateAutomationFlow(tenantId, flowId) {
   const [tenant, flow] = await Promise.all([
-    Tenant.findById(tenantId).select("+meta.accessToken status billing meta.phoneNumberId"),
+    Tenant.findById(tenantId).select("+meta.accessToken status billing trial meta.phoneNumberId"),
     AutomationFlow.findOne({ _id: flowId, tenantId })
   ]);
 
   if (!tenant) throw new HttpError(404, "Tenant not found");
   if (!flow) throw new HttpError(404, "Automation flow not found");
-  await requirePlatformAccess(tenantId);
+  await requirePlatformAccess(tenantId, { tenant });
   if (!tenant.meta?.phoneNumberId || !tenant.getMetaAccessToken()) {
     throw new HttpError(409, "Connect WhatsApp before launching a chatbot");
   }

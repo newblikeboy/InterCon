@@ -188,7 +188,8 @@ async function deleteConversation(tenantId, conversationId) {
 }
 
 async function sendReply(tenantId, conversationId, body = {}) {
-  await requirePlatformAccess(tenantId);
+  const tenant = await Tenant.findById(tenantId).select("+meta.accessToken");
+  await requirePlatformAccess(tenantId, { tenant });
 
   const text = String(body.text || body.message || "").trim();
   if (!text) {
@@ -211,7 +212,6 @@ async function sendReply(tenantId, conversationId, body = {}) {
     );
   }
 
-  const tenant = await Tenant.findById(tenantId).select("+meta.accessToken");
   const accessToken = tenant?.getMetaAccessToken();
 
   if (!tenant?.meta?.phoneNumberId || !accessToken) {

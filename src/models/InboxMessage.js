@@ -88,6 +88,7 @@ const inboxMessageSchema = new mongoose.Schema(
 );
 
 inboxMessageSchema.index({ conversationId: 1, createdAt: 1 });
+inboxMessageSchema.index({ tenantId: 1, customerPhone: 1, direction: 1, sentAt: -1 });
 inboxMessageSchema.index({ tenantId: 1, conversationId: 1, _id: -1 });
 inboxMessageSchema.index(
   { tenantId: 1, metaMessageId: 1 },

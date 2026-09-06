@@ -913,15 +913,15 @@ function renderBilling() {
   renderSetupProgress();
 }
 
-async function loadBilling() {
-  const data = await requestJson("/api/billing");
+async function loadBilling({ summary = false } = {}) {
+  const data = await requestJson(summary ? "/api/billing?summary=1" : "/api/billing");
   setupState.billing = {
     ...(data.billing || {}),
     active: isInterconPlanActive(data.billing || {})
   };
   setupState.plans = data.plans || [];
   const history = document.querySelector("[data-payment-history]");
-  if (history) {
+  if (history && Array.isArray(data.payments)) {
     history.replaceChildren();
     for (const payment of data.payments || []) {
       const row = document.createElement("p");
@@ -1020,8 +1020,10 @@ async function startRazorpayPayment(planId) {
 }
 
 async function requirePlatformAccessBeforeAction(messageSetter) {
+  // This is a UI hint; each action still enforces current access on the server.
+  if (hasInterconPlatformAccess(setupState.billing)) return true;
   try {
-    await loadBilling();
+    await loadBilling({ summary: true });
   } catch (error) {
     messageSetter(error.message, true);
     return false;
@@ -4841,7 +4843,7 @@ async function sendInboxReply() {
     if (data.conversation) applyInboxWindowState(data.conversation);
     await refreshActiveConversation();
     await loadInboxConversations(true);
-    await loadBilling().catch(() => null);
+    void loadBilling({ summary: true }).catch(() => null);
   } catch (error) {
     setInboxStatus(error.message, true);
   } finally {
@@ -5146,7 +5148,7 @@ function onPortalViewShown(viewId) {
     loadMetaOnboardingSession().catch(() => {});
   }
   if (["billing", "payments", "send-whatsapp", "inbox", "chatbot"].includes(viewId)) {
-    loadBilling().catch((error) => {
+    loadBilling({ summary: !["billing", "payments"].includes(viewId) }).catch((error) => {
       if (billingMessage) {
         billingMessage.textContent = error.message;
         billingMessage.classList.add("error");

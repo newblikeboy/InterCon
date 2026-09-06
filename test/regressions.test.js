@@ -580,6 +580,76 @@ function trialSend(tenantId, phone) {
   });
 }
 
+test("paid queued sends reuse their initial tenant read and skip capped quota writes", async t => {
+  const tenant = await freeWorkspace(20);
+  await Tenant.updateOne({ _id: tenant._id }, { $set: { "billing.plan": "monthly", "billing.status": "active" } });
+  const contact = await Contact.create({ tenantId: tenant._id, name: "Customer", phone: "919999999999", optIn: { status: true } });
+  await Template.create({ tenantId: tenant._id, name: "paid_fast", category: "utility", language: "en", status: "approved", body: "Ready", parameterCount: 0 });
+  await messages.sendTemplateMessage(tenant._id, { contactId: String(contact._id), templateName: "paid_fast" });
+  t.mock.method(global, "fetch", async (_url, options) => response(options.method === "POST" ? { messages: [{ id: "paid-fast" }] } : {}));
+  const reads = t.mock.method(Tenant, "findById");
+  const writes = t.mock.method(Tenant, "updateOne");
+  assert.equal((await messages.processNextQueuedMessage("paid-fast-worker")).action, "accepted");
+  assert.equal(reads.mock.callCount(), 2, "One context read and one fresh pre-send access check");
+  assert.equal(writes.mock.callCount(), 0, "A completed lifetime counter needs no tenant writes");
+});
+
+test("paid usage counts new recipients but skips repeat writes and still checks suspension", async t => {
+  const tenant = await freeWorkspace(1);
+  await Tenant.updateOne({ _id: tenant._id }, { $set: { "billing.plan": "monthly", "billing.status": "active" } });
+  const provider = t.mock.method(global, "fetch", async () => response({ messages: [{ id: "paid-counted" }] }));
+  const writes = t.mock.method(Tenant, "updateOne");
+  await trialSend(tenant._id, "919999999999");
+  assert.equal(writes.mock.callCount(), 1);
+  await trialSend(tenant._id, "919999999999");
+  assert.equal(writes.mock.callCount(), 1);
+  assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 2);
+  await Tenant.updateOne({ _id: tenant._id }, { $set: { status: "suspended" } });
+  await assert.rejects(trialSend(tenant._id, "919999999999"), error => error.statusCode === 403);
+  assert.equal(provider.mock.callCount(), 2);
+});
+
+test("free sends with available capacity avoid history scans and combine quota completion with release", async t => {
+  const tenant = await freeWorkspace(1);
+  await Tenant.updateOne({ _id: tenant._id }, { $push: { "trial.reservations": { token: "unknown", recipient: "919777777777", createdAt: new Date() } } });
+  t.mock.method(global, "fetch", async () => response({ messages: [{ id: "free-fast" }] }));
+  const bulkHistory = t.mock.method(Message, "aggregate");
+  const inboxHistory = t.mock.method(InboxMessage, "aggregate");
+  const writes = t.mock.method(Tenant, "updateOne");
+  await trialSend(tenant._id, "919999999999");
+  assert.equal(bulkHistory.mock.callCount() + inboxHistory.mock.callCount(), 0);
+  assert.equal(writes.mock.callCount(), 2, "Only reserve and complete are needed");
+  const saved = await Tenant.findById(tenant._id);
+  assert.equal(saved.trial.recipients.length, 2);
+  assert.deepEqual(saved.trial.reservations.map(item => item.token), ["unknown"]);
+});
+
+test("capacity contention recovers accepted sends before deciding whether more may be sent", async t => {
+  const tenant = await freeWorkspace(19);
+  const createdAt = new Date(Date.now() - 1000);
+  await Tenant.updateOne({ _id: tenant._id }, { $push: { "trial.reservations": { token: "recover-at-capacity", recipient: "919999999999", createdAt } } });
+  await Message.create({ tenantId: tenant._id, to: "919999999999", templateName: "accepted", status: "accepted", acceptedAt: new Date() });
+  const provider = t.mock.method(global, "fetch", async () => response({ messages: [{ id: "must-not-send" }] }));
+  await assert.rejects(trialSend(tenant._id, "919777777777"), error => error.statusCode === 402);
+  assert.equal(provider.mock.callCount(), 0);
+  const saved = await Tenant.findById(tenant._id);
+  assert.equal(saved.trial.recipients.length, 20);
+  assert.equal(saved.trial.reservations.length, 0);
+});
+
+test("billing summaries omit the payment query while the full billing response keeps history", async t => {
+  const tenant = await freeWorkspace(1), user = await socketUser(tenant);
+  const history = t.mock.method(billing, "listPaymentHistory");
+  const auth = "Bearer " + signAuthToken(user);
+  const summary = await request(app).get("/api/billing?summary=1").set("Authorization", auth).expect(200);
+  assert.equal(summary.body.billing.trial.used, 1);
+  assert.equal(summary.body.payments, undefined);
+  assert.equal(history.mock.callCount(), 0);
+  const full = await request(app).get("/api/billing").set("Authorization", auth).expect(200);
+  assert.deepEqual(full.body.payments, []);
+  assert.equal(history.mock.callCount(), 1);
+});
+
 test("free allowance ignores contacts and counts repeated normalized recipients once", async t => {
   const tenant = await freeWorkspace();
   await Contact.insertMany(Array.from({ length: 100 }, (_, i) => ({ tenantId: tenant._id, name: "Imported", phone: String(919900000000 + i) })));

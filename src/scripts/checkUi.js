@@ -61,7 +61,10 @@ async function run() {
         data.flow = liveFlow;
       }
     }
-    if (url.pathname === "/api/billing") Object.assign(data, { billing: tenant.billing, plans: [{ id: "monthly", name: "Monthly", amount: 1000, currency: "INR", interval: "month" }], payments: [] });
+    if (url.pathname === "/api/billing") Object.assign(data, { billing: tenant.billing, plans: [{ id: "monthly", name: "Monthly", amount: 1000, currency: "INR", interval: "month" }], ...(url.searchParams.get("summary") === "1" ? {} : { payments: [] }) });
+    if (url.pathname === "/api/messages/send-template" && tenant.billing.platformAccess === false) {
+      return route.fulfill({ status: 402, json: { message: "Free allowance complete", details: { code: "INTERCON_PLAN_REQUIRED", trial: tenant.billing.trial } } });
+    }
     if (url.pathname === "/api/meta/onboarding") data.tenant = tenant;
     if (url.pathname === "/api/contacts" && !url.searchParams.has("status")) {
       data.contacts = url.searchParams.has("after") ? [contact(501)] : Array.from({ length: 500 }, (_, index) => contact(index + 1));
@@ -199,7 +202,12 @@ async function run() {
   tenant.billing = { plan: "none", status: "not_started", active: false, platformAccess: true, trial: { limit: 20, used: 0, remaining: 20, reserved: 0, active: true } };
   await page.evaluate(() => loadBilling());
   assert.match(await page.locator("[data-trial-usage]").innerText(), /0 of 20 unique WhatsApp recipients/);
+  const billingCallsBeforeAction = apiCalls.filter(url => url.startsWith("/api/billing")).length;
   assert.equal(await page.evaluate(() => requirePlatformAccessBeforeAction(setSendMessage)), true);
+  assert.equal(apiCalls.filter(url => url.startsWith("/api/billing")).length, billingCallsBeforeAction, "Allowed actions avoid a billing preflight request");
+  await page.evaluate(() => { document.querySelector("[data-payment-history]").textContent = "Saved payment history"; });
+  await page.evaluate(() => loadBilling({ summary: true }));
+  assert.equal(await page.locator("[data-payment-history]").textContent(), "Saved payment history", "Usage refresh must preserve payment history");
   tenant.billing.trial = { limit: 20, used: 19, remaining: 1, reserved: 0, active: true };
   await page.evaluate(() => loadBilling());
   assert.equal(await page.evaluate(() => requirePlatformAccessBeforeAction(setTemplateMessage)), true);
@@ -207,6 +215,10 @@ async function run() {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Trial banner fits mobile");
   tenant.billing.trial = { limit: 20, used: 20, remaining: 0, reserved: 0, active: false };
   tenant.billing.platformAccess = false;
+  assert.equal(await page.evaluate(async () => {
+    try { await requestJson("/api/messages/send-template", { method: "POST", body: "{}" }); return false; }
+    catch (error) { return error.details?.code === "INTERCON_PLAN_REQUIRED" && !hasInterconPlatformAccess(setupState.billing); }
+  }), true, "Server rejection refreshes stale local allowance");
   assert.equal(await page.evaluate(() => requirePlatformAccessBeforeAction(setSendMessage)), false);
   await page.waitForFunction(() => !document.getElementById("billing").hidden);
   assert.match(await page.locator("[data-billing-message]").innerText(), /Free allowance complete/);

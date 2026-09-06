@@ -2,13 +2,17 @@ const asyncHandler = require("../utils/asyncHandler");
 const billingService = require("../services/billing.service");
 
 const getBilling = asyncHandler(async (req, res) => {
-  const billing = await billingService.getBillingStatus(req.tenantId);
+  const summary = req.query.summary === "1";
+  const [billing, payments] = await Promise.all([
+    billingService.getBillingStatus(req.tenantId),
+    summary ? Promise.resolve(undefined) : billingService.listPaymentHistory(req.tenantId)
+  ]);
 
   res.json({
     success: true,
     billing,
     plans: billingService.getPlans(),
-    payments: await billingService.listPaymentHistory(req.tenantId)
+    ...(summary ? {} : { payments })
   });
 });
 

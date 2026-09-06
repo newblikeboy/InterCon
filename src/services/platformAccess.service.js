@@ -31,11 +31,12 @@ function publicTrial(tenant) {
   };
 }
 
-async function getAccessTenant(tenantId) {
-  const tenant = await Tenant.findById(tenantId).select("billing status trial").lean();
+async function getAccessTenant(tenantId, { tenant: loadedTenant, recover = true } = {}) {
+  // Reuse only a tenant loaded by this request, never a cached authorization.
+  const tenant = loadedTenant || await Tenant.findById(tenantId).select("billing status trial").lean();
   if (!tenant) throw new HttpError(404, "Tenant not found");
   if (tenant.trial?.initializedAt) {
-    if (!tenant.trial.reservations?.length) return tenant;
+    if (!recover || !tenant.trial.reservations?.length) return tenant;
     // Recover a successful send whose quota write failed, using durable provider
     // acceptance evidence. Unknown outcomes retain their reservations.
     const since = new Date(Math.min(...tenant.trial.reservations.map(item => new Date(item.createdAt).getTime())));
@@ -85,15 +86,20 @@ function assertPlatformAccess(tenant) {
   }
 }
 
-async function requirePlatformAccess(tenantId) {
-  const tenant = await getAccessTenant(tenantId);
+async function requirePlatformAccess(tenantId, { tenant: loadedTenant, recover = false } = {}) {
+  const tenant = await getAccessTenant(tenantId, { tenant: loadedTenant, recover });
   assertPlatformAccess(tenant);
   return tenant;
 }
 
-async function reserveTrialSend(tenantId, recipient) {
-  const tenant = await requirePlatformAccess(tenantId);
-  if (hasActivePaidPlan(tenant)) return null;
+async function reserveTrialSend(tenantId, recipient, recover = false) {
+  // Always read current access immediately before sending, even for paid plans.
+  const tenant = await requirePlatformAccess(tenantId, { recover });
+  if (hasActivePaidPlan(tenant)) return {
+    token: null,
+    trackRecipient: tenant.trial.recipients.length < FREE_RECIPIENT_LIMIT
+      && !tenant.trial.recipients.includes(recipient)
+  };
   const token = crypto.randomUUID();
   const recipients = { $ifNull: ["$trial.recipients", []] };
   const reservations = { $ifNull: ["$trial.reservations", []] };
@@ -107,14 +113,21 @@ async function reserveTrialSend(tenantId, recipient) {
     ] }
   }, { $push: { "trial.reservations": { token, recipient, createdAt: new Date() } } });
   if (!reserved.modifiedCount) {
+    // Ordinary in-flight sends need no history scans. Recover durable acceptance
+    // evidence only when capacity is full, then retry the atomic reservation once.
+    if (!recover) return reserveTrialSend(tenantId, recipient, true);
     // Recheck after racing with a completion or a plan activation.
     const latest = await requirePlatformAccess(tenantId);
-    if (hasActivePaidPlan(latest)) return null;
+    if (hasActivePaidPlan(latest)) return {
+      token: null,
+      trackRecipient: latest.trial.recipients.length < FREE_RECIPIENT_LIMIT
+        && !latest.trial.recipients.includes(recipient)
+    };
     throw new HttpError(409, "Other WhatsApp sends are using the remaining free allowance. Wait for their results before sending again.", {
       code: "INTERCON_TRIAL_BUSY", trial: publicTrial(latest)
     });
   }
-  return token;
+  return { token, trackRecipient: true };
 }
 
 async function releaseTrialSend(tenantId, token) {
@@ -123,16 +136,18 @@ async function releaseTrialSend(tenantId, token) {
 
 async function completeTrialSend(tenantId, recipient, token) {
   // Cap lifetime storage at 20, including sends made while a plan is paid.
-  await Tenant.updateOne({ _id: tenantId, $expr: { $lt: [{ $size: { $ifNull: ["$trial.recipients", []] } }, FREE_RECIPIENT_LIMIT] } }, {
+  const result = await Tenant.updateOne({ _id: tenantId, $expr: { $lt: [{ $size: { $ifNull: ["$trial.recipients", []] } }, FREE_RECIPIENT_LIMIT] } }, {
     $addToSet: { "trial.recipients": recipient },
     ...(token ? { $pull: { "trial.reservations": { token } } } : {})
   });
-  await releaseTrialSend(tenantId, token);
+  // Successful completion already removed the reservation. Only a counter filled
+  // by a concurrent send needs a separate removal.
+  if (!result.matchedCount) await releaseTrialSend(tenantId, token);
 }
 
 async function sendWhatsAppWithAccess(tenantId, phone, url, options) {
   const recipient = normalizeRecipient(phone);
-  const token = await reserveTrialSend(tenantId, recipient);
+  const { token, trackRecipient } = await reserveTrialSend(tenantId, recipient);
   let response;
   try {
     response = await fetchWithPolicy(url, options);
@@ -145,7 +160,7 @@ async function sendWhatsAppWithAccess(tenantId, phone, url, options) {
   const metaResponse = await response.json().catch(() => ({}));
   if (!response.ok || metaResponse.error) {
     await releaseTrialSend(tenantId, token);
-  } else if (metaResponse.messages?.[0]?.id) {
+  } else if (metaResponse.messages?.[0]?.id && trackRecipient) {
     try {
       await completeTrialSend(tenantId, recipient, token);
     } catch (error) {

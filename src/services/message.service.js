@@ -1034,7 +1034,7 @@ async function processQueuedMessage(message) {
   if (!tenant) {
     return failMessage(message, "Tenant not found for queued message.");
   }
-  await requirePlatformAccess(message.tenantId);
+  await requirePlatformAccess(message.tenantId, { tenant });
   if (!contact || contact.status !== "active" || !contact.optIn?.status) {
     return failMessage(message, "Recipient is no longer active and opted in. Message was not sent.");
   }

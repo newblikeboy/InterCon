@@ -1350,40 +1350,6 @@ address {
   font-size: 28px;
 }
 
-.facebook-login-button {
-  display: inline-flex;
-  min-height: 46px;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 0 16px;
-  border: 1px solid #1877f2;
-  border-radius: var(--radius);
-  color: #fff;
-  background: #1877f2;
-  cursor: pointer;
-  font-weight: 850;
-  box-shadow: 0 14px 28px rgba(24, 119, 242, 0.22);
-}
-
-.facebook-login-button span {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  border-radius: 50%;
-  color: #1877f2;
-  background: #fff;
-  font-family: Arial, sans-serif;
-  font-size: 20px;
-  font-weight: 900;
-  line-height: 1;
-}
-
-.facebook-login-button:disabled {
-  cursor: wait;
-  opacity: 0.72;
-}
 
 .auth-divider {
   display: flex;

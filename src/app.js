@@ -90,10 +90,9 @@ function sendHtml(res, file) {
   res.sendFile(path.join(publicPath, file));
 }
 
-// Authenticated app shells use no-store (not just no-cache) so browsers that
-// support back/forward cache won't restore a signed-in page's DOM verbatim
-// after logout — the back button forces a fresh load, which re-checks the
-// session via /api/auth/me instead of flashing stale account data.
+// Authenticated app shells use no-store so browsers that support back/forward
+// cache do not restore a signed-in page's DOM after logout. The next load must
+// re-check the current session before showing account data.
 function sendAuthenticatedHtml(res, file) {
   res.set("Cache-Control", "no-store");
   res.sendFile(path.join(publicPath, file));

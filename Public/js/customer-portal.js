@@ -1237,9 +1237,6 @@ function getEmbeddedSignupExtras(config, overrides = {}) {
   return extras;
 }
 
-function redirectToManualEmbeddedSignup(config) {
-  throw new Error("Meta Embedded Signup must be completed through the Facebook JavaScript SDK popup. Use a normal browser window with Facebook cookies enabled, then try again.");
-}
 
 function getMetaLoginFailureMessage(loginResponse) {
   const authResponse = loginResponse?.authResponse || {};
@@ -3195,7 +3192,6 @@ function useLibraryTemplateInBuilder(tpl) {
   const note = templateModal.querySelector("[data-template-library-note]");
   if (note) {
     const buttonSummary = (tpl.buttons || []).map(libraryButtonLabel).join(", ");
-    note.textContent = `From Meta's Template Library: "${formatLibraryLabel(tpl.name)}" (${tpl.language})${buttonSummary ? ` · Buttons: ${buttonSummary}` : ""}. Keep the message text unchanged and it is usually approved instantly. Editing the text sends it through normal Meta review${buttonSummary ? " without the library buttons" : ""}.`;
     note.textContent = `From Meta's Template Library: "${formatLibraryLabel(tpl.name)}" (${tpl.language})${buttonSummary ? ` - Buttons: ${buttonSummary}` : ""}. Keep the message text and CTA button types unchanged and it is usually approved instantly. Editing content or adding another CTA sends it through normal Meta review.`;
     note.hidden = false;
   }

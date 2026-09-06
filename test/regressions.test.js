@@ -106,6 +106,7 @@ const inbox = require("../src/services/inbox.service");
 const contacts = require("../src/services/contact.service");
 const User = require("../src/models/User");
 const auth = require("../src/services/auth.service");
+const automation = require("../src/services/automation.service");
 const request = require("supertest");
 const app = require("../src/app");
 const { signAuthToken } = require("../src/services/authToken.service");
@@ -197,16 +198,53 @@ test("template sync reads all pages and does not disable records after a partial
 test("password recovery uses a one-time token and invalidates existing sessions", async t => {
   const tenant = await workspace();
   const user = await User.create({ tenantId: tenant._id, name: "Owner", email: "reset@example.test", passwordHash: await require("bcryptjs").hash("oldPassword1", 4), isVerified: true });
-  let text;
-  t.mock.method(require("../src/services/email.service"), "sendMail", async message => { text = message.text; });
+  let token;
+  t.mock.method(require("../src/services/email.service"), "sendPasswordResetEmail", async (messageUser, messageToken) => {
+    assert.equal(String(messageUser._id), String(user._id));
+    token = messageToken;
+  });
   await auth.requestPasswordReset(user.email);
-  const token = text.match(/reset=([a-f0-9]{64})/)[1];
+  assert.match(token, /^[a-f0-9]{64}$/);
   const payload = { token, password: "newPassword2", confirm_password: "newPassword2" };
   await auth.resetPassword(payload);
   await assert.rejects(auth.resetPassword(payload), /invalid or has expired/);
   assert.equal((await User.findById(user._id).select("+sessionVersion")).sessionVersion, 1);
   await assert.rejects(auth.loginCustomer({ email: user.email, password: "oldPassword1" }), /Invalid/);
   assert.ok((await auth.loginCustomer({ email: user.email, password: "newPassword2" })).user);
+});
+
+test("chatbot automation drafts preserve visual menu nodes and can be updated", async () => {
+  const tenant = await workspace();
+  const flow = await automation.createAutomationFlow(tenant._id, {
+    name: "Welcome bot",
+    triggerType: "keyword",
+    triggerValue: "hi",
+    nodes: [
+      { id: "trigger", type: "trigger", title: "Customer message", keyword: "hi", position: { x: 20, y: 20 } },
+      { id: "menu", type: "menu", title: "Main menu", message: "How can we help?", options: [{ label: "Sales", nextNodeId: "sales" }], position: { x: 280, y: 20 } },
+      { id: "sales", type: "handoff", title: "Sales", message: "Sales will continue.", routeTo: "sales", position: { x: 560, y: 20 } }
+    ],
+    edges: [
+      { from: "trigger", to: "menu", label: "match" },
+      { from: "menu", to: "sales", label: "Sales" }
+    ]
+  });
+
+  assert.equal(flow.firstReply, "How can we help?");
+  assert.equal(flow.nodes.length, 3);
+  assert.equal(flow.edges.length, 2);
+
+  const updated = await automation.updateAutomationFlow(tenant._id, flow._id, {
+    name: "Welcome bot v2",
+    triggerType: "keyword",
+    triggerValue: "hello",
+    nodes: flow.nodes.map((node) => node.id === "menu" ? { ...node.toObject(), message: "Choose an option" } : node.toObject()),
+    edges: flow.edges.map((edge) => edge.toObject())
+  });
+
+  assert.equal(updated.name, "Welcome bot v2");
+  assert.equal(updated.triggerValue, "hello");
+  assert.equal(updated.firstReply, "Choose an option");
 });
 
 test("platform admin pages and data reject ordinary tenant owners and static bypasses", async () => {

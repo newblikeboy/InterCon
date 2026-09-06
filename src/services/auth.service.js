@@ -300,8 +300,7 @@ async function requestPasswordReset(identifier) {
     passwordResetExpires: new Date(Date.now() + 30 * 60000), passwordResetSentAt: new Date()
   } }, { returnDocument: "after" });
   if (user) {
-    const link = env.clientOrigin.replace(/\/$/, "") + "/#reset=" + token;
-    try { await emailService.sendMail({ to: user.email, subject: "Reset your InterCon password", text: "Open this link within 30 minutes to choose a new password: " + link + "\nIf you did not request this, ignore this email." }); }
+    try { await emailService.sendPasswordResetEmail(user, token); }
     catch (error) { console.error("Password reset email failed:", error.message); }
   }
   return generic;

@@ -167,6 +167,22 @@ const mediaFileLabel = document.querySelector("[data-media-file-label]");
 const mediaUploadStatus = document.querySelector("[data-media-upload-status]");
 const mediaUploadSubmit = document.querySelector("[data-media-upload-submit]");
 const refreshMediaButton = document.querySelector("[data-refresh-media]");
+const chatbotNameInput = document.querySelector("[data-chatbot-name]");
+const chatbotCanvas = document.querySelector("[data-chatbot-canvas]");
+const chatbotInspector = document.querySelector("[data-chatbot-inspector]");
+const chatbotMessage = document.querySelector("[data-chatbot-message]");
+const chatbotFlowList = document.querySelector("[data-chatbot-flow-list]");
+const chatbotSaveButton = document.querySelector("[data-chatbot-save]");
+const chatbotNewButton = document.querySelector("[data-chatbot-new]");
+const chatbotRefreshButton = document.querySelector("[data-chatbot-refresh]");
+const chatbotAutoLayoutButton = document.querySelector("[data-chatbot-auto-layout]");
+const chatbotAddNodeButtons = document.querySelectorAll("[data-chatbot-add-node]");
+const chatbotPlusButton = document.querySelector("[data-chatbot-plus]");
+const chatbotPlusMenu = document.querySelector("[data-chatbot-plus-menu]");
+const chatbotFloatingActions = chatbotPlusButton?.closest(".chatbot-floating-actions") || null;
+const chatbotZoomOutButton = document.querySelector("[data-chatbot-zoom-out]");
+const chatbotZoomInButton = document.querySelector("[data-chatbot-zoom-in]");
+const chatbotZoomLabel = document.querySelector("[data-chatbot-zoom-label]");
 const defaultPortalView = "home";
 let facebookSdkPromise;
 // Once resolved, holds { FB, config } synchronously so the Meta popup can be
@@ -226,6 +242,17 @@ const reportState = {
   totalPages: 1,
   filters: {}
 };
+const chatbotState = {
+  currentId: null,
+  loaded: false,
+  selectedNodeId: "trigger",
+  draggingNodeId: null,
+  dragOffset: { x: 0, y: 0 },
+  zoom: 1,
+  flows: [],
+  nodes: [],
+  edges: []
+};
 
 if (templateModal) {
   document.querySelector("#templates .portal-section-head")?.insertAdjacentElement("afterend", templateModal);
@@ -254,8 +281,8 @@ function viewExists(viewId) {
 }
 
 // Top-level launcher pages (rail items) and the feature views they own.
-const PAGES = ["home", "setup", "send-whatsapp", "inbox", "reports", "payments", "api"];
-const PAGE_TITLES = { home: "Home", setup: "Setup", "send-whatsapp": "Send WhatsApp", inbox: "Inbox", reports: "Reports", payments: "Payments", api: "API" };
+const PAGES = ["home", "setup", "send-whatsapp", "inbox", "chatbot", "reports", "payments", "api"];
+const PAGE_TITLES = { home: "Home", setup: "Setup", "send-whatsapp": "Send WhatsApp", inbox: "Inbox", chatbot: "ChatBot", reports: "Reports", payments: "Payments", api: "API" };
 const VIEW_PARENT = {
   connect: "setup",
   coexistence: "setup",
@@ -280,6 +307,7 @@ const VIEW_META = {
   groups: { title: "Manage Groups", related: ["contacts", "optout"] },
   blacklist: { title: "Blacklist Numbers", related: ["contacts", "optout"] },
   "send-whatsapp": { title: "Send WhatsApp", related: ["templates", "contacts"] },
+  chatbot: { title: "ChatBot Builder", related: ["inbox", "templates", "contacts"] },
   billing: { title: "Billing", related: ["connect"] },
   "developer-api": { title: "API Access", related: ["contacts", "templates"] }
 };
@@ -5072,6 +5100,9 @@ function onPortalViewShown(viewId) {
   if (viewId === "groups") {
     loadGroups().catch((error) => setGroupMessage(error.message, true));
   }
+  if (viewId === "chatbot") {
+    loadChatbotFlows().catch((error) => setChatbotMessage(error.message, true));
+  }
   if (viewId === "connect" || viewId === "coexistence") {
     loadOnboardingStatus().catch((error) => setMetaConnectMessage(error.message, true));
     // Warm up the Facebook SDK so the Meta popup can be opened synchronously on
@@ -5360,6 +5391,618 @@ document.addEventListener("keydown", (event) => {
 if (refreshGroupsButton) {
   refreshGroupsButton.addEventListener("click", () => loadGroups());
 }
+
+function defaultChatbotNodes() {
+  return [
+    {
+      id: "trigger",
+      type: "trigger",
+      title: "Customer message",
+      keyword: "hi",
+      message: "",
+      routeTo: "human_agent",
+      options: [],
+      position: { x: 58, y: 104 }
+    },
+    {
+      id: "menu_1",
+      type: "menu",
+      title: "Welcome menu",
+      keyword: "",
+      message: "Hi! Welcome to InterCon. How can we help you today?",
+      routeTo: "human_agent",
+      options: [
+        { label: "Sales", nextNodeId: "handoff_sales" },
+        { label: "Support", nextNodeId: "handoff_support" }
+      ],
+      position: { x: 258, y: 104 }
+    },
+    {
+      id: "handoff_sales",
+      type: "handoff",
+      title: "Sales team",
+      keyword: "",
+      message: "Thanks. Our sales team will continue from here.",
+      routeTo: "sales",
+      options: [],
+      position: { x: 580, y: 76 }
+    },
+    {
+      id: "handoff_support",
+      type: "handoff",
+      title: "Support team",
+      keyword: "",
+      message: "Thanks. Our support team will continue from here.",
+      routeTo: "support",
+      options: [],
+      position: { x: 580, y: 314 }
+    }
+  ];
+}
+
+function resetChatbotBuilder() {
+  chatbotState.currentId = null;
+  chatbotState.selectedNodeId = "trigger";
+  chatbotState.nodes = defaultChatbotNodes();
+  chatbotState.edges = buildChatbotEdges(chatbotState.nodes);
+  if (chatbotNameInput) chatbotNameInput.value = "Welcome menu";
+  renderChatbotBuilder();
+}
+
+function setChatbotMessage(message, isError = false) {
+  if (!chatbotMessage) return;
+  chatbotMessage.textContent = message || "";
+  chatbotMessage.classList.toggle("error", Boolean(isError));
+}
+
+function getChatbotNode(nodeId) {
+  return chatbotState.nodes.find((node) => node.id === nodeId) || null;
+}
+
+function getChatbotFirstReplyNode(nodes = chatbotState.nodes) {
+  return nodes.find((node) => ["message", "menu"].includes(node.type) && node.message) || nodes.find((node) => ["message", "menu"].includes(node.type)) || null;
+}
+
+function buildChatbotEdges(nodes = chatbotState.nodes) {
+  const ids = new Set(nodes.map((node) => node.id));
+  const edges = [];
+  const firstReply = getChatbotFirstReplyNode(nodes);
+  if (firstReply && ids.has("trigger")) edges.push({ from: "trigger", to: firstReply.id, label: "match" });
+
+  nodes.forEach((node) => {
+    (node.options || []).forEach((option) => {
+      if (option.label && ids.has(option.nextNodeId)) {
+        edges.push({ from: node.id, to: option.nextNodeId, label: option.label });
+      }
+    });
+  });
+
+  return edges;
+}
+
+function getChatbotNodeSize(node) {
+  if (node.type === "trigger") return { width: 154, height: 104 };
+  if (node.type === "menu") return { width: 282, height: 156 + Math.max(0, (node.options?.length || 0) - 3) * 34 };
+  return { width: 278, height: 142 };
+}
+
+function renderChatbotConnections() {
+  const nodeMap = new Map(chatbotState.nodes.map((node) => [node.id, node]));
+  const paths = chatbotState.edges.map((edge) => {
+    const from = nodeMap.get(edge.from);
+    const to = nodeMap.get(edge.to);
+    if (!from || !to) return "";
+    const fromSize = getChatbotNodeSize(from);
+    const toSize = getChatbotNodeSize(to);
+    const optionIndex = (from.options || []).findIndex((option) => option.nextNodeId === edge.to && option.label === edge.label);
+    const startX = Number(from.position?.x || 0) + fromSize.width;
+    const startY = Number(from.position?.y || 0) + (optionIndex >= 0 ? 118 + optionIndex * 34 : fromSize.height / 2);
+    const endX = Number(to.position?.x || 0);
+    const endY = Number(to.position?.y || 0) + Math.min(68, toSize.height / 2);
+    const midX = Math.max(startX + 48, startX + (endX - startX) / 2);
+    return `<path d="M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}" />`;
+  }).join("");
+
+  return `<svg class="chatbot-connection-layer" viewBox="0 0 1200 760" aria-hidden="true">${paths}</svg>`;
+}
+
+function createChatbotNode(type, position = null) {
+  const count = chatbotState.nodes.filter((node) => node.type === type).length + 1;
+  const id = `${type}_${Date.now().toString(36)}_${count}`;
+  const basePosition = position || { x: 320 + count * 24, y: 260 + count * 20 };
+  const templates = {
+    message: {
+      title: `Reply ${count}`,
+      message: "Thanks for messaging us. Please share a few details so we can help.",
+      routeTo: "human_agent",
+      options: []
+    },
+    menu: {
+      title: `Menu ${count}`,
+      message: "Choose an option:\n1. Sales\n2. Support",
+      routeTo: "human_agent",
+      options: [
+        { label: "Sales", nextNodeId: "" },
+        { label: "Support", nextNodeId: "" }
+      ]
+    },
+    handoff: {
+      title: `Handoff ${count}`,
+      message: "A team member will continue this chat.",
+      routeTo: "human_agent",
+      options: []
+    }
+  };
+
+  const node = {
+    id,
+    type,
+    keyword: "",
+    position: basePosition,
+    ...templates[type]
+  };
+  chatbotState.nodes.push(node);
+  chatbotState.selectedNodeId = id;
+  chatbotState.edges = buildChatbotEdges();
+  renderChatbotBuilder();
+}
+
+function renderChatbotCanvas() {
+  if (!chatbotCanvas) return;
+  chatbotState.edges = buildChatbotEdges();
+
+  chatbotCanvas.innerHTML = [
+    renderChatbotConnections(),
+    ...chatbotState.nodes.map((node) => {
+      const selected = node.id === chatbotState.selectedNodeId;
+      const size = getChatbotNodeSize(node);
+      const messageText = node.message || (node.type === "trigger" ? "" : "Add message");
+      const icon = node.type === "trigger"
+        ? `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h12v12M5 5v14"/><path d="m5 5 5 4"/></svg>`
+        : node.type === "menu"
+          ? `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5Z"/><path d="M9 9h6M9 12h6M9 15h4"/></svg>`
+          : `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h14v10H7l-3 3Z"/><path d="M18 13l3 3-3 3"/></svg>`;
+      const options = node.type === "menu"
+        ? `<div class="chatbot-card-options">${(node.options || []).map((option, index) => `
+            <div class="chatbot-option-chip">
+              <span>${escapeHtml(option.label || `Option ${index + 1}`)}</span>
+              <em>0</em>
+              <i aria-hidden="true"></i>
+            </div>
+          `).join("")}</div>`
+        : "";
+      return `
+        <article
+          class="chatbot-node chatbot-node-${escapeHtml(node.type)} ${selected ? "is-selected" : ""}"
+          data-chatbot-node="${escapeHtml(node.id)}"
+          style="left:${Number(node.position?.x || 0) * chatbotState.zoom}px;top:${Number(node.position?.y || 0) * chatbotState.zoom}px;width:${size.width}px;min-height:${size.height}px;"
+          role="button"
+          tabindex="0"
+          aria-pressed="${selected ? "true" : "false"}">
+          <div class="chatbot-card-head">
+            <span class="chatbot-card-icon">${icon}</span>
+            <strong>${escapeHtml(node.title || node.type)}</strong>
+            <i aria-hidden="true"></i>
+          </div>
+          <div class="chatbot-card-stats">
+            <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 5 14 7-14 7v-5l8-2-8-2Z"/></svg>0</span>
+            ${node.type === "menu" ? `<span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 8 4 4-4 4M13 8h4"/></svg>${node.options?.length || 0}</span>` : ""}
+          </div>
+          ${node.type === "trigger"
+            ? `<p class="chatbot-trigger-text">Customer sends <b>${escapeHtml(node.keyword || "hi")}</b></p>`
+            : `<p class="chatbot-card-message">${escapeHtml(messageText)}</p>`}
+          ${options}
+        </article>
+      `;
+    })
+  ].join("");
+  chatbotCanvas.style.setProperty("--chatbot-zoom", chatbotState.zoom);
+  if (chatbotZoomLabel) chatbotZoomLabel.textContent = `${Math.round(chatbotState.zoom * 100)}%`;
+}
+
+function renderChatbotInspector() {
+  if (!chatbotInspector) return;
+  const node = getChatbotNode(chatbotState.selectedNodeId);
+  if (!node) {
+    chatbotInspector.innerHTML = `<div class="chatbot-inspector-empty">Select a block to edit the trigger, reply, menu, or handoff.</div>`;
+    return;
+  }
+
+  const nodeChoices = chatbotState.nodes
+    .filter((item) => item.id !== node.id && item.type !== "trigger")
+    .map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title || item.id)}</option>`)
+    .join("");
+  const optionsHtml = (node.options || []).map((option, index) => `
+    <div class="chatbot-option-row">
+      <input type="text" maxlength="80" value="${escapeHtml(option.label || "")}" placeholder="Button text" data-chatbot-option-label="${index}">
+      <select data-chatbot-option-next="${index}">
+        <option value="">No next block</option>
+        ${chatbotState.nodes.filter((item) => item.id !== node.id && item.type !== "trigger").map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === option.nextNodeId ? "selected" : ""}>${escapeHtml(item.title || item.id)}</option>`).join("")}
+      </select>
+      <button type="button" aria-label="Remove option" title="Remove option" data-chatbot-remove-option="${index}">&times;</button>
+    </div>
+  `).join("");
+
+  chatbotInspector.innerHTML = `
+    <div class="chatbot-inspector-head">
+      <span>${escapeHtml(node.type)}</span>
+      <strong>${escapeHtml(node.title || node.type)}</strong>
+    </div>
+    <label>
+      Block title
+      <input type="text" maxlength="140" value="${escapeHtml(node.title || "")}" data-chatbot-field="title">
+    </label>
+    ${node.type === "trigger" ? `
+      <label>
+        Customer keyword
+        <input type="text" maxlength="120" value="${escapeHtml(node.keyword || "")}" placeholder="hi" data-chatbot-field="keyword">
+      </label>
+    ` : `
+      <label>
+        Reply text
+        <textarea rows="5" maxlength="900" data-chatbot-field="message">${escapeHtml(node.message || "")}</textarea>
+      </label>
+    `}
+    ${node.type === "menu" ? `
+      <div class="chatbot-options-head">
+        <strong>Menu options</strong>
+        <button type="button" data-chatbot-add-option>Add option</button>
+      </div>
+      <div class="chatbot-options">${optionsHtml || `<div class="empty-row">No menu options yet.</div>`}</div>
+      <label>
+        Quick connect next reply
+        <select data-chatbot-quick-next>
+          <option value="">Choose block</option>
+          ${nodeChoices}
+        </select>
+      </label>
+    ` : ""}
+    ${node.type === "handoff" ? `
+      <label>
+        Team route
+        <select data-chatbot-field="routeTo">
+          <option value="human_agent" ${node.routeTo === "human_agent" ? "selected" : ""}>Human agent</option>
+          <option value="sales" ${node.routeTo === "sales" ? "selected" : ""}>Sales</option>
+          <option value="support" ${node.routeTo === "support" ? "selected" : ""}>Support</option>
+          <option value="billing" ${node.routeTo === "billing" ? "selected" : ""}>Billing</option>
+        </select>
+      </label>
+    ` : ""}
+    ${node.type !== "trigger" ? `<button type="button" class="btn btn-outline btn-small" data-chatbot-delete-node>Delete block</button>` : ""}
+  `;
+}
+
+function renderChatbotBuilder() {
+  renderChatbotCanvas();
+  renderChatbotInspector();
+}
+
+function chatbotPayload() {
+  const nodes = chatbotState.nodes.map((node) => ({
+    id: node.id,
+    type: node.type,
+    title: node.title || "",
+    keyword: node.keyword || "",
+    message: node.message || "",
+    routeTo: node.routeTo || "human_agent",
+    options: (node.options || []).filter((option) => option.label).map((option) => ({
+      label: option.label,
+      nextNodeId: option.nextNodeId || ""
+    })),
+    position: node.position || { x: 0, y: 0 }
+  }));
+  const trigger = nodes.find((node) => node.type === "trigger") || {};
+  const firstReply = getChatbotFirstReplyNode(nodes);
+  const routeNode = nodes.find((node) => node.type === "handoff");
+
+  return {
+    name: (chatbotNameInput?.value || "").trim(),
+    triggerType: "keyword",
+    triggerValue: trigger.keyword || "hi",
+    firstReply: firstReply?.message || "",
+    routeTo: routeNode?.routeTo || "human_agent",
+    nodes,
+    edges: buildChatbotEdges(nodes),
+    stopOnAgentJoin: true,
+    respectServiceWindow: true,
+    requireOptInForTemplate: true,
+    fallbackForUnknownReply: true
+  };
+}
+
+function renderChatbotFlowList() {
+  if (!chatbotFlowList) return;
+  if (!chatbotState.flows.length) {
+    chatbotFlowList.innerHTML = `<div class="empty-row">No chatbot drafts yet.</div>`;
+    return;
+  }
+  chatbotFlowList.innerHTML = chatbotState.flows.map((flow) => `
+    <button type="button" class="chatbot-flow-item" data-chatbot-load-flow="${escapeHtml(flow._id)}">
+      <strong>${escapeHtml(flow.name || "Untitled flow")}</strong>
+      <span>${escapeHtml(flow.triggerValue || "hi")} -> ${escapeHtml(flow.firstReply || "Draft reply")}</span>
+      <em>${escapeHtml(flow.status || "draft")}</em>
+    </button>
+  `).join("");
+}
+
+async function loadChatbotFlows() {
+  if (!chatbotFlowList) return;
+  const data = await requestJson("/api/automations");
+  chatbotState.flows = data.flows || [];
+  chatbotState.loaded = true;
+  renderChatbotFlowList();
+}
+
+function loadChatbotFlowIntoBuilder(flow) {
+  chatbotState.currentId = flow._id || null;
+  chatbotState.selectedNodeId = "trigger";
+  chatbotState.nodes = Array.isArray(flow.nodes) && flow.nodes.length
+    ? flow.nodes.map((node, index) => ({
+        id: node.id || `node_${index + 1}`,
+        type: node.type || "message",
+        title: node.title || node.name || node.type || "Block",
+        keyword: node.keyword || "",
+        message: node.message || "",
+        routeTo: node.routeTo || "human_agent",
+        options: node.options || [],
+        position: node.position || { x: 32 + index * 260, y: 48 }
+      }))
+    : [
+        {
+          id: "trigger",
+          type: "trigger",
+          title: "Customer message",
+          keyword: flow.triggerValue || "hi",
+          message: "",
+          routeTo: "human_agent",
+          options: [],
+          position: { x: 58, y: 104 }
+        },
+        {
+          id: "reply_1",
+          type: "message",
+          title: "First reply",
+          keyword: "",
+          message: flow.firstReply || "",
+          routeTo: flow.routeTo || "human_agent",
+          options: [],
+          position: { x: 258, y: 104 }
+        }
+      ];
+  chatbotState.edges = buildChatbotEdges();
+  if (chatbotNameInput) chatbotNameInput.value = flow.name || "Welcome menu";
+  renderChatbotBuilder();
+}
+
+async function saveChatbotFlow() {
+  const payload = chatbotPayload();
+  if (!payload.name) {
+    setChatbotMessage("Flow name is required.", true);
+    return;
+  }
+  if (!payload.firstReply) {
+    setChatbotMessage("Add at least one reply or menu message before saving.", true);
+    return;
+  }
+
+  setChatbotMessage("Saving chatbot draft...");
+  if (chatbotSaveButton) chatbotSaveButton.disabled = true;
+  try {
+    const data = await requestJson(chatbotState.currentId ? `/api/automations/${chatbotState.currentId}` : "/api/automations", {
+      method: chatbotState.currentId ? "PUT" : "POST",
+      body: JSON.stringify(payload)
+    });
+    chatbotState.currentId = data.flow?._id || chatbotState.currentId;
+    setChatbotMessage("ChatBot draft saved. Activation will be available after the live automation runner is connected.");
+    await loadChatbotFlows();
+  } catch (error) {
+    setChatbotMessage(error.message, true);
+  } finally {
+    if (chatbotSaveButton) chatbotSaveButton.disabled = false;
+  }
+}
+
+function autoLayoutChatbot() {
+  const columns = { trigger: 0, message: 1, menu: 1, handoff: 2 };
+  const counts = {};
+  chatbotState.nodes.forEach((node) => {
+    const column = columns[node.type] ?? 1;
+    const row = counts[column] || 0;
+    node.position = { x: 58 + column * 260, y: 104 + row * 228 };
+    counts[column] = row + 1;
+  });
+  renderChatbotBuilder();
+}
+
+function updateSelectedChatbotNode(field, value) {
+  const node = getChatbotNode(chatbotState.selectedNodeId);
+  if (!node) return;
+  node[field] = value;
+  chatbotState.edges = buildChatbotEdges();
+  renderChatbotCanvas();
+}
+
+function setChatbotPlusMenuOpen(open) {
+  if (!chatbotPlusButton || !chatbotPlusMenu || !chatbotFloatingActions) return;
+  chatbotPlusButton.setAttribute("aria-expanded", open ? "true" : "false");
+  chatbotFloatingActions.classList.toggle("is-open", open);
+
+  if (open) {
+    chatbotPlusMenu.hidden = false;
+    window.requestAnimationFrame(() => chatbotPlusMenu.classList.add("is-open"));
+    return;
+  }
+
+  chatbotPlusMenu.classList.remove("is-open");
+  window.setTimeout(() => {
+    if (!chatbotPlusMenu.classList.contains("is-open")) chatbotPlusMenu.hidden = true;
+  }, 200);
+}
+
+function toggleChatbotPlusMenu() {
+  setChatbotPlusMenuOpen(chatbotPlusButton?.getAttribute("aria-expanded") !== "true");
+}
+
+
+chatbotCanvas?.addEventListener("click", (event) => {
+  const nodeButton = event.target.closest("[data-chatbot-node]");
+  if (!nodeButton) return;
+  chatbotState.selectedNodeId = nodeButton.getAttribute("data-chatbot-node");
+  renderChatbotBuilder();
+});
+
+chatbotCanvas?.addEventListener("pointerdown", (event) => {
+  const nodeButton = event.target.closest("[data-chatbot-node]");
+  if (!nodeButton || event.button !== 0) return;
+  const node = getChatbotNode(nodeButton.getAttribute("data-chatbot-node"));
+  if (!node) return;
+  const rect = nodeButton.getBoundingClientRect();
+  chatbotState.draggingNodeId = node.id;
+  chatbotState.dragOffset = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  nodeButton.setPointerCapture(event.pointerId);
+});
+
+chatbotCanvas?.addEventListener("pointermove", (event) => {
+  if (!chatbotState.draggingNodeId) return;
+  const node = getChatbotNode(chatbotState.draggingNodeId);
+  const rect = chatbotCanvas.getBoundingClientRect();
+  if (!node) return;
+  node.position = {
+    x: Math.max(12, Math.min((rect.width - 300) / chatbotState.zoom, (event.clientX - rect.left - chatbotState.dragOffset.x) / chatbotState.zoom)),
+    y: Math.max(12, Math.min((rect.height - 120) / chatbotState.zoom, (event.clientY - rect.top - chatbotState.dragOffset.y) / chatbotState.zoom))
+  };
+  renderChatbotCanvas();
+});
+
+chatbotCanvas?.addEventListener("pointerup", () => {
+  chatbotState.draggingNodeId = null;
+});
+
+chatbotCanvas?.addEventListener("dragover", (event) => {
+  event.preventDefault();
+});
+
+chatbotCanvas?.addEventListener("drop", (event) => {
+  event.preventDefault();
+  const type = event.dataTransfer?.getData("text/chatbot-node");
+  if (!["message", "menu", "handoff"].includes(type)) return;
+  const rect = chatbotCanvas.getBoundingClientRect();
+  createChatbotNode(type, { x: (event.clientX - rect.left) / chatbotState.zoom, y: (event.clientY - rect.top) / chatbotState.zoom });
+});
+
+chatbotAddNodeButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    createChatbotNode(button.getAttribute("data-chatbot-add-node"));
+    setChatbotPlusMenuOpen(false);
+  });
+  button.addEventListener("dragstart", (event) => {
+    event.dataTransfer?.setData("text/chatbot-node", button.getAttribute("data-chatbot-add-node"));
+  });
+});
+
+chatbotInspector?.addEventListener("input", (event) => {
+  const field = event.target.getAttribute("data-chatbot-field");
+  if (field) {
+    updateSelectedChatbotNode(field, event.target.value);
+    return;
+  }
+  const optionLabel = event.target.getAttribute("data-chatbot-option-label");
+  if (optionLabel !== null) {
+    const node = getChatbotNode(chatbotState.selectedNodeId);
+    if (!node) return;
+    node.options[Number(optionLabel)].label = event.target.value;
+    chatbotState.edges = buildChatbotEdges();
+    renderChatbotCanvas();
+  }
+});
+
+chatbotInspector?.addEventListener("change", (event) => {
+  const field = event.target.getAttribute("data-chatbot-field");
+  if (field) {
+    updateSelectedChatbotNode(field, event.target.value);
+    renderChatbotInspector();
+    return;
+  }
+  const optionNext = event.target.getAttribute("data-chatbot-option-next");
+  if (optionNext !== null) {
+    const node = getChatbotNode(chatbotState.selectedNodeId);
+    if (!node) return;
+    node.options[Number(optionNext)].nextNodeId = event.target.value;
+    chatbotState.edges = buildChatbotEdges();
+    renderChatbotCanvas();
+    return;
+  }
+  if (event.target.matches("[data-chatbot-quick-next]") && event.target.value) {
+    const node = getChatbotNode(chatbotState.selectedNodeId);
+    const target = getChatbotNode(event.target.value);
+    if (!node || !target) return;
+    node.options = [...(node.options || []), { label: target.title || "Next", nextNodeId: target.id }];
+    renderChatbotBuilder();
+  }
+});
+
+chatbotInspector?.addEventListener("click", (event) => {
+  const node = getChatbotNode(chatbotState.selectedNodeId);
+  if (!node) return;
+  if (event.target.closest("[data-chatbot-add-option]")) {
+    node.options = [...(node.options || []), { label: "New option", nextNodeId: "" }];
+    renderChatbotBuilder();
+    return;
+  }
+  const removeOption = event.target.closest("[data-chatbot-remove-option]");
+  if (removeOption) {
+    node.options.splice(Number(removeOption.getAttribute("data-chatbot-remove-option")), 1);
+    chatbotState.edges = buildChatbotEdges();
+    renderChatbotBuilder();
+    return;
+  }
+  if (event.target.closest("[data-chatbot-delete-node]")) {
+    chatbotState.nodes = chatbotState.nodes.filter((item) => item.id !== node.id);
+    chatbotState.nodes.forEach((item) => {
+      item.options = (item.options || []).filter((option) => option.nextNodeId !== node.id);
+    });
+    chatbotState.selectedNodeId = "trigger";
+    chatbotState.edges = buildChatbotEdges();
+    renderChatbotBuilder();
+  }
+});
+
+chatbotFlowList?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-chatbot-load-flow]");
+  if (!button) return;
+  const flow = chatbotState.flows.find((item) => item._id === button.getAttribute("data-chatbot-load-flow"));
+  if (flow) loadChatbotFlowIntoBuilder(flow);
+});
+
+chatbotNewButton?.addEventListener("click", () => {
+  resetChatbotBuilder();
+  setChatbotMessage("");
+});
+
+chatbotRefreshButton?.addEventListener("click", () => {
+  loadChatbotFlows().catch((error) => setChatbotMessage(error.message, true));
+});
+
+chatbotSaveButton?.addEventListener("click", saveChatbotFlow);
+chatbotPlusButton?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  toggleChatbotPlusMenu();
+});
+chatbotPlusMenu?.addEventListener("click", (event) => event.stopPropagation());
+document.addEventListener("click", () => setChatbotPlusMenuOpen(false));
+chatbotAutoLayoutButton?.addEventListener("click", () => {
+  autoLayoutChatbot();
+  setChatbotPlusMenuOpen(false);
+});
+chatbotZoomOutButton?.addEventListener("click", () => {
+  chatbotState.zoom = Math.max(0.75, Number((chatbotState.zoom - 0.1).toFixed(2)));
+  renderChatbotCanvas();
+});
+chatbotZoomInButton?.addEventListener("click", () => {
+  chatbotState.zoom = Math.min(1.5, Number((chatbotState.zoom + 0.1).toFixed(2)));
+  renderChatbotCanvas();
+});
+if (chatbotCanvas) resetChatbotBuilder();
 
 if (groupList) {
   groupList.addEventListener("click", (event) => {

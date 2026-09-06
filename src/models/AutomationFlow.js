@@ -30,6 +30,84 @@ const automationFlowSchema = new mongoose.Schema(
       trim: true,
       maxlength: 900
     },
+    nodes: [{
+      id: {
+        type: String,
+        required: true,
+        trim: true,
+        maxlength: 80
+      },
+      type: {
+        type: String,
+        enum: ["trigger", "message", "menu", "handoff"],
+        required: true
+      },
+      title: {
+        type: String,
+        trim: true,
+        maxlength: 140
+      },
+      keyword: {
+        type: String,
+        trim: true,
+        maxlength: 120
+      },
+      message: {
+        type: String,
+        trim: true,
+        maxlength: 900
+      },
+      routeTo: {
+        type: String,
+        enum: ["sales", "support", "billing", "human_agent"],
+        default: "human_agent"
+      },
+      options: [{
+        label: {
+          type: String,
+          trim: true,
+          maxlength: 80
+        },
+        nextNodeId: {
+          type: String,
+          trim: true,
+          maxlength: 80
+        }
+      }],
+      position: {
+        x: {
+          type: Number,
+          default: 0,
+          min: 0,
+          max: 5000
+        },
+        y: {
+          type: Number,
+          default: 0,
+          min: 0,
+          max: 5000
+        }
+      }
+    }],
+    edges: [{
+      from: {
+        type: String,
+        required: true,
+        trim: true,
+        maxlength: 80
+      },
+      to: {
+        type: String,
+        required: true,
+        trim: true,
+        maxlength: 80
+      },
+      label: {
+        type: String,
+        trim: true,
+        maxlength: 80
+      }
+    }],
     routeTo: {
       type: String,
       enum: ["sales", "support", "billing", "human_agent"],

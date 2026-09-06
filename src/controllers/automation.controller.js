@@ -19,6 +19,15 @@ const createAutomationFlow = asyncHandler(async (req, res) => {
   });
 });
 
+const updateAutomationFlow = asyncHandler(async (req, res) => {
+  const flow = await automationService.updateAutomationFlow(req.tenantId, req.params.id, req.body);
+
+  res.json({
+    success: true,
+    flow
+  });
+});
+
 const updateAutomationStatus = asyncHandler(async (req, res) => {
   const flow = await automationService.updateAutomationStatus(req.tenantId, req.params.id, req.body.status);
 
@@ -31,5 +40,6 @@ const updateAutomationStatus = asyncHandler(async (req, res) => {
 module.exports = {
   listAutomationFlows,
   createAutomationFlow,
+  updateAutomationFlow,
   updateAutomationStatus
 };

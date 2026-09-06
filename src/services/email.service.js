@@ -46,9 +46,13 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
-function portalUrl(hash = "") {
+function appUrl(path = "") {
   const base = env.clientOrigin.replace(/\/$/, "");
-  return `${base}/customer${hash}`;
+  return `${base}${path}`;
+}
+
+function portalUrl(hash = "") {
+  return appUrl(`/customer${hash}`);
 }
 
 function renderButton(href, label, background = BRAND.brand) {
@@ -56,16 +60,17 @@ function renderButton(href, label, background = BRAND.brand) {
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 8px;">
       <tr>
         <td align="center" bgcolor="${background}" style="border-radius:10px;">
-          <a href="${href}" style="display:inline-block;padding:14px 30px;font-family:${FONT_STACK};font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">${escapeHtml(label)}</a>
+          <a href="${escapeHtml(href)}" style="display:inline-block;padding:14px 30px;font-family:${FONT_STACK};font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">${escapeHtml(label)}</a>
         </td>
       </tr>
     </table>`;
 }
 
-// Email clients ignore <style> blocks inconsistently, so the shell is
-// table-based with inline styles and an explicit light background (dark-mode
-// clients otherwise invert the card into unreadable contrast).
+// Email clients ignore style blocks inconsistently, so the shell is
+// table-based with inline styles and an explicit light background.
 function renderEmailLayout({ preheader, eyebrow, heading, bodyHtml }) {
+  const baseUrl = env.clientOrigin.replace(/\/$/, "");
+  const safeEmailFrom = escapeHtml(env.emailFrom);
   return `<!doctype html>
 <html>
 <head>
@@ -82,7 +87,7 @@ function renderEmailLayout({ preheader, eyebrow, heading, bodyHtml }) {
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:100%;max-width:600px;">
 
           <tr>
-            <td style="padding:0 4px 18px;font-family:${FONT_STACK};font-size:19px;font-weight:800;color:${BRAND.ink};letter-spacing:-0.01em;">
+            <td style="padding:0 4px 18px;font-family:${FONT_STACK};font-size:19px;font-weight:800;color:${BRAND.ink};letter-spacing:0;">
               Inter<span style="color:${BRAND.brand};">Con</span>
             </td>
           </tr>
@@ -96,7 +101,7 @@ function renderEmailLayout({ preheader, eyebrow, heading, bodyHtml }) {
                 <tr>
                   <td style="padding:34px 34px 36px;">
                     ${eyebrow ? `<p style="margin:0 0 10px;font-family:${FONT_STACK};font-size:12px;font-weight:800;letter-spacing:0.09em;text-transform:uppercase;color:${BRAND.brand};">${escapeHtml(eyebrow)}</p>` : ""}
-                    <h1 style="margin:0 0 16px;font-family:${FONT_STACK};font-size:25px;line-height:1.25;font-weight:800;color:${BRAND.ink};letter-spacing:-0.02em;">${escapeHtml(heading)}</h1>
+                    <h1 style="margin:0 0 16px;font-family:${FONT_STACK};font-size:25px;line-height:1.25;font-weight:800;color:${BRAND.ink};letter-spacing:0;">${escapeHtml(heading)}</h1>
                     ${bodyHtml}
                   </td>
                 </tr>
@@ -109,9 +114,9 @@ function renderEmailLayout({ preheader, eyebrow, heading, bodyHtml }) {
               <p style="margin:0 0 6px;font-weight:700;color:${BRAND.ink};">Synqvest System LLP</p>
               <p style="margin:0 0 6px;">121-C, MIG Flats, Rajouri Garden, New Delhi - 110027</p>
               <p style="margin:0 0 12px;">
-                <a href="mailto:${env.emailFrom}" style="color:${BRAND.brand};text-decoration:none;">${env.emailFrom}</a>
+                <a href="mailto:${safeEmailFrom}" style="color:${BRAND.brand};text-decoration:none;">${safeEmailFrom}</a>
                 &nbsp;&middot;&nbsp;
-                <a href="${env.clientOrigin.replace(/\/$/, "")}/privacy-policy" style="color:${BRAND.brand};text-decoration:none;">Privacy Policy</a>
+                <a href="${escapeHtml(`${baseUrl}/privacy-policy`)}" style="color:${BRAND.brand};text-decoration:none;">Privacy Policy</a>
               </p>
               <p style="margin:0;color:#8b99ad;">WhatsApp and Meta are trademarks of their respective owners.</p>
             </td>
@@ -142,7 +147,7 @@ async function sendMail({ to, subject, text, html }) {
 }
 
 async function sendVerificationEmail(user, token) {
-  const verifyUrl = `${env.clientOrigin.replace(/\/$/, "")}/api/auth/verify-email?token=${token}`;
+  const verifyUrl = appUrl(`/api/auth/verify-email?token=${token}`);
   const firstName = String(user.name || "there").split(" ")[0];
 
   const bodyHtml = `
@@ -153,12 +158,12 @@ async function sendVerificationEmail(user, token) {
     ${renderButton(verifyUrl, "Verify my email")}
     <p style="margin:14px 0 26px;font-family:${FONT_STACK};font-size:13px;line-height:1.6;color:${BRAND.muted};">
       This link expires in 24 hours. If the button does not work, paste this address into your browser:<br>
-      <a href="${verifyUrl}" style="color:${BRAND.brand};word-break:break-all;">${verifyUrl}</a>
+      <a href="${escapeHtml(verifyUrl)}" style="color:${BRAND.brand};word-break:break-all;">${escapeHtml(verifyUrl)}</a>
     </p>
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-top:1px solid ${BRAND.line};">
       <tr>
         <td style="padding-top:18px;font-family:${FONT_STACK};font-size:13px;line-height:1.6;color:${BRAND.muted};">
-          Did not sign up for InterCon? You can safely ignore this email — no account will be activated without this confirmation.
+          Did not sign up for InterCon? You can safely ignore this email - no account will be activated without this confirmation.
         </td>
       </tr>
     </table>`;
@@ -171,10 +176,10 @@ ${verifyUrl}
 
 This link expires in 24 hours.
 
-Did not sign up for InterCon? You can safely ignore this email — no account will be activated without this confirmation.
+Did not sign up for InterCon? You can safely ignore this email - no account will be activated without this confirmation.
 
-— InterCon Support
-Synqvest System LLP · ${env.emailFrom}`;
+- InterCon Support
+Synqvest System LLP - ${env.emailFrom}`;
 
   await sendMail({
     to: user.email,
@@ -189,9 +194,64 @@ Synqvest System LLP · ${env.emailFrom}`;
   });
 }
 
+async function sendPasswordResetEmail(user, token) {
+  const resetUrl = appUrl(`/#reset=${token}`);
+  const firstName = String(user.name || "there").split(" ")[0];
+
+  const bodyHtml = `
+    <p style="margin:0 0 14px;font-family:${FONT_STACK};font-size:15px;line-height:1.65;color:${BRAND.ink};">Hi ${escapeHtml(firstName)},</p>
+    <p style="margin:0 0 22px;font-family:${FONT_STACK};font-size:15px;line-height:1.65;color:${BRAND.muted};">
+      We received a request to reset the password for your InterCon account. Use the button below to choose a new password.
+    </p>
+    ${renderButton(resetUrl, "Reset password")}
+    <p style="margin:14px 0 22px;font-family:${FONT_STACK};font-size:13px;line-height:1.6;color:${BRAND.muted};">
+      This link expires in 30 minutes and can be used only once. If the button does not work, paste this address into your browser:<br>
+      <a href="${escapeHtml(resetUrl)}" style="color:${BRAND.brand};word-break:break-all;">${escapeHtml(resetUrl)}</a>
+    </p>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:${BRAND.soft};border-radius:12px;margin:0 0 24px;">
+      <tr>
+        <td style="padding:16px 18px;font-family:${FONT_STACK};font-size:13px;line-height:1.6;color:${BRAND.muted};">
+          For your security, all existing sessions for this account will be signed out after the password is changed.
+        </td>
+      </tr>
+    </table>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-top:1px solid ${BRAND.line};">
+      <tr>
+        <td style="padding-top:18px;font-family:${FONT_STACK};font-size:13px;line-height:1.6;color:${BRAND.muted};">
+          If you did not request this reset, you can safely ignore this email.
+        </td>
+      </tr>
+    </table>`;
+
+  const text = `Hi ${firstName},
+
+We received a request to reset the password for your InterCon account. Open this link within 30 minutes to choose a new password:
+
+${resetUrl}
+
+This link can be used only once. Existing sessions are signed out after the password is changed.
+
+If you did not request this reset, you can safely ignore this email.
+
+- InterCon Support
+Synqvest System LLP - ${env.emailFrom}`;
+
+  await sendMail({
+    to: user.email,
+    subject: "Reset your InterCon password",
+    text,
+    html: renderEmailLayout({
+      preheader: "Use this secure link within 30 minutes to reset your InterCon password.",
+      eyebrow: "Password reset",
+      heading: "Reset your password",
+      bodyHtml
+    })
+  });
+}
+
 // Mirrors the portal's own setup checklist (getSetupSteps in
 // Public/js/customer-portal.js) so the email and the dashboard never
-// disagree about what comes next — including the ordering constraint that a
+// disagree about what comes next - including the ordering constraint that a
 // paid plan must be active before templates go to Meta for review.
 const ONBOARDING_STEPS = [
   {
@@ -237,7 +297,7 @@ function renderStepRow(step, index) {
         </td>
         <td valign="top">
           <p style="margin:0 0 4px;font-family:${FONT_STACK};font-size:15px;font-weight:750;color:${BRAND.ink};line-height:1.4;">
-            <a href="${portalUrl(step.hash)}" style="color:${BRAND.ink};text-decoration:none;">${escapeHtml(step.title)}</a>
+            <a href="${escapeHtml(portalUrl(step.hash))}" style="color:${BRAND.ink};text-decoration:none;">${escapeHtml(step.title)}</a>
           </p>
           <p style="margin:0;font-family:${FONT_STACK};font-size:14px;line-height:1.6;color:${BRAND.muted};">${escapeHtml(step.body)}</p>
         </td>
@@ -252,7 +312,7 @@ async function sendWelcomeEmail(user, tenant = null) {
   const bodyHtml = `
     <p style="margin:0 0 14px;font-family:${FONT_STACK};font-size:15px;line-height:1.65;color:${BRAND.ink};">Hi ${escapeHtml(firstName)},</p>
     <p style="margin:0 0 22px;font-family:${FONT_STACK};font-size:15px;line-height:1.65;color:${BRAND.muted};">
-      Your email is verified and ${businessName ? `<strong style="color:${BRAND.ink};">${escapeHtml(businessName)}</strong> is` : "your workspace is"} live on InterCon. Here is exactly what to do next to start sending WhatsApp messages — each step links straight to the right place in your dashboard.
+      Your email is verified and ${businessName ? `<strong style="color:${BRAND.ink};">${escapeHtml(businessName)}</strong> is` : "your workspace is"} live on InterCon. Here is exactly what to do next to start sending WhatsApp messages - each step links straight to the right place in your dashboard.
     </p>
 
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 26px;background-color:${BRAND.soft};border-radius:12px;">
@@ -291,12 +351,12 @@ Open your dashboard: ${portalUrl()}
 
 Your dashboard tracks this checklist automatically and shows what is still pending. If you get stuck on Meta verification or template approval, reply to this email and our team will walk you through it.
 
-— InterCon Support
-Synqvest System LLP · ${env.emailFrom}`;
+- InterCon Support
+Synqvest System LLP - ${env.emailFrom}`;
 
   await sendMail({
     to: user.email,
-    subject: "Welcome to InterCon — here's your WhatsApp setup guide",
+    subject: "Welcome to InterCon - here's your WhatsApp setup guide",
     text,
     html: renderEmailLayout({
       preheader: "Your account is active. Five steps to your first WhatsApp message.",
@@ -310,5 +370,6 @@ Synqvest System LLP · ${env.emailFrom}`;
 module.exports = {
   sendMail,
   sendVerificationEmail,
+  sendPasswordResetEmail,
   sendWelcomeEmail
 };

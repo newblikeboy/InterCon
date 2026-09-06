@@ -10,6 +10,7 @@ router.use(authorize("owner", "admin"));
 
 router.get("/", automationController.listAutomationFlows);
 router.post("/", automationController.createAutomationFlow);
+router.put("/:id", automationController.updateAutomationFlow);
 router.patch("/:id/status", automationController.updateAutomationStatus);
 
 module.exports = router;

@@ -182,6 +182,7 @@ const chatbotPlusMenu = document.querySelector("[data-chatbot-plus-menu]");
 const chatbotFloatingActions = chatbotPlusButton?.closest(".chatbot-floating-actions") || null;
 const chatbotZoomOutButton = document.querySelector("[data-chatbot-zoom-out]");
 const chatbotZoomInButton = document.querySelector("[data-chatbot-zoom-in]");
+const chatbotPanButton = document.querySelector("[data-chatbot-pan]");
 const chatbotZoomLabel = document.querySelector("[data-chatbot-zoom-label]");
 const defaultPortalView = "home";
 let facebookSdkPromise;
@@ -248,6 +249,9 @@ const chatbotState = {
   selectedNodeId: "trigger",
   draggingNodeId: null,
   dragOffset: { x: 0, y: 0 },
+  panMode: false,
+  panning: false,
+  panStart: { x: 0, y: 0, scrollLeft: 0, scrollTop: 0 },
   zoom: 1,
   flows: [],
   nodes: [],
@@ -5839,6 +5843,14 @@ function toggleChatbotPlusMenu() {
   setChatbotPlusMenuOpen(chatbotPlusButton?.getAttribute("aria-expanded") !== "true");
 }
 
+function setChatbotPanMode(enabled) {
+  chatbotState.panMode = Boolean(enabled);
+  chatbotCanvas?.classList.toggle("is-pan-mode", chatbotState.panMode);
+  chatbotPanButton?.classList.toggle("is-active", chatbotState.panMode);
+  chatbotPanButton?.setAttribute("aria-pressed", chatbotState.panMode ? "true" : "false");
+  if (!chatbotState.panMode) chatbotState.panning = false;
+}
+
 
 chatbotCanvas?.addEventListener("click", (event) => {
   const nodeButton = event.target.closest("[data-chatbot-node]");
@@ -5848,8 +5860,23 @@ chatbotCanvas?.addEventListener("click", (event) => {
 });
 
 chatbotCanvas?.addEventListener("pointerdown", (event) => {
+  if (event.button !== 0) return;
   const nodeButton = event.target.closest("[data-chatbot-node]");
-  if (!nodeButton || event.button !== 0) return;
+
+  if (chatbotState.panMode && !nodeButton) {
+    chatbotState.panning = true;
+    chatbotState.panStart = {
+      x: event.clientX,
+      y: event.clientY,
+      scrollLeft: chatbotCanvas.scrollLeft,
+      scrollTop: chatbotCanvas.scrollTop
+    };
+    chatbotCanvas.setPointerCapture(event.pointerId);
+    chatbotCanvas.classList.add("is-panning");
+    return;
+  }
+
+  if (!nodeButton || chatbotState.panMode) return;
   const node = getChatbotNode(nodeButton.getAttribute("data-chatbot-node"));
   if (!node) return;
   const rect = nodeButton.getBoundingClientRect();
@@ -5859,6 +5886,12 @@ chatbotCanvas?.addEventListener("pointerdown", (event) => {
 });
 
 chatbotCanvas?.addEventListener("pointermove", (event) => {
+  if (chatbotState.panning) {
+    chatbotCanvas.scrollLeft = chatbotState.panStart.scrollLeft - (event.clientX - chatbotState.panStart.x);
+    chatbotCanvas.scrollTop = chatbotState.panStart.scrollTop - (event.clientY - chatbotState.panStart.y);
+    return;
+  }
+
   if (!chatbotState.draggingNodeId) return;
   const node = getChatbotNode(chatbotState.draggingNodeId);
   const rect = chatbotCanvas.getBoundingClientRect();
@@ -5872,6 +5905,14 @@ chatbotCanvas?.addEventListener("pointermove", (event) => {
 
 chatbotCanvas?.addEventListener("pointerup", () => {
   chatbotState.draggingNodeId = null;
+  chatbotState.panning = false;
+  chatbotCanvas.classList.remove("is-panning");
+});
+
+chatbotCanvas?.addEventListener("pointercancel", () => {
+  chatbotState.draggingNodeId = null;
+  chatbotState.panning = false;
+  chatbotCanvas.classList.remove("is-panning");
 });
 
 chatbotCanvas?.addEventListener("dragover", (event) => {
@@ -5980,6 +6021,7 @@ chatbotRefreshButton?.addEventListener("click", () => {
 });
 
 chatbotSaveButton?.addEventListener("click", saveChatbotFlow);
+chatbotPanButton?.addEventListener("click", () => setChatbotPanMode(!chatbotState.panMode));
 chatbotPlusButton?.addEventListener("click", (event) => {
   event.stopPropagation();
   toggleChatbotPlusMenu();

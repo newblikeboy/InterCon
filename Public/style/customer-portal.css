@@ -4540,6 +4540,27 @@ address {
   font-weight: 750;
 }
 
+.chatbot-toolbar-center .chatbot-pan-toggle {
+  min-width: 42px;
+  border-left: 1px solid #d7deea;
+  color: #5b6675;
+}
+
+.chatbot-toolbar-center .chatbot-pan-toggle svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chatbot-toolbar-center .chatbot-pan-toggle.is-active {
+  color: #fff;
+  background: #5d86d8;
+}
+
 .chatbot-toolbar-center span {
   min-width: 54px;
   font-size: 13px;
@@ -4635,11 +4656,21 @@ address {
 .chatbot-canvas {
   --chatbot-zoom: 1;
   position: relative;
-  min-height: 760px;
+  height: 680px;
+  min-height: 680px;
   overflow: auto;
   background:
     radial-gradient(circle, rgba(113, 128, 150, 0.22) 1px, transparent 1px) 0 0 / 22px 22px,
     #fbfcff;
+}
+
+.chatbot-canvas.is-pan-mode {
+  cursor: grab;
+}
+
+.chatbot-canvas.is-panning {
+  cursor: grabbing;
+  user-select: none;
 }
 
 .chatbot-connection-layer {
@@ -6350,6 +6381,7 @@ address {
 
   .chatbot-toolbar-center {
     justify-self: start;
+    flex-wrap: wrap;
   }
 
   .chatbot-toolbar-button {
@@ -6368,6 +6400,7 @@ address {
 
   .chatbot-canvas {
     display: grid;
+    height: auto;
     align-content: start;
     gap: 12px;
     padding: 12px;

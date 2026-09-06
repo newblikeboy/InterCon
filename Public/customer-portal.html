@@ -211,10 +211,13 @@
               <input type="text" maxlength="140" value="Welcome menu" aria-label="Flow name" data-chatbot-name>
               <span class="chatbot-status-pill">Draft</span>
             </div>
-            <div class="chatbot-toolbar-center" aria-label="Canvas zoom">
+            <div class="chatbot-toolbar-center" aria-label="Canvas controls">
               <button type="button" aria-label="Zoom out" data-chatbot-zoom-out>-</button>
               <span data-chatbot-zoom-label>100%</span>
               <button type="button" aria-label="Zoom in" data-chatbot-zoom-in>+</button>
+              <button class="chatbot-pan-toggle" type="button" aria-label="Pan canvas" aria-pressed="false" title="Move canvas" data-chatbot-pan>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12V7a2 2 0 1 1 4 0v5"/><path d="M12 11V6a2 2 0 1 1 4 0v6"/><path d="M16 12V8a2 2 0 1 1 4 0v6c0 5-3 8-8 8h-1c-3 0-5-2-6-5l-1-4a2 2 0 0 1 4-1l1 3"/></svg>
+              </button>
             </div>
             <div class="chatbot-toolbar-actions">
               <button class="chatbot-icon-button" type="button" aria-label="More options" title="More options">&#8942;</button>

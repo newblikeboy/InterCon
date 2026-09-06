@@ -13,7 +13,9 @@ const app = require("../src/app");
 
 test("health endpoint sends defensive browser headers", async () => {
   const response = await request(app).get("/api/health").expect(200);
-  assert.match(response.headers["content-security-policy"], /default-src 'self'/);
+  const csp = response.headers["content-security-policy"];
+  assert.match(csp, /default-src 'self'/);
+  assert.match(csp, /connect-src[^;]*https:\/\/connect\.facebook\.net/);
   assert.equal(response.headers["x-content-type-options"], "nosniff");
   assert.ok(response.headers["x-request-id"]);
 });

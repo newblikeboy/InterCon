@@ -93,7 +93,7 @@ function securityMiddleware(app) {
       directives: {
         defaultSrc: ["'self'"],
         baseUri: ["'self'"],
-        connectSrc: ["'self'", "https://www.facebook.com", "https://*.facebook.com", "https://*.razorpay.com"],
+        connectSrc: ["'self'", "https://www.facebook.com", "https://*.facebook.com", "https://connect.facebook.net", "https://*.razorpay.com"],
         fontSrc: ["'self'", "data:"],
         formAction: ["'self'"],
         frameAncestors: ["'none'"],

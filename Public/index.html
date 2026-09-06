@@ -461,6 +461,7 @@
       </form>
       <form class="auth-form" data-auth-form="reset-password">
         <h2>Choose a new password</h2>
+        <input type="text" name="login_id" autocomplete="username" hidden aria-hidden="true">
         <label>New password<input type="password" name="password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
         <label>Confirm password<input type="password" name="confirm_password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
         <button class="btn" type="submit">Change password</button>

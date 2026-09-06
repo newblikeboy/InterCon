@@ -26,6 +26,13 @@ test("Facebook authentication endpoint is removed", async () => {
     .expect(404);
 });
 
+test("landing session check is public and me remains protected", async () => {
+  const session = await request(app).get("/api/auth/session").expect(200);
+  assert.equal(session.body.authenticated, false);
+
+  await request(app).get("/api/auth/me").expect(401);
+});
+
 test("unsafe browser requests require a trusted origin", async () => {
   await request(app)
     .post("/api/auth/signup")

@@ -1,5 +1,5 @@
 const asyncHandler = require("../utils/asyncHandler");
-const { signAuthToken, setAuthCookie, clearAuthCookie } = require("../services/authToken.service");
+const { signAuthToken, setAuthCookie, clearAuthCookie, verifyAuthToken } = require("../services/authToken.service");
 const authService = require("../services/auth.service");
 const User = require("../models/User");
 const sessionCache = require("../services/sessionCache.service");
@@ -72,11 +72,33 @@ const me = asyncHandler(async (req, res) => {
   });
 });
 
+const session = asyncHandler(async (req, res) => {
+  const token = req.cookies?.[env.authCookieName];
+  if (!token) {
+    return res.json({ success: true, authenticated: false });
+  }
+
+  try {
+    const payload = verifyAuthToken(token);
+    const user = await sessionCache.getUser(payload.sub);
+    const authenticated = Boolean(
+      user
+      && user.status === "active"
+      && Number(payload.sv || 0) === Number(user.sessionVersion || 0)
+      && String(payload.tenantId) === String(user.tenantId)
+    );
+    return res.json({ success: true, authenticated });
+  } catch (error) {
+    return res.json({ success: true, authenticated: false });
+  }
+});
+
 module.exports = {
   signup,
   login,
   logout,
   me,
+  session,
   verifyEmail,
   resendVerification
 };

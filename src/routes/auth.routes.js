@@ -7,6 +7,7 @@ const router = express.Router();
 router.post("/signup", authController.signup);
 router.post("/login", require("../middleware/security").accountLimiter, authController.login);
 router.post("/logout", authenticate, authController.logout);
+router.get("/session", authController.session);
 router.get("/me", authenticate, authController.me);
 router.get("/verify-email", authController.verifyEmail);
 router.post("/resend-verification", authController.resendVerification);

@@ -295,8 +295,9 @@ authForms.forEach((form) => {
 
   async function checkAndRedirect() {
     try {
-      const response = await fetch("/api/auth/me", { credentials: "include" });
-      if (response.ok) {
+      const response = await fetch("/api/auth/session", { credentials: "include" });
+      const data = await response.json().catch(() => ({}));
+      if (data.authenticated) {
         window.location.replace("/customer");
       }
     } catch (error) {

@@ -28,6 +28,7 @@ async function run() {
     if (!url.pathname.startsWith("/api/")) return route.continue();
     apiCalls.push(url.pathname + url.search);
     let data = { success: true, contacts: [], templates: [], messages: [], groups: [], segments: [], media: [], conversations: [], keys: [], totalUnread: 0, nextCursor: null };
+    if (url.pathname === "/api/auth/session") data.authenticated = signedIn;
     if (url.pathname === "/api/auth/me") {
       if (!signedIn) return route.fulfill({ status: 401, json: { message: "Authentication required" } });
       data.user = user;

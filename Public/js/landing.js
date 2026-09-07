@@ -27,6 +27,7 @@ function setAuthMode(mode) {
 
   authForms.forEach((form) => {
     form.classList.toggle("active", form.dataset.authForm === mode);
+    setResetPasswordFieldsVisible(form, true);
     const message = form.querySelector("[data-form-message]");
     if (message) {
       message.textContent = "";
@@ -62,6 +63,22 @@ function setFormMessage(form, message, isError = false) {
   if (!messageNode) return;
   messageNode.textContent = message;
   messageNode.classList.toggle("error", isError);
+}
+
+function setResetPasswordFieldsVisible(form, visible) {
+  if (!form || form.dataset.authForm !== "reset-password") return;
+  form.querySelectorAll("[data-reset-password-field]").forEach((field) => {
+    field.hidden = !visible;
+    field.querySelectorAll("input").forEach((input) => {
+      input.disabled = !visible;
+      input.required = visible;
+    });
+  });
+  const submit = form.querySelector("[data-reset-password-submit]");
+  if (submit) {
+    submit.hidden = !visible;
+    submit.disabled = !visible;
+  }
 }
 
 // Matches EMAIL_VERIFICATION_RESEND_COOLDOWN_MS on the server. The countdown
@@ -262,9 +279,8 @@ authForms.forEach((form) => {
         form.reset();
         if (mode === "reset-password") {
           passwordResetToken = "";
-          const loginForm = document.querySelector('[data-auth-form="login"]');
-          setAuthMode("login");
-          setFormMessage(loginForm || form, data.message || "Password changed. Please log in with your new password.");
+          setResetPasswordFieldsVisible(form, false);
+          setFormMessage(form, "Password successfully changed.");
         } else {
           setFormMessage(form, data.message);
         }

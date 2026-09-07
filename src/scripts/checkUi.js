@@ -101,10 +101,13 @@ async function run() {
   await page.locator('[data-auth-form="reset-password"] [name="password"]').fill("NewPassword123!");
   await page.locator('[data-auth-form="reset-password"] [name="confirm_password"]').fill("NewPassword123!");
   await page.locator('[data-auth-form="reset-password"] button[type="submit"]').click();
-  await page.waitForFunction(() => document.querySelector('[data-auth-form="login"]').classList.contains("active"));
-  assert.equal(await page.locator('[data-auth-form="reset-password"]').isVisible(), false);
-  assert.match(await page.locator('[data-auth-form="login"] [data-form-message]').innerText(), /Password changed/);
-  results.push({ check: "login keyboard focus stays inside dialog; recovery opens; reset completion returns to login; Escape closes", passed: true });
+  await page.waitForFunction(() => document.querySelector('[data-auth-form="reset-password"] [data-form-message]').textContent === "Password successfully changed.");
+  assert.equal(await page.locator('[data-auth-form="reset-password"]').isVisible(), true);
+  assert.equal(await page.locator('[data-auth-form="reset-password"] [name="password"]').isVisible(), false);
+  assert.equal(await page.locator('[data-auth-form="reset-password"] [name="confirm_password"]').isVisible(), false);
+  assert.equal(await page.locator('[data-auth-form="reset-password"] [data-reset-password-submit]').isVisible(), false);
+  assert.equal(await page.locator('[data-auth-form="reset-password"] h2').isVisible(), false);
+  results.push({ check: "login keyboard focus stays inside dialog; recovery opens; reset completion shows success without password inputs; Escape closes", passed: true });
   signedIn = true;
   await page.goto(origin + "/customer#setup");
   await page.waitForFunction(() => setupState.user?.id);

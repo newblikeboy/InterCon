@@ -538,11 +538,11 @@
         <button type="button" class="btn-link" data-open-auth="login">Back to login</button>
       </form>
       <form class="auth-form" data-auth-form="reset-password">
-        <h2>Choose a new password</h2>
+        <h2 data-reset-password-field>Choose a new password</h2>
         <input type="text" name="login_id" autocomplete="username" hidden aria-hidden="true">
-        <label>New password<input type="password" name="password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
-        <label>Confirm password<input type="password" name="confirm_password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
-        <button class="btn" type="submit">Change password</button>
+        <label data-reset-password-field>New password<input type="password" name="password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
+        <label data-reset-password-field>Confirm password<input type="password" name="confirm_password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
+        <button class="btn" type="submit" data-reset-password-submit>Change password</button>
         <p class="form-note" data-form-message role="status" aria-live="polite"></p>
         <button type="button" class="btn-link" data-open-auth="login">Back to login</button>
       </form>

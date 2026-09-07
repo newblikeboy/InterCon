@@ -259,9 +259,15 @@ authForms.forEach((form) => {
       }
 
       if (isRecovery) {
-        setFormMessage(form, data.message);
         form.reset();
-        if (mode === "reset-password") passwordResetToken = "";
+        if (mode === "reset-password") {
+          passwordResetToken = "";
+          const loginForm = document.querySelector('[data-auth-form="login"]');
+          setAuthMode("login");
+          setFormMessage(loginForm || form, data.message || "Password changed. Please log in with your new password.");
+        } else {
+          setFormMessage(form, data.message);
+        }
       } else if (isSignup) {
         setFormMessage(form, data.message || "Account created. Check your email to verify your account.");
         // Surface the resend control straight away (already counting down),

@@ -44,6 +44,7 @@ async function run() {
       if (!signedIn) return route.fulfill({ status: 401, json: { message: "Authentication required" } });
       data.user = user;
     }
+    if (url.pathname === "/api/auth/reset-password") data.message = "Password changed. Please log in with your new password.";
     if (url.pathname === "/api/auth/login") { signedIn = true; data.user = user; }
     if (url.pathname === "/api/auth/logout") {
       if (logoutFails) return route.fulfill({ status: 503, json: { message: "Temporary server failure" } });
@@ -96,7 +97,14 @@ async function run() {
   await page.screenshot({ path: path.join(output, "password-recovery-mobile.png") });
   await page.keyboard.press("Escape");
   assert.equal(await page.locator("[data-auth-modal]").isVisible(), false);
-  results.push({ check: "login keyboard focus stays inside dialog; recovery opens; Escape closes", passed: true });
+  await page.evaluate(() => { passwordResetToken = "test-reset-token"; openAuth("reset-password"); });
+  await page.locator('[data-auth-form="reset-password"] [name="password"]').fill("NewPassword123!");
+  await page.locator('[data-auth-form="reset-password"] [name="confirm_password"]').fill("NewPassword123!");
+  await page.locator('[data-auth-form="reset-password"] button[type="submit"]').click();
+  await page.waitForFunction(() => document.querySelector('[data-auth-form="login"]').classList.contains("active"));
+  assert.equal(await page.locator('[data-auth-form="reset-password"]').isVisible(), false);
+  assert.match(await page.locator('[data-auth-form="login"] [data-form-message]').innerText(), /Password changed/);
+  results.push({ check: "login keyboard focus stays inside dialog; recovery opens; reset completion returns to login; Escape closes", passed: true });
   signedIn = true;
   await page.goto(origin + "/customer#setup");
   await page.waitForFunction(() => setupState.user?.id);

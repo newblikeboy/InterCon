@@ -1024,6 +1024,69 @@ h3 {
   color: var(--muted);
 }
 
+.text-link {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  margin: 12px 0 18px;
+  color: var(--brand-dark);
+  font-weight: 850;
+}
+
+.text-link:hover {
+  color: var(--brand);
+}
+
+.service-page .site-header {
+  color: var(--ink);
+}
+
+.service-hero {
+  padding-bottom: clamp(62px, 8vw, 104px);
+}
+
+.service-detail .section-heading {
+  max-width: 820px;
+}
+
+.seo-copy-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(260px, 0.7fr);
+  gap: clamp(22px, 4vw, 56px);
+  align-items: start;
+}
+
+.seo-copy-section h2 {
+  margin-top: 0;
+}
+
+.seo-copy-section p,
+.seo-copy-section li {
+  color: var(--muted);
+}
+
+.seo-copy-section aside {
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(17, 41, 29, 0.07);
+}
+
+.seo-copy-section aside strong {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.seo-copy-section ul {
+  display: grid;
+  gap: 10px;
+  padding-left: 18px;
+  margin: 0;
+}
+
 .policy-hero {
   padding: 136px clamp(18px, 4vw, 54px) 52px;
   color: #fff;
@@ -2143,6 +2206,7 @@ address {
   .process-section,
   .dashboard-band,
   .outcome-section,
+  .seo-copy-section,
   .policy-section {
     grid-template-columns: 1fr;
   }

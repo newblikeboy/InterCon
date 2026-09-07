@@ -42,6 +42,9 @@ test("technical SEO files are public and point to canonical production URLs", as
   assert.match(sitemap.text, /<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/);
   assert.match(sitemap.text, /<loc>https:\/\/intercon\.in\/<\/loc>/);
   assert.match(sitemap.text, /<loc>https:\/\/intercon\.in\/privacy-policy<\/loc>/);
+  assert.match(sitemap.text, /<loc>https:\/\/intercon\.in\/whatsapp-business-api<\/loc>/);
+  assert.match(sitemap.text, /<loc>https:\/\/intercon\.in\/whatsapp-team-inbox<\/loc>/);
+  assert.match(sitemap.text, /<loc>https:\/\/intercon\.in\/whatsapp-bulk-messaging<\/loc>/);
   assert.doesNotMatch(sitemap.text, /\/api\/|\/customer|\/admin/);
   assert.doesNotMatch(sitemap.text, /^\{/);
   assert.doesNotMatch(sitemap.text, /<!DOCTYPE html>/i);
@@ -61,11 +64,30 @@ test("public pages expose canonical metadata and private pages remain protected"
   assert.match(home.text, /<title>InterCon \| Omnichannel Business Messaging/);
   assert.match(home.text, /<meta name="description" content="InterCon by Synqvest System LLP is an omnichannel business messaging platform\./);
   assert.match(home.text, /<link rel="canonical" href="https:\/\/intercon\.in\/">/);
+  assert.match(home.text, /"@type": "Organization"/);
+  assert.match(home.text, /"@type": "SoftwareApplication"/);
+  assert.match(home.text, /href="\/whatsapp-business-api"/);
+  assert.match(home.text, /href="\/whatsapp-team-inbox"/);
+  assert.match(home.text, /href="\/whatsapp-bulk-messaging"/);
   assert.doesNotMatch(home.text, /noindex/i);
 
   const policy = await request(app).get("/privacy-policy").expect(200);
   assert.match(policy.text, /<link rel="canonical" href="https:\/\/intercon\.in\/privacy-policy">/);
   assert.doesNotMatch(policy.text, /noindex/i);
+
+  const servicePages = [
+    ["/whatsapp-business-api", "WhatsApp Business API Setup in India", "https://intercon.in/whatsapp-business-api"],
+    ["/whatsapp-team-inbox", "WhatsApp Team Inbox for Business", "https://intercon.in/whatsapp-team-inbox"],
+    ["/whatsapp-bulk-messaging", "WhatsApp Bulk Messaging Platform", "https://intercon.in/whatsapp-bulk-messaging"]
+  ];
+
+  for (const [path, title, canonical] of servicePages) {
+    const page = await request(app).get(path).expect(200);
+    assert.match(page.text, new RegExp(`<title>${title}`));
+    assert.match(page.text, new RegExp(`<link rel="canonical" href="${canonical}">`));
+    assert.match(page.text, /"@type": "Service"/);
+    assert.doesNotMatch(page.text, /noindex/i);
+  }
 
   await request(app).get("/admin").expect(401);
   await request(app).get("/api/auth/me").expect(401);

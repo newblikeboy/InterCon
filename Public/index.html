@@ -7,7 +7,76 @@
   <meta name="description" content="InterCon by Synqvest System LLP is an omnichannel business messaging platform. Launch on WhatsApp today, with RCS and SMS coming soon — onboarding, Cloud API, team inbox, and bulk messaging from one workspace.">
   <link rel="canonical" href="https://intercon.in/">
   <link rel="preconnect" href="https://images.unsplash.com">
-  <link rel="stylesheet" href="style/landing.css?v=20260906">
+  <link rel="stylesheet" href="style/landing.css?v=20260907-seo1">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://intercon.in/#organization",
+        "name": "Synqvest System LLP",
+        "url": "https://intercon.in/",
+        "logo": "https://intercon.in/InterIcon.jpg",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "121-C, MIG Flats, Rajouri Garden",
+          "addressLocality": "New Delhi",
+          "postalCode": "110027",
+          "addressCountry": "IN"
+        },
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+91-9718223355",
+          "contactType": "customer support"
+        }
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://intercon.in/#website",
+        "name": "InterCon",
+        "url": "https://intercon.in/",
+        "publisher": {
+          "@id": "https://intercon.in/#organization"
+        }
+      },
+      {
+        "@type": "SoftwareApplication",
+        "name": "InterCon",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "url": "https://intercon.in/",
+        "description": "InterCon is a business messaging workspace for WhatsApp onboarding, Cloud API setup, templates, bulk messaging, team inbox, contacts, and delivery status.",
+        "publisher": {
+          "@id": "https://intercon.in/#organization"
+        },
+        "offers": [
+          {
+            "@type": "Offer",
+            "name": "Monthly",
+            "price": "1000",
+            "priceCurrency": "INR",
+            "url": "https://intercon.in/#pricing"
+          },
+          {
+            "@type": "Offer",
+            "name": "Quarterly",
+            "price": "2500",
+            "priceCurrency": "INR",
+            "url": "https://intercon.in/#pricing"
+          },
+          {
+            "@type": "Offer",
+            "name": "Yearly",
+            "price": "9000",
+            "priceCurrency": "INR",
+            "url": "https://intercon.in/#pricing"
+          }
+        ]
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
   <header class="site-header" data-header>
@@ -28,6 +97,7 @@
     <nav class="main-nav" data-nav>
       <a href="#channels">Channels</a>
       <a href="#services">Platform</a>
+      <a href="/whatsapp-business-api">WhatsApp API</a>
       <a href="#process">How it works</a>
       <a href="#pricing">Plans</a>
       <a href="#faq">FAQ</a>
@@ -118,6 +188,7 @@
             <li>Shared WhatsApp inbox</li>
             <li>Templates and bulk messaging</li>
           </ul>
+          <a class="text-link" href="/whatsapp-business-api">Learn about WhatsApp API setup</a>
           <button class="btn btn-block" type="button" data-open-auth="signup">Start on WhatsApp</button>
         </article>
 
@@ -180,12 +251,14 @@
           </span>
           <h3>Cloud API Setup</h3>
           <p>Connect numbers, configure webhooks, and integrate messaging into your website, app, CRM, or ERP with clean, documented APIs.</p>
+          <a class="text-link" href="/whatsapp-business-api">WhatsApp API setup</a>
         </article>
         <article class="service-card">
           <span class="service-icon tint-violet" aria-hidden="true">
             <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16M9 9v11"/></svg>
           </span>
           <h3>Templates & Bulk Messaging</h3>
+          <a class="text-link" href="/whatsapp-bulk-messaging">Bulk messaging platform</a>
           <p>Policy-aware templates for OTP, order updates, reminders, and offers — plus targeted campaigns that stay compliant.</p>
         </article>
         <article class="service-card">
@@ -200,6 +273,7 @@
             <svg viewBox="0 0 24 24"><path d="M4 6h16v12H7l-3 3Z"/><path d="M8 10h8M8 13h5"/></svg>
           </span>
           <h3>Team Inbox</h3>
+          <a class="text-link" href="/whatsapp-team-inbox">WhatsApp team inbox</a>
           <p>One shared workspace to assign chats, add notes, track customers, and reply from every agent — like WhatsApp Web, for teams.</p>
         </article>
         <article class="service-card">
@@ -405,6 +479,9 @@
         <strong>Platform</strong>
         <a href="#channels">Channels</a>
         <a href="#services">Capabilities</a>
+        <a href="/whatsapp-business-api">WhatsApp API setup</a>
+        <a href="/whatsapp-team-inbox">Team inbox</a>
+        <a href="/whatsapp-bulk-messaging">Bulk messaging</a>
         <a href="#process">How it works</a>
         <a href="#pricing">Plans</a>
         <a href="#faq">FAQ</a>

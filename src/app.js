@@ -106,7 +106,17 @@ app.get("/customer", (req, res) => {
   sendAuthenticatedHtml(res, "customer-portal.html");
 });
 
+app.get("/whatsapp-business-api", (req, res) => {
+  sendHtml(res, "whatsapp-business-api.html");
+});
 
+app.get("/whatsapp-team-inbox", (req, res) => {
+  sendHtml(res, "whatsapp-team-inbox.html");
+});
+
+app.get("/whatsapp-bulk-messaging", (req, res) => {
+  sendHtml(res, "whatsapp-bulk-messaging.html");
+});
 
 app.get("/privacy-policy", (req, res) => {
   sendHtml(res, "privacy-policy.html");

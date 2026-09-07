@@ -35,6 +35,42 @@ test("landing session check is public and me remains protected", async () => {
   await request(app).get("/api/auth/me").expect(401);
 });
 
+test("technical SEO files are public and point to canonical production URLs", async () => {
+  const sitemap = await request(app).get("/sitemap.xml").expect(200);
+  assert.match(sitemap.headers["content-type"], /xml/);
+  assert.match(sitemap.text, /^<\?xml version="1\.0" encoding="UTF-8"\?>/);
+  assert.match(sitemap.text, /<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/);
+  assert.match(sitemap.text, /<loc>https:\/\/intercon\.in\/<\/loc>/);
+  assert.match(sitemap.text, /<loc>https:\/\/intercon\.in\/privacy-policy<\/loc>/);
+  assert.doesNotMatch(sitemap.text, /\/api\/|\/customer|\/admin/);
+  assert.doesNotMatch(sitemap.text, /^\{/);
+  assert.doesNotMatch(sitemap.text, /<!DOCTYPE html>/i);
+
+  const robots = await request(app).get("/robots.txt").expect(200);
+  assert.match(robots.headers["content-type"], /text\/plain/);
+  assert.match(robots.text, /User-agent: \*/);
+  assert.match(robots.text, /Allow: \//);
+  assert.match(robots.text, /Disallow: \/api\//);
+  assert.match(robots.text, /Sitemap: https:\/\/intercon\.in\/sitemap\.xml/);
+  assert.doesNotMatch(robots.text, /^\{/);
+  assert.doesNotMatch(robots.text, /<!DOCTYPE html>/i);
+});
+
+test("public pages expose canonical metadata and private pages remain protected", async () => {
+  const home = await request(app).get("/").expect(200);
+  assert.match(home.text, /<title>InterCon \| Omnichannel Business Messaging/);
+  assert.match(home.text, /<meta name="description" content="InterCon by Synqvest System LLP is an omnichannel business messaging platform\./);
+  assert.match(home.text, /<link rel="canonical" href="https:\/\/intercon\.in\/">/);
+  assert.doesNotMatch(home.text, /noindex/i);
+
+  const policy = await request(app).get("/privacy-policy").expect(200);
+  assert.match(policy.text, /<link rel="canonical" href="https:\/\/intercon\.in\/privacy-policy">/);
+  assert.doesNotMatch(policy.text, /noindex/i);
+
+  await request(app).get("/admin").expect(401);
+  await request(app).get("/api/auth/me").expect(401);
+});
+
 test("unsafe browser requests require a trusted origin", async () => {
   await request(app)
     .post("/api/auth/signup")

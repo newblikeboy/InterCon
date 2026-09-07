@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /admin-portal.html
+Disallow: /customer
+Disallow: /customer-portal.html
+
+Sitemap: https://intercon.in/sitemap.xml

@@ -61,6 +61,11 @@ function publicConversation(conversation, groupNamesByTag = new Map()) {
     lastMessageAt: conversation.lastMessageAt,
     lastDirection: conversation.lastDirection || "in",
     unreadCount: conversation.unreadCount || 0,
+    automation: {
+      status: conversation.automationControl?.held ? "handoff" : conversation.automation?.status || "idle",
+      routeTo: conversation.automation?.routeTo || "",
+      currentNodeId: conversation.automation?.currentNodeId || ""
+    },
     windowOpen: windowState.windowOpen,
     windowExpiresAt: windowState.windowExpiresAt
   };
@@ -180,6 +185,7 @@ async function deleteConversation(tenantId, conversationId) {
     tenantId,
     conversationId: conversation._id
   });
+  await require("../models/AutomationExecution").deleteMany({ tenantId, conversationId: conversation._id });
 
   return {
     conversationId: String(conversation._id),
@@ -201,6 +207,9 @@ async function sendReply(tenantId, conversationId, body = {}) {
 
   const conversation = await loadConversation(tenantId, conversationId);
   const { windowOpen, windowExpiresAt } = getWindowState(conversation);
+  if (body.automationSend && (conversation.automationControl?.held || conversation.automation?.status === "handoff")) {
+    throw new HttpError(409, "The conversation is being handled by an agent", { code: "AUTOMATION_HELD" });
+  }
   const contact = await Contact.findOne({ tenantId, phone: conversation.customerPhone }).lean();
   if (!contact || contact.status !== "active") throw new HttpError(403, "This contact is blocked or opted out");
 
@@ -217,6 +226,9 @@ async function sendReply(tenantId, conversationId, body = {}) {
   if (!tenant?.meta?.phoneNumberId || !accessToken) {
     throw new HttpError(409, "Connect WhatsApp first. Phone number ID and Meta access token are required before replying.");
   }
+
+  // Hold before sending so an in-flight bot cannot restore its state over the agent.
+  if (!body.automationSend) await setAutomationControl(tenantId, conversationId, { action: "takeover" });
 
   const { response, metaResponse } = await sendWhatsAppWithAccess(tenantId, conversation.customerPhone, `https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.phoneNumberId}/messages`, {
     method: "POST",
@@ -238,7 +250,9 @@ async function sendReply(tenantId, conversationId, body = {}) {
 
   if (!response.ok || metaResponse.error) {
     const metaError = metaResponse.error || {};
-    throw new HttpError(response.status || 400, metaError.message || "Failed to send WhatsApp reply", metaError);
+    const error = new HttpError(response.ok ? 400 : response.status || 400, metaError.message || "Failed to send WhatsApp reply", metaError);
+    error.deliveryOutcome = "rejected";
+    throw error;
   }
 
   const metaMessageId = metaResponse.messages?.[0]?.id || "";
@@ -254,6 +268,9 @@ async function sendReply(tenantId, conversationId, body = {}) {
     type: "text",
     text,
     metaMessageId,
+    ...(body.automationSend && body.automationExecutionId ? {
+      automationExecutionId: body.automationExecutionId, automationStep: body.automationStep
+    } : {}),
     status: "sent",
     sentAt
   });
@@ -263,9 +280,9 @@ async function sendReply(tenantId, conversationId, body = {}) {
   conversation.lastDirection = "out";
   if (!body.automationSend) {
     conversation.automation = {
-      status: "idle",
+      status: "handoff",
       currentNodeId: "",
-      routeTo: "",
+      routeTo: "human_agent",
       updatedAt: sentAt
     };
   }
@@ -274,14 +291,6 @@ async function sendReply(tenantId, conversationId, body = {}) {
     lastMessageText: text.slice(0, 1000),
     lastMessageAt: sentAt,
     lastDirection: "out",
-    ...(!body.automationSend ? {
-      automation: {
-        status: "idle",
-        currentNodeId: "",
-        routeTo: "",
-        updatedAt: sentAt
-      }
-    } : {})
   };
   await Conversation.updateOne({ _id: conversation._id, tenantId, lastMessageAt: { $lte: sentAt } }, { $set: conversationUpdate });
 
@@ -300,7 +309,28 @@ async function sendReply(tenantId, conversationId, body = {}) {
   };
 }
 
+async function setAutomationControl(tenantId, conversationId, body = {}) {
+  if (!["takeover", "release"].includes(body.action)) throw new HttpError(400, "Choose takeover or release");
+  await loadConversation(tenantId, conversationId);
+  const held = body.action === "takeover";
+  const session = await Conversation.startSession();
+  let conversation;
+  try {
+    await session.withTransaction(async () => {
+      const current = await Conversation.findOne({ _id: conversationId, tenantId }).session(session);
+      if (!current) throw new HttpError(404, "Conversation not found");
+      conversation = await Conversation.findOneAndUpdate({ _id: conversationId, tenantId }, { $set: {
+        automationControl: { held, changedAt: new Date(), throughSequence: current.automationSequence || 0 },
+        automation: { status: held ? "handoff" : "idle", currentNodeId: "", routeTo: held ? "human_agent" : "", updatedAt: new Date() }
+      } }, { session, returnDocument: "after" });
+    });
+  } finally { await session.endSession(); }
+  await publishInboxUpdated(tenantId, { action: "automation_updated", conversationId: String(conversationId) });
+  return publicConversation(conversation);
+}
+
 module.exports = {
+  setAutomationControl,
   listConversations,
   getUnreadSummary,
   getConversationMessages,

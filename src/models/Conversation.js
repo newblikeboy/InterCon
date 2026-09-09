@@ -62,7 +62,13 @@ const conversationSchema = new mongoose.Schema(
       default: 0,
       min: 0
     },
+    automationLock: { token: String, expiresAt: Date },
+    automationSequence: { type: Number, default: 0 },
+    automationControl: { held: { type: Boolean, default: false }, changedAt: Date, throughSequence: Number },
     automation: {
+      snapshot: mongoose.Schema.Types.Mixed,
+      needsRecovery: { type: Boolean, default: false },
+      lastProcessedAt: Date,
       flowId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "AutomationFlow"
@@ -96,5 +102,6 @@ const conversationSchema = new mongoose.Schema(
 conversationSchema.index({ tenantId: 1, lastMessageAt: -1 });
 conversationSchema.index({ tenantId: 1, customerPhone: 1 }, { unique: true });
 conversationSchema.index({ tenantId: 1, "automation.flowId": 1, "automation.status": 1 });
+conversationSchema.index({ "automationLock.expiresAt": 1 });
 
 module.exports = mongoose.model("Conversation", conversationSchema);

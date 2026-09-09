@@ -11,6 +11,7 @@ const env = require("../config/env");
 const HttpError = require("../utils/httpError");
 const { publishInboxUpdated } = require("./realtime.service");
 const automationService = require("./automation.service");
+const automationQueue = require("./automationQueue.service");
 
 function getWebhookAppSecret() {
   return env.facebookAppSecret || env.metaAppSecret;
@@ -340,6 +341,7 @@ async function storeConversationMessage(tenantId, customerPhone, contact, profil
         conversation.lastDirection = messageData.direction;
       }
       if (messageData.direction === "in") {
+        conversation.automationSequence = Number(conversation.automationSequence || 0) + 1;
         conversation.unreadCount += 1;
         if (!conversation.lastInboundAt || messageData.sentAt > conversation.lastInboundAt) conversation.lastInboundAt = messageData.sentAt;
       }
@@ -348,6 +350,17 @@ async function storeConversationMessage(tenantId, customerPhone, contact, profil
       }], { session });
       conversation.lastStoredMessageId = inboxMessage._id;
       await conversation.save({ session });
+      if (messageData.direction === "in") {
+        await automationQueue.enqueueInbound({ tenantId, conversationId: conversation._id,
+          inboundMessageId: inboxMessage._id, text: messageData.text, receivedAt: messageData.sentAt, sequence: conversation.automationSequence }, session);
+      } else {
+        // Business-app messages constitute human takeover, committed with the echo.
+        await Conversation.updateOne({ _id: conversation._id, tenantId }, { $set: {
+          "automationControl.held": true, "automationControl.changedAt": new Date(),
+          "automationControl.throughSequence": conversation.automationSequence || 0,
+          "automation.status": "handoff", "automation.routeTo": "human_agent", "automation.updatedAt": new Date()
+        } }, { session });
+      }
       result = { conversation, inboxMessage };
     });
     return result;
@@ -403,6 +416,8 @@ async function processInboundMessages(tenantId, value = {}, wabaId, phoneNumberI
       await automationService.runAutomationForInboundMessage({
         tenantId,
         conversationId: conversation._id,
+        inboundMessageId: inboxMessage._id,
+        receivedAt: sentAt,
         text: summary.text
       });
     } catch (error) {
@@ -489,9 +504,6 @@ async function processMessageEchoes(tenantId, value = {}, wabaId, phoneNumberId)
       error: describeMessageError(echo), metaMessageId, status: "sent", sentAt
     });
     if (stored) {
-      await Conversation.updateOne({ _id: stored.conversation._id, tenantId }, { $set: {
-        automation: { status: "idle", currentNodeId: "", routeTo: "", updatedAt: sentAt }
-      } });
       await publishInboxUpdated(tenantId, { action: "message_sent", conversationId: String(stored.conversation._id), messageId: String(stored.inboxMessage._id) });
     }
   }

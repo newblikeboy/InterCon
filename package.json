@@ -18,6 +18,7 @@
     "billing:activate": "node src/scripts/activateTenantPlan.js",
     "worker:billing": "node src/workers/billing.worker.js",
     "check:ui": "node src/scripts/checkUi.js",
+    "check:chatbot": "node src/scripts/checkChatbot.js",
     "admin:access": "node src/scripts/setPlatformAdmin.js",
     "db:indexes": "node src/scripts/ensureIndexes.js",
     "check:realtime": "node src/scripts/checkInboxRealtime.js"

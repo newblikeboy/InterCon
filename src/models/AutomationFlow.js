@@ -31,6 +31,7 @@ const automationFlowSchema = new mongoose.Schema(
       maxlength: 900
     },
     nodes: [{
+      nextNodeId: { type: String, trim: true, maxlength: 80, default: "" },
       id: {
         type: String,
         required: true,

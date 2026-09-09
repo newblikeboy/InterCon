@@ -12,5 +12,6 @@ router.get("/conversations/:conversationId/messages", inboxController.getConvers
 router.post("/conversations/:conversationId/read", inboxController.markConversationRead);
 router.delete("/conversations/:conversationId", inboxController.deleteConversation);
 router.post("/conversations/:conversationId/reply", inboxController.sendReply);
+router.patch("/conversations/:conversationId/automation", inboxController.setAutomationControl);
 
 module.exports = router;

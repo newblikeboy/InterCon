@@ -48,7 +48,7 @@ const deleteConversation = asyncHandler(async (req, res) => {
 });
 
 const sendReply = asyncHandler(async (req, res) => {
-  const data = await inboxService.sendReply(req.tenantId, req.params.conversationId, req.body);
+  const data = await inboxService.sendReply(req.tenantId, req.params.conversationId, { text: req.body.text || req.body.message });
 
   res.status(201).json({
     success: true,
@@ -58,6 +58,9 @@ const sendReply = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  setAutomationControl: asyncHandler(async (req, res) => {
+    res.json({ success: true, conversation: await inboxService.setAutomationControl(req.tenantId, req.params.conversationId, req.body) });
+  }),
   listConversations,
   getUnreadSummary,
   getConversationMessages,

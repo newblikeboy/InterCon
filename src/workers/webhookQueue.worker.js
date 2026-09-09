@@ -5,6 +5,7 @@ const { connectRedis, closeRedis } = require("../config/redis");
 const { assertProductionEnvironment } = require("../config/validate");
 const env = require("../config/env");
 const webhookService = require("../services/webhook.service");
+const automationQueue = require("../services/automationQueue.service");
 
 const workerId = `webhook-worker-${os.hostname()}-${process.pid}`;
 let stopping = false;
@@ -21,7 +22,8 @@ async function run() {
   while (!stopping) {
     try {
       const result = await webhookService.processNextWebhookEvent(workerId);
-      if (!result) {
+      const automationResult = await automationQueue.processNextAutomationJob();
+      if (!result && !automationResult) {
         await sleep(env.webhookWorkerPollMs);
       }
     } catch (error) {

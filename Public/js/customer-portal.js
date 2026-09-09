@@ -4663,6 +4663,17 @@ function renderInboxMessages(messages) {
 }
 
 function applyInboxWindowState(conversation) {
+  const control = document.querySelector("[data-inbox-automation-control]");
+  const status = document.querySelector("[data-inbox-automation-status]");
+  const held = conversation?.automation?.status === "handoff";
+  if (control) {
+    control.disabled = !conversation?.id;
+    control.dataset.action = held ? "release" : "takeover";
+    control.textContent = held ? "Release to chatbot" : "Take over";
+  }
+  if (status) status.textContent = held
+    ? `Human handoff${conversation?.automation?.routeTo ? " · " + conversation.automation.routeTo.replace(/_/g, " ") : ""} — chatbot paused`
+    : conversation?.automation?.status === "active" ? "Chatbot waiting for a reply" : "Chatbot ready";
   if (inboxState.windowTimer) {
     clearTimeout(inboxState.windowTimer);
     inboxState.windowTimer = null;
@@ -4706,6 +4717,8 @@ function applyInboxWindowState(conversation) {
 }
 
 function setInboxConversationLoading() {
+  const control = document.querySelector("[data-inbox-automation-control]");
+  if (control) control.disabled = true;
   inboxState.activeWindowOpen = false;
 
   if (inboxMessagesEl) {
@@ -5500,16 +5513,19 @@ function getChatbotNode(nodeId) {
 }
 
 function getChatbotFirstReplyNode(nodes = chatbotState.nodes) {
-  return nodes.find((node) => ["message", "menu"].includes(node.type) && node.message) || nodes.find((node) => ["message", "menu"].includes(node.type)) || null;
+  const trigger = nodes.find(node => node.type === "trigger");
+  return nodes.find(node => node.id === trigger?.nextNodeId) || nodes.find((node) => ["message", "menu", "handoff"].includes(node.type) && node.message) || null;
 }
 
 function buildChatbotEdges(nodes = chatbotState.nodes) {
   const ids = new Set(nodes.map((node) => node.id));
   const edges = [];
   const firstReply = getChatbotFirstReplyNode(nodes);
-  if (firstReply && ids.has("trigger")) edges.push({ from: "trigger", to: firstReply.id, label: "match" });
+  const trigger = nodes.find(node => node.type === "trigger");
+  if (firstReply && trigger) edges.push({ from: trigger.id, to: trigger.nextNodeId || firstReply.id, label: "match" });
 
   nodes.forEach((node) => {
+    if (node.type === "message" && node.nextNodeId) edges.push({ from: node.id, to: node.nextNodeId, label: "next" });
     (node.options || []).forEach((option) => {
       if (option.label && ids.has(option.nextNodeId)) {
         edges.push({ from: node.id, to: option.nextNodeId, label: option.label });
@@ -5683,6 +5699,14 @@ function renderChatbotInspector() {
         <textarea rows="5" maxlength="900" data-chatbot-field="message">${escapeHtml(node.message || "")}</textarea>
       </label>
     `}
+    ${["trigger", "message"].includes(node.type) ? `
+      <label>Next block
+        <select data-chatbot-field="nextNodeId">
+          <option value="">${node.type === "trigger" ? "First reply block" : "End conversation"}</option>
+          ${chatbotState.nodes.filter(item => item.id !== node.id && item.type !== "trigger").map(item => `<option value="${escapeHtml(item.id)}" ${item.id === node.nextNodeId ? "selected" : ""}>${escapeHtml(item.title || item.id)}</option>`).join("")}
+        </select>
+      </label>
+    ` : ""}
     ${node.type === "menu" ? `
       <div class="chatbot-options-head">
         <strong>Menu options</strong>
@@ -5742,6 +5766,7 @@ function chatbotPayload() {
     type: node.type,
     title: node.title || "",
     keyword: node.keyword || "",
+    nextNodeId: node.nextNodeId || "",
     message: node.message || "",
     routeTo: node.routeTo || "human_agent",
     options: (node.options || []).filter((option) => option.label).map((option) => ({
@@ -5811,6 +5836,7 @@ function loadChatbotFlowIntoBuilder(flow) {
         type: node.type || "message",
         title: node.title || node.name || node.type || "Block",
         keyword: node.keyword || "",
+        nextNodeId: node.nextNodeId || (["message", "trigger"].includes(node.type) ? flow.edges?.find(edge => edge.from === node.id)?.to : "") || "",
         message: node.message || "",
         routeTo: node.routeTo || "human_agent",
         options: (node.options || []).map((option) => ({ ...option })),
@@ -6113,6 +6139,7 @@ chatbotInspector?.addEventListener("click", (event) => {
   if (event.target.closest("[data-chatbot-delete-node]")) {
     chatbotState.nodes = chatbotState.nodes.filter((item) => item.id !== node.id);
     chatbotState.nodes.forEach((item) => {
+      if (item.nextNodeId === node.id) item.nextNodeId = "";
       item.options = (item.options || []).filter((option) => option.nextNodeId !== node.id);
     });
     chatbotState.selectedNodeId = "trigger";
@@ -6170,6 +6197,53 @@ chatbotZoomInButton?.addEventListener("click", () => {
   renderChatbotCanvas();
 });
 if (chatbotCanvas) resetChatbotBuilder({ restoreSelection: true });
+
+document.querySelector("[data-inbox-automation-control]")?.addEventListener("click", async event => {
+  const button = event.currentTarget, conversationId = inboxState.activeId;
+  if (!conversationId) return;
+  const action = button.dataset.action;
+  button.disabled = true;
+  try {
+    const data = await requestJson(`/api/inbox/conversations/${conversationId}/automation`, { method: "PATCH", body: JSON.stringify({ action }) });
+    if (inboxState.activeId === conversationId) {
+      applyInboxWindowState(data.conversation);
+      setInboxStatus(action === "release" ? "Chatbot released. It will respond to the customer's next message." : "You have taken over. The chatbot is paused until you release it.");
+    }
+  } catch (error) { setInboxStatus(error.message, true); }
+  finally { if (inboxState.activeId === conversationId) button.disabled = false; }
+});
+
+document.querySelector("[data-chatbot-test-toggle]")?.addEventListener("click", event => {
+  const panel = document.getElementById("chatbot-testing");
+  panel.hidden = !panel.hidden;
+  event.currentTarget.setAttribute("aria-expanded", String(!panel.hidden));
+  if (!panel.hidden) document.querySelector("[data-chatbot-test-input]")?.focus();
+});
+document.querySelector("[data-chatbot-test-run]")?.addEventListener("click", async event => {
+  const button = event.currentTarget, output = document.querySelector("[data-chatbot-test-results]");
+  const messages = document.querySelector("[data-chatbot-test-input]").value.split(/\r?\n/).filter(line => line.trim());
+  button.disabled = true; output.textContent = "Testing flow…";
+  try {
+    const data = await requestJson("/api/automations/simulate", { method: "POST", body: JSON.stringify({ flow: chatbotPayload(), messages }) });
+    output.innerHTML = data.turns.map(turn => `<article class="chatbot-test-turn"><strong>Customer: ${escapeHtml(turn.input)}</strong>${turn.replies.map(reply => `<p>${escapeHtml(reply)}</p>`).join("")}<small>${escapeHtml(turn.action.replace(/_/g, " "))}${turn.nodeId ? " · " + escapeHtml(turn.nodeId) : ""}</small></article>`).join("") || "Add a customer message to test.";
+  } catch (error) { output.textContent = error.message; }
+  finally { button.disabled = false; }
+});
+document.querySelector("[data-chatbot-diagnostics]")?.addEventListener("click", async event => {
+  const button = event.currentTarget, output = document.querySelector("[data-chatbot-executions]");
+  button.disabled = true; output.textContent = "Loading activity…";
+  try {
+    const data = await requestJson("/api/automations/executions");
+    output.innerHTML = data.executions.map(item => `<article class="chatbot-test-turn"><strong>${escapeHtml(item.text || "Non-text message")}</strong><p>${escapeHtml(item.status)} · ${escapeHtml(item.action.replace(/_/g, " "))} · ${Number(item.attempts)} attempts</p>${item.deliveryStatus ? `<p>Delivery: ${escapeHtml(item.deliveryStatus)}${item.deliveryError ? " - " + escapeHtml(item.deliveryError) : ""}</p>` : ""}${item.error ? `<p>${escapeHtml(item.error)}</p>` : ""}<small>${escapeHtml(new Date(item.createdAt).toLocaleString())}</small><button type="button" class="btn-link" data-chatbot-open-conversation="${escapeHtml(item.conversationId)}">Open conversation</button></article>`).join("") || "No chatbot activity yet.";
+  } catch (error) { output.textContent = error.message; }
+  finally { button.disabled = false; }
+});
+document.querySelector("[data-chatbot-executions]")?.addEventListener("click", event => {
+  const button = event.target.closest("[data-chatbot-open-conversation]");
+  if (!button) return;
+  location.hash = "#inbox";
+  openInboxConversation(button.dataset.chatbotOpenConversation);
+});
 
 if (groupList) {
   groupList.addEventListener("click", (event) => {

@@ -9355,3 +9355,16 @@ address {
 [data-inbox-older] { flex-shrink: 0; padding: 10px; background: #fff; }
 
 .inbox-ticks.is-failed { color: #b42318; font-weight: 800; }
+/* Chatbot simulation, execution history, and explicit human takeover. */
+.chatbot-testing { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; padding: 20px; border-bottom: 1px solid #dce3ea; background: #fff; }
+.chatbot-testing[hidden] { display: none; }
+.chatbot-testing h3 { margin: 0 0 8px; }
+.chatbot-testing p { font-size: 13px; line-height: 1.5; }
+.chatbot-testing label { display: block; margin: 12px 0 6px; font-size: 13px; }
+.chatbot-testing textarea { display: block; width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #bdc8d4; border-radius: 8px; margin-bottom: 12px; font: inherit; }
+[data-chatbot-test-results], [data-chatbot-executions] { max-height: 380px; overflow: auto; margin-top: 12px; overflow-wrap: anywhere; }
+.chatbot-test-turn { padding: 12px; margin-bottom: 8px; background: #f3f6f9; border-radius: 8px; font-size: 13px; }
+.chatbot-test-turn p { white-space: pre-wrap; }
+.chatbot-test-turn small { display: block; color: #4b5d70; }
+.inbox-automation-control { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px; background: #f1f6f8; font-size: 12px; flex-wrap: wrap; }
+@media (max-width: 700px) { .chatbot-testing { grid-template-columns: 1fr; padding: 12px; } }

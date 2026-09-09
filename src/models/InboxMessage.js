@@ -55,6 +55,8 @@ const inboxMessageSchema = new mongoose.Schema(
       maxlength: 160,
       index: true
     },
+    automationExecutionId: mongoose.Schema.Types.ObjectId,
+    automationStep: Number,
     providerStatusAt: { type: Date },
     status: {
       type: String,
@@ -88,6 +90,7 @@ const inboxMessageSchema = new mongoose.Schema(
 );
 
 inboxMessageSchema.index({ conversationId: 1, createdAt: 1 });
+inboxMessageSchema.index({ automationExecutionId: 1, automationStep: 1 }, { unique: true, partialFilterExpression: { automationExecutionId: { $type: "objectId" } } });
 inboxMessageSchema.index({ tenantId: 1, customerPhone: 1, direction: 1, sentAt: -1 });
 inboxMessageSchema.index({ tenantId: 1, conversationId: 1, _id: -1 });
 inboxMessageSchema.index(

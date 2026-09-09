@@ -10,7 +10,7 @@ const MAX_CONNECTIONS = 10000;
 const MAX_USER_CONNECTIONS = 10;
 const MAX_PENDING_UPGRADES = 64;
 const MAX_BUFFERED_BYTES = 64 * 1024;
-const actions = new Set(["message_received", "message_sent", "message_updated", "status_updated"]);
+const actions = new Set(["message_received", "message_sent", "message_updated", "status_updated", "automation_updated"]);
 const statuses = new Set(["sent", "delivered", "read", "failed"]);
 const isId = value => /^[a-f0-9]{24}$/i.test(String(value || ""));
 const tenants = new Map();

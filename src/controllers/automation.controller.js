@@ -38,6 +38,12 @@ const updateAutomationStatus = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  simulateAutomation: asyncHandler(async (req, res) => {
+    res.json({ success: true, ...await automationService.simulateAutomation(req.tenantId, req.body) });
+  }),
+  listExecutions: asyncHandler(async (req, res) => {
+    res.json({ success: true, executions: await automationService.listExecutions(req.tenantId, req.query) });
+  }),
   listAutomationFlows,
   createAutomationFlow,
   updateAutomationFlow,

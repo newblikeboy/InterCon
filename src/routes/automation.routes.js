@@ -9,6 +9,8 @@ router.use(authenticate);
 router.use(authorize("owner", "admin"));
 
 router.get("/", automationController.listAutomationFlows);
+router.post("/simulate", automationController.simulateAutomation);
+router.get("/executions", automationController.listExecutions);
 router.post("/", automationController.createAutomationFlow);
 router.put("/:id", automationController.updateAutomationFlow);
 router.patch("/:id/status", automationController.updateAutomationStatus);

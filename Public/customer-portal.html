@@ -232,6 +232,7 @@
                 <span data-chatbot-launch-label>Launch</span>
               </button>
               <button class="chatbot-toolbar-button" type="button" data-chatbot-stop hidden>Stop</button>
+              <button class="chatbot-toolbar-button" type="button" data-chatbot-test-toggle aria-expanded="false" aria-controls="chatbot-testing">Test flow</button>
               <button class="chatbot-toolbar-button" type="button" data-chatbot-edit hidden>Edit</button>
               <button class="chatbot-toolbar-button" type="button" data-chatbot-new>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
@@ -240,6 +241,25 @@
             </div>
           </div>
 
+          <section id="chatbot-testing" class="chatbot-testing" hidden>
+            <div>
+              <h3>Test this flow</h3>
+              <p>Enter one customer message per line. Tests use your current edits and send no WhatsApp messages.</p>
+              <label for="chatbot-test-input">Customer messages</label>
+              <textarea id="chatbot-test-input" rows="4" maxlength="20000" data-chatbot-test-input>Hi
+help
+Hi
+1</textarea>
+              <button type="button" class="btn btn-outline btn-small" data-chatbot-test-run>Run simulation</button>
+              <div data-chatbot-test-results role="status" aria-live="polite"></div>
+            </div>
+            <div>
+              <h3>Recent chatbot activity</h3>
+              <p>Check replies, handoffs, retries, and reasons a reply was not sent. Showing the latest 100 messages across your flows.</p>
+              <button type="button" class="btn btn-outline btn-small" data-chatbot-diagnostics>Refresh activity</button>
+              <div data-chatbot-executions role="status" aria-live="polite"></div>
+            </div>
+          </section>
           <div class="chatbot-workspace">
             <main class="chatbot-canvas-frame">
               <p class="contact-message" data-chatbot-message></p>
@@ -668,6 +688,10 @@
                 <span class="inbox-chat-live" data-inbox-chat-live hidden>New message</span>
               </header>
 
+              <div class="inbox-automation-control">
+                <span data-inbox-automation-status>Chatbot ready</span>
+                <button type="button" class="btn-link" data-inbox-automation-control disabled>Take over</button>
+              </div>
               <div class="inbox-history"><button type="button" class="btn-link" data-inbox-older hidden>Load older messages</button>
                   <div class="inbox-messages" data-inbox-messages></div></div>
 

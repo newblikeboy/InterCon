@@ -609,7 +609,7 @@ function getSetupSteps() {
 function isInterconPlanActive(billing = {}) {
   if (!["monthly", "quarterly", "yearly"].includes(billing.plan)) return false;
   if (billing.status !== "active") return false;
-  if (!billing.currentPeriodEnd) return true;
+  if (!billing.currentPeriodEnd) return false;
 
   return new Date(billing.currentPeriodEnd).getTime() > Date.now();
 }
@@ -878,7 +878,7 @@ function renderBilling() {
 
   if (billingCurrentPlan) {
     billingCurrentPlan.textContent = selectedPlan
-      ? `${selectedPlan.name} - ${formatCurrency(selectedPlan.amount, selectedPlan.currency)}`
+      ? `${selectedPlan.name} - ${formatCurrency(billing.amount, billing.currency)}`
       : trial?.active ? "Free access · 20 unique recipients" : "No active plan";
   }
 

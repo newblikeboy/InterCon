@@ -81,7 +81,7 @@ test("opening multiple checkouts preserves access and an older paid order still 
   let sequence = 0;
   t.mock.method(global, "fetch", async (url, options) => {
     if (url.endsWith("/orders")) return response({ id: `order_${++sequence}`, ...JSON.parse(options.body) });
-    return response({ id: "pay_1", order_id: "order_1", status: "captured", amount: 100000, currency: "INR" });
+    return response({ id: "pay_1", order_id: "order_1", status: "captured", amount: 150000, currency: "INR" });
   });
   const first = await billing.selectPlan(tenant._id, "monthly");
   await billing.selectPlan(tenant._id, "yearly");
@@ -98,6 +98,107 @@ test("opening multiple checkouts preserves access and an older paid order still 
 });
 test("subscription month arithmetic clamps month end", () => {
   assert.equal(billing.addMonths(new Date("2026-01-31T10:00:00Z"), 1).toISOString(), "2026-02-28T10:00:00.000Z");
+});
+
+function signedPayment(orderId, paymentId) {
+  return {
+    razorpay_order_id: orderId, razorpay_payment_id: paymentId,
+    razorpay_signature: require("crypto").createHmac("sha256", "test-secret").update(`${orderId}|${paymentId}`).digest("hex")
+  };
+}
+
+test("billing charges all three package prices and adds the purchased months", async t => {
+  const tenant = await workspace();
+  let currentOrder;
+  t.mock.method(global, "fetch", async (url, options) => {
+    if (url.endsWith("/orders")) {
+      currentOrder = { id: `order_${JSON.parse(options.body).notes.plan}`, ...JSON.parse(options.body) };
+      return response(currentOrder);
+    }
+    return response({ id: `pay_${currentOrder.notes.plan}`, order_id: currentOrder.id, status: "captured", amount: currentOrder.amount, currency: currentOrder.currency });
+  });
+  let expectedEnd = tenant.billing.currentPeriodEnd;
+  for (const [plan, amount, months] of [["monthly", 1500, 1], ["quarterly", 4000, 3], ["yearly", 10000, 12]]) {
+    const selected = await billing.selectPlan(tenant._id, plan);
+    assert.equal(selected.checkout.amount, amount * 100);
+    assert.equal(selected.checkout.currency, "INR");
+    const result = await billing.verifyPayment(tenant._id, signedPayment(currentOrder.id, `pay_${plan}`));
+    expectedEnd = billing.addMonths(expectedEnd, months);
+    assert.equal(result.billing.amount, amount);
+    assert.equal(+result.billing.currentPeriodEnd, +expectedEnd);
+    assert.equal((await Payment.findOne({ providerOrderId: currentOrder.id })).amount, amount * 100);
+  }
+});
+
+test("billing blocks purchases for suspended or deleted workspaces before contacting the provider", async t => {
+  const tenant = await workspace();
+  const provider = t.mock.method(global, "fetch", async () => { throw new Error("Unexpected provider call"); });
+  for (const status of ["suspended", "deleted"]) {
+    await Tenant.updateOne({ _id: tenant._id }, { $set: { status } });
+    await assert.rejects(billing.selectPlan(tenant._id, "monthly"), error => error.statusCode === 403);
+  }
+  assert.equal(provider.mock.callCount(), 0);
+  assert.equal(await require("../src/models/BillingOrder").countDocuments(), 0);
+});
+
+test("billing rejects tampered signatures, other tenants, mismatched and uncaptured payments", async t => {
+  const tenant = await workspace();
+  const other = await Tenant.create({ businessName: "Other", contactPerson: "Other", businessEmail: "other@example.test", whatsappNumber: "9876543211" });
+  let providerPayment = { id: "pay_checked", order_id: "order_checked", amount: 150000, currency: "INR", status: "captured" };
+  t.mock.method(global, "fetch", async (url, options) => url.endsWith("/orders")
+    ? response({ id: "order_checked", ...JSON.parse(options.body) }) : response(providerPayment));
+  await billing.selectPlan(tenant._id, "monthly");
+  const payload = signedPayment("order_checked", "pay_checked");
+  await assert.rejects(billing.verifyPayment(tenant._id, { ...payload, razorpay_signature: "f".repeat(64) }), /signature verification failed/);
+  await assert.rejects(billing.verifyPayment(other._id, payload), /order not found/);
+  const valid = { ...providerPayment };
+  for (const mismatch of [{ amount: 100000 }, { currency: "USD" }, { order_id: "order_other" }, { status: "failed" }, { status: "refunded" }]) {
+    providerPayment = { ...valid, ...mismatch };
+    await assert.rejects(billing.verifyPayment(tenant._id, payload), /does not match|not captured/);
+  }
+  assert.equal(await Payment.countDocuments(), 0);
+  assert.equal(+(await Tenant.findById(tenant._id)).billing.currentPeriodEnd, +tenant.billing.currentPeriodEnd);
+});
+
+test("billing concurrent callbacks activate a payment only once", async t => {
+  const tenant = await workspace();
+  t.mock.method(global, "fetch", async (url, options) => url.endsWith("/orders")
+    ? response({ id: "order_concurrent", ...JSON.parse(options.body) })
+    : response({ id: "pay_concurrent", order_id: "order_concurrent", amount: 150000, currency: "INR", status: "captured" }));
+  await billing.selectPlan(tenant._id, "monthly");
+  const payload = signedPayment("order_concurrent", "pay_concurrent");
+  await Promise.all([billing.verifyPayment(tenant._id, payload), billing.verifyPayment(tenant._id, payload)]);
+  assert.equal(await Payment.countDocuments(), 1);
+  assert.equal(+(await Tenant.findById(tenant._id)).billing.currentPeriodEnd, +billing.addMonths(tenant.billing.currentPeriodEnd, 1));
+});
+
+test("billing honors the saved price of an order opened before a price change", async t => {
+  const tenant = await workspace();
+  const Order = require("../src/models/BillingOrder");
+  await Order.create({ tenantId: tenant._id, providerOrderId: "order_old_price", plan: "monthly", amount: 100000, currency: "INR", receipt: "old_price", status: "pending" });
+  t.mock.method(global, "fetch", async () => response({ id: "pay_old_price", order_id: "order_old_price", amount: 100000, currency: "INR", status: "captured" }));
+  const result = await billing.verifyPayment(tenant._id, signedPayment("order_old_price", "pay_old_price"));
+  assert.equal(result.billing.amount, 1000);
+  assert.equal((await Payment.findOne({ providerOrderId: "order_old_price" })).amount, 100000);
+  assert.equal(result.plan.amount, 1500);
+});
+
+test("billing settlement rolls back on a database failure and recovers on retry", async t => {
+  const tenant = await workspace();
+  const Order = require("../src/models/BillingOrder");
+  t.mock.method(global, "fetch", async (url, options) => url.endsWith("/orders")
+    ? response({ id: "order_retry", ...JSON.parse(options.body) })
+    : response({ id: "pay_retry", order_id: "order_retry", amount: 150000, currency: "INR", status: "captured" }));
+  await billing.selectPlan(tenant._id, "monthly");
+  const failure = t.mock.method(Order, "updateOne", async () => { throw new Error("Simulated settlement write failure"); });
+  const payload = signedPayment("order_retry", "pay_retry");
+  await assert.rejects(billing.verifyPayment(tenant._id, payload), /Simulated settlement write failure/);
+  assert.equal(await Payment.countDocuments(), 0);
+  assert.equal(+(await Tenant.findById(tenant._id)).billing.currentPeriodEnd, +tenant.billing.currentPeriodEnd);
+  failure.mock.restore();
+  await billing.verifyPayment(tenant._id, payload);
+  assert.equal(await Payment.countDocuments(), 1);
+  assert.equal((await Order.findOne({ providerOrderId: "order_retry" })).status, "paid");
 });
 
 const Conversation = require("../src/models/Conversation");
@@ -319,7 +420,7 @@ test("platform admin pages and data reject ordinary tenant owners and static byp
 
 test("payment webhook recovers a captured payment without a browser confirmation", async t => {
   const tenant = await workspace();
-  t.mock.method(global, "fetch", async (url, options) => url.endsWith("/orders") ? response({ id: "order_webhook", ...JSON.parse(options.body) }) : response({ id: "pay_webhook", order_id: "order_webhook", status: "captured", amount: 100000, currency: "INR" }));
+  t.mock.method(global, "fetch", async (url, options) => url.endsWith("/orders") ? response({ id: "order_webhook", ...JSON.parse(options.body) }) : response({ id: "pay_webhook", order_id: "order_webhook", status: "captured", amount: 150000, currency: "INR" }));
   await billing.selectPlan(tenant._id, "monthly");
   const body = { event: "payment.captured", payload: { payment: { entity: { id: "pay_webhook", order_id: "order_webhook" } } } };
   const rawBody = Buffer.from(JSON.stringify(body));
@@ -446,7 +547,7 @@ test("bulk insertion failure rolls back the entire batch ledger", async t => {
 
 test("billing reconciliation recovers payment when browser and webhook callbacks are absent", async t => {
   const tenant = await workspace();
-  const captured = { id: "pay_recovered", order_id: "order_recovered", amount: 100000, currency: "INR", status: "captured" };
+  const captured = { id: "pay_recovered", order_id: "order_recovered", amount: 150000, currency: "INR", status: "captured" };
   t.mock.method(global, "fetch", async (url, options) => {
     if (url.endsWith("/orders")) return response({ id: "order_recovered", ...JSON.parse(options.body) });
     if (url.endsWith("/orders/order_recovered/payments")) return response({ items: [captured] });

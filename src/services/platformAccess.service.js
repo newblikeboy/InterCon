@@ -17,7 +17,7 @@ function hasActivePaidPlan(tenant) {
   const billing = tenant?.billing;
   return Boolean(billing && ["monthly", "quarterly", "yearly"].includes(billing.plan)
     && billing.status === "active"
-    && (!billing.currentPeriodEnd || new Date(billing.currentPeriodEnd).getTime() > Date.now()));
+    && billing.currentPeriodEnd && new Date(billing.currentPeriodEnd).getTime() > Date.now());
 }
 
 function publicTrial(tenant) {

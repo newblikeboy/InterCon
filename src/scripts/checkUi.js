@@ -7,7 +7,7 @@ Object.assign(process.env, { NODE_ENV: "test", REDIS_URL: "", CLIENT_ORIGIN: "ht
 const app = require("../app");
 const output = path.resolve("docs/review-2026-09-06/fixes");
 fs.mkdirSync(output, { recursive: true });
-const tenant = { id: "000000000000000000000001", businessName: "Test Shop", status: "active", onboardingStatus: "account_created", meta: {}, billing: { plan: "monthly", status: "active", active: true, currentPeriodEnd: "2027-01-01T00:00:00Z" } };
+const tenant = { id: "000000000000000000000001", businessName: "Test Shop", status: "active", onboardingStatus: "account_created", meta: {}, billing: { plan: "monthly", amount: 1000, currency: "INR", status: "active", active: true, currentPeriodEnd: "2027-01-01T00:00:00Z" } };
 const user = { id: "000000000000000000000002", tenantId: tenant.id, name: "Test Owner", email: "test@example.test", role: "owner", tenant };
 const contact = (index) => ({ _id: index.toString(16).padStart(24, "0"), name: "Customer " + index, phone: String(919900000000 + index), status: "active", optIn: { status: true }, tags: [] });
 const conversation = { id: "000000000000000000000999", customerName: "Test Customer", customerPhone: "919999999999", unreadCount: 5, lastMessageAt: new Date().toISOString(), windowOpen: true, windowExpiresAt: new Date(Date.now() + 3600000).toISOString() };
@@ -62,7 +62,7 @@ async function run() {
         data.flow = liveFlow;
       }
     }
-    if (url.pathname === "/api/billing") Object.assign(data, { billing: tenant.billing, plans: [{ id: "monthly", name: "Monthly", amount: 1000, currency: "INR", interval: "month" }], ...(url.searchParams.get("summary") === "1" ? {} : { payments: [] }) });
+    if (url.pathname === "/api/billing") Object.assign(data, { billing: tenant.billing, plans: [{ id: "monthly", name: "Monthly", amount: 1500, currency: "INR", interval: "month" }], ...(url.searchParams.get("summary") === "1" ? {} : { payments: [] }) });
     if (url.pathname === "/api/messages/send-template" && tenant.billing.platformAccess === false) {
       return route.fulfill({ status: 402, json: { message: "Free allowance complete", details: { code: "INTERCON_PLAN_REQUIRED", trial: tenant.billing.trial } } });
     }
@@ -119,6 +119,10 @@ async function run() {
   await page.evaluate(() => showPortalView("billing"));
   await page.waitForFunction(() => document.querySelector("[data-select-plan]")?.textContent === "Renew plan");
   assert.equal(await page.locator("[data-select-plan]").isEnabled(), true);
+  assert.match(await page.locator("[data-billing-current-plan]").innerText(), /1,000/);
+  assert.match(await page.locator(".billing-plan-card strong").first().innerText(), /1,500/);
+  assert.equal(await page.evaluate(() => isInterconPlanActive({ plan: "monthly", status: "active" })), false);
+  results.push({ check: "billing preserves the purchased price, shows the new renewal price, and rejects missing expiry", passed: true });
   await page.evaluate(() => showPortalView("contacts"));
   await page.goBack();
   await page.waitForFunction(() => !document.getElementById("billing").hidden);

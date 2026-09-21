@@ -45,7 +45,15 @@ test("stored secrets use authenticated encryption", () => {
 
 test("billing plans expose the configured public prices", () => {
   const plans = billingService.getPlans();
-  assert.equal(plans.find((plan) => plan.id === "monthly")?.amount, 1000);
-  assert.equal(plans.find((plan) => plan.id === "quarterly")?.amount, 2500);
-  assert.equal(plans.find((plan) => plan.id === "yearly")?.amount, 9000);
+  assert.equal(plans.find((plan) => plan.id === "monthly")?.amount, 1500);
+  assert.equal(plans.find((plan) => plan.id === "quarterly")?.amount, 4000);
+  assert.equal(plans.find((plan) => plan.id === "yearly")?.amount, 10000);
+});
+
+test("paid billing access requires a valid future expiry", () => {
+  const billing = { plan: "monthly", status: "active" };
+  for (const currentPeriodEnd of [undefined, null, "invalid-date", new Date(0)]) {
+    assert.equal(billingService.hasActivePaidPlan({ billing: { ...billing, currentPeriodEnd } }), false);
+  }
+  assert.equal(billingService.hasActivePaidPlan({ billing: { ...billing, currentPeriodEnd: new Date(Date.now() + 86400000) } }), true);
 });

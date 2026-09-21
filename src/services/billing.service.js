@@ -12,7 +12,7 @@ const plans = [
   {
     id: "monthly",
     name: "Monthly",
-    amount: 1000,
+    amount: 1500,
     currency: "INR",
     interval: "month",
     months: 1
@@ -20,7 +20,7 @@ const plans = [
   {
     id: "quarterly",
     name: "Quarterly",
-    amount: 2500,
+    amount: 4000,
     currency: "INR",
     interval: "quarter",
     months: 3
@@ -28,7 +28,7 @@ const plans = [
   {
     id: "yearly",
     name: "Yearly",
-    amount: 9000,
+    amount: 10000,
     currency: "INR",
     interval: "year",
     months: 12
@@ -119,6 +119,9 @@ async function selectPlan(tenantId, planId) {
   const existingTenant = await Tenant.findById(tenantId).select("businessName businessEmail contactPerson whatsappNumber billing status trial");
   if (!existingTenant) {
     throw new HttpError(404, "Tenant not found");
+  }
+  if (existingTenant.status !== "active") {
+    throw new HttpError(403, "Workspace is suspended or unavailable. Contact support before purchasing a plan.");
   }
 
   const receipt = `ic_${crypto.randomUUID().replaceAll("-", "")}`;

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>InterCon Customer Portal</title>
   <meta name="description" content="InterCon customer portal for connecting WhatsApp Business, managing contacts, creating templates, sending messages, and checking billing readiness.">
-  <link rel="stylesheet" href="style/customer-portal.css?v=20261010-usage1">
+  <link rel="stylesheet" href="style/customer-portal.css?v=20261010-usage2">
 </head>
 <body class="portal-body console-body">
   <div class="portal-shell console-shell">
@@ -77,32 +77,6 @@
           </div>
         </div>
       </header>
-
-      <section class="recipient-usage" data-trial-usage aria-labelledby="recipient-usage-title" hidden>
-        <div class="recipient-usage-intro">
-          <span class="recipient-usage-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M20 11.5a8 8 0 0 1-8 8 9 9 0 0 1-4-.9L3 20l1.4-4.6a8 8 0 1 1 15.6-3.9Z"/><path d="M8.5 7.5c.3 4 2.5 6.2 6.5 7l1-2-2-1-1 1a6 6 0 0 1-3-3l1-1-1-2Z"/></svg>
-          </span>
-          <div>
-            <span class="recipient-usage-label">Free allowance</span>
-            <h2 id="recipient-usage-title">WhatsApp recipients</h2>
-            <p data-usage-description>Your free allowance is ready.</p>
-          </div>
-        </div>
-        <div class="recipient-usage-meter">
-          <div class="recipient-usage-counts" role="status" aria-live="polite" aria-atomic="true">
-            <span class="recipient-usage-total"><strong data-usage-used></strong><span> / <span data-usage-limit></span> used</span></span>
-            <span class="recipient-usage-remaining" data-usage-remaining></span>
-          </div>
-          <div class="recipient-usage-track" data-usage-progress role="progressbar" aria-label="Unique WhatsApp recipients used" aria-valuemin="0">
-            <span class="recipient-usage-fill" data-usage-fill></span>
-            <span class="recipient-usage-pending-fill" data-usage-pending-fill></span>
-          </div>
-          <p class="recipient-usage-pending" data-usage-pending hidden></p>
-        </div>
-        <a class="recipient-usage-plan" href="#billing" data-usage-plan>View plans<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></a>
-        <p class="recipient-usage-note">Only unique numbers messaged count. Adding contacts is free. Meta WhatsApp charges are separate.</p>
-      </section>
 
       <!-- ============ HOME : Services ============ -->
       <div class="portal-view console-home" id="home" data-portal-view>
@@ -846,6 +820,31 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
       </section>
 
       <section class="portal-section portal-view mini" id="billing" data-portal-view hidden>
+        <section class="recipient-usage" data-trial-usage aria-labelledby="recipient-usage-title" hidden>
+          <div class="recipient-usage-intro">
+            <span class="recipient-usage-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M20 11.5a8 8 0 0 1-8 8 9 9 0 0 1-4-.9L3 20l1.4-4.6a8 8 0 1 1 15.6-3.9Z"/><path d="M8.5 7.5c.3 4 2.5 6.2 6.5 7l1-2-2-1-1 1a6 6 0 0 1-3-3l1-1-1-2Z"/></svg>
+            </span>
+            <div>
+              <span class="recipient-usage-label">Free allowance</span>
+              <h2 id="recipient-usage-title">WhatsApp recipients</h2>
+              <p data-usage-description>Your free allowance is ready.</p>
+            </div>
+          </div>
+          <div class="recipient-usage-meter">
+            <div class="recipient-usage-counts" role="status" aria-live="polite" aria-atomic="true">
+              <span class="recipient-usage-total"><strong data-usage-used></strong><span> / <span data-usage-limit></span> used</span></span>
+              <span class="recipient-usage-remaining" data-usage-remaining></span>
+            </div>
+            <div class="recipient-usage-track" data-usage-progress role="progressbar" aria-label="Unique WhatsApp recipients used" aria-valuemin="0">
+              <span class="recipient-usage-fill" data-usage-fill></span>
+              <span class="recipient-usage-pending-fill" data-usage-pending-fill></span>
+            </div>
+            <p class="recipient-usage-pending" data-usage-pending hidden></p>
+          </div>
+          <a class="recipient-usage-plan" href="#billing" data-usage-plan>View plans<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></a>
+          <p class="recipient-usage-note">Only unique numbers messaged count. Adding contacts is free. Meta WhatsApp charges are separate.</p>
+        </section>
         <div class="billing-status-card">
           <div>
             <span>Current plan</span>

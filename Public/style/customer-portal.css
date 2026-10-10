@@ -10196,7 +10196,7 @@ address {
   }
 }
 
-/* Shared free-recipient allowance, visible across portal views. */
+/* Free-recipient allowance on the Billing & Plan page. */
 .recipient-usage {
   --usage-accent: #08724d;
   --usage-tint: #eaf7f0;
@@ -10230,7 +10230,7 @@ address {
 .recipient-usage svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .recipient-usage-icon svg { width: 25px; height: 25px; }
 .recipient-usage-label { display: block; color: var(--usage-accent); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
-.recipient-usage h2 { margin: 4px 0; color: var(--ink); font-size: 15px; font-weight: 700; line-height: 1.3; }
+.console-body .recipient-usage h2 { margin: 4px 0; color: var(--ink); font-size: 15px; font-weight: 700; line-height: 1.3; }
 .recipient-usage-intro p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .recipient-usage-meter { min-width: 0; }
 .recipient-usage-counts { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
@@ -10240,7 +10240,7 @@ address {
 .recipient-usage-track { display: flex; height: 6px; overflow: hidden; border-radius: 6px; background: #edf1f4; }
 .recipient-usage-fill { flex: 0 0 auto; background: var(--usage-accent); }
 .recipient-usage-pending-fill { flex: 0 0 auto; background: repeating-linear-gradient(120deg, #e4c589 0 3px, #f5e8ce 3px 6px); }
-.recipient-usage .recipient-usage-pending { margin: 7px 0 0; color: #79531d; font-size: 11px; line-height: 1.4; }
+.recipient-usage p.recipient-usage-pending { margin: 7px 0 0; color: #79531d; font-size: 11px; line-height: 1.4; }
 .recipient-usage-plan { display: inline-flex; align-items: center; justify-content: center; gap: 12px; padding: 10px 14px; border: 1px solid #dce4df; border-radius: 8px; color: var(--usage-accent); font-size: 12px; font-weight: 700; white-space: nowrap; text-decoration: none; }
 .recipient-usage-plan svg { width: 16px; height: 16px; }
 .recipient-usage-plan:hover { background: var(--usage-tint); border-color: var(--usage-accent); }

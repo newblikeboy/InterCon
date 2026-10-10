@@ -610,13 +610,15 @@ async function run() {
   const paidBilling = tenant.billing;
   tenant.billing = { plan: "none", status: "not_started", active: false, platformAccess: true, trial: { limit: 20, used: 0, remaining: 20, reserved: 0, active: true } };
   await page.evaluate(() => loadBilling());
+  await page.evaluate(() => showPortalView("billing"));
+  assert.equal(await page.locator("[data-trial-usage]").isVisible(), true, "Usage card appears on the plan page");
   assert.equal(await page.locator("[data-usage-used]").innerText(), "0");
   assert.equal(await page.locator("[data-usage-limit]").innerText(), "20");
   assert.equal(await page.locator("[data-usage-remaining]").innerText(), "20 remaining");
   assert.equal(await page.locator("[data-usage-pending]").isVisible(), false);
   for (const view of ["home", "setup", "send-whatsapp", "inbox", "chatbot", "reports", "payments", "api"]) {
     await page.evaluate(view => showPortalView(view), view);
-    assert.equal(await page.locator("[data-trial-usage]").isVisible(), true, "Usage card remains visible in " + view);
+    assert.equal(await page.locator("[data-trial-usage]").isVisible(), false, "Usage card is hidden in " + view);
   }
   const billingCallsBeforeAction = apiCalls.filter(url => url.startsWith("/api/billing")).length;
   assert.equal(await page.evaluate(() => requirePlatformAccessBeforeAction(setSendMessage)), true);
@@ -626,7 +628,7 @@ async function run() {
   assert.equal(await page.locator("[data-payment-history]").textContent(), "Saved payment history", "Usage refresh must preserve payment history");
   tenant.billing.trial = { limit: 20, used: 8, remaining: 12, reserved: 3, active: true };
   await page.evaluate(() => loadBilling());
-  await page.evaluate(() => showPortalView("home"));
+  await page.evaluate(() => showPortalView("billing"));
   assert.equal(await page.locator("[data-usage-progress]").getAttribute("aria-valuenow"), "8", "Pending sends do not count as used");
   assert.equal(await page.locator("[data-usage-remaining]").innerText(), "12 remaining", "Remaining follows the server's confirmed recipient allowance");
   assert.match(await page.locator("[data-usage-pending]").innerText(), /3 recipient sends awaiting confirmation/);
@@ -665,7 +667,7 @@ async function run() {
   await page.evaluate(() => loadBilling());
   assert.equal(await page.evaluate(() => requirePlatformAccessBeforeAction(setSendMessage)), true);
   assert.equal(await page.locator("[data-trial-usage]").isVisible(), false);
-  results.push({ check: "recipient usage across every main menu fits desktop/mobile; pending sends separate; keyboard plan link; 0/20 and 19/20 allow actions; 20/20 prompts payment across reload; paid access hides card", passed: true });
+  results.push({ check: "recipient usage visible only on plan page and fits desktop/mobile; pending sends separate; keyboard plan link; 0/20 and 19/20 allow actions; 20/20 prompts payment across reload; paid access hides card", passed: true });
   await page.goto(origin + "/admin");
   await page.waitForFunction(() => document.querySelector("[data-admin-records]")?.textContent.includes("Test Shop"));
   await page.waitForFunction(() => document.querySelector("[data-admin-stats]")?.textContent.includes("20"));

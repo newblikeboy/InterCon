@@ -853,6 +853,41 @@ function renderOverviewStats() {
   if (statMessagesDetail) statMessagesDetail.textContent = `${setupState.messages.length} total sends`;
 }
 
+function renderRecipientUsage(trial, paidPlanActive) {
+  const card = document.querySelector("[data-trial-usage]");
+  if (!card) return;
+  card.hidden = paidPlanActive || !trial;
+  if (card.hidden) return;
+
+  const count = (value) => Number.isFinite(Number(value)) ? Math.max(0, Math.floor(Number(value))) : 0;
+  const limit = count(trial.limit);
+  const used = Math.min(limit, count(trial.used));
+  const remaining = count(trial.remaining);
+  const reserved = count(trial.reserved);
+  const complete = limit > 0 && used >= limit;
+  const low = !complete && limit > 0 && used / limit >= 0.8;
+  card.dataset.usageState = complete ? "complete" : low ? "low" : "available";
+  card.querySelector("[data-usage-used]").textContent = String(used);
+  card.querySelector("[data-usage-limit]").textContent = String(limit);
+  card.querySelector("[data-usage-remaining]").textContent = `${remaining} remaining`;
+  card.querySelector("[data-usage-description]").textContent = complete
+    ? "Activate a plan to keep sending."
+    : !trial.active ? "Check your plan or workspace status to send."
+    : low ? "Nearly there. Choose a plan for your next sends."
+    : "Reach new customers, one conversation at a time.";
+  const progress = card.querySelector("[data-usage-progress]");
+  progress.setAttribute("aria-valuemax", String(limit));
+  progress.setAttribute("aria-valuenow", String(used));
+  progress.setAttribute("aria-valuetext", `${used} of ${limit} unique recipients used, ${remaining} remaining${reserved ? `, ${reserved} awaiting confirmation` : ""}`);
+  card.querySelector("[data-usage-fill]").style.width = `${limit ? used / limit * 100 : 0}%`;
+  card.querySelector("[data-usage-pending-fill]").style.width = `${limit ? Math.min(reserved, limit - used) / limit * 100 : 0}%`;
+  const pending = card.querySelector("[data-usage-pending]");
+  pending.hidden = reserved === 0;
+  pending.textContent = reserved ? `${reserved} ${reserved === 1 ? "recipient send" : "recipient sends"} awaiting confirmation` : "";
+  const link = card.querySelector("[data-usage-plan]");
+  link.firstChild.textContent = complete ? "Activate plan" : "View plans";
+}
+
 function renderBilling() {
   const billing = setupState.billing || {};
   const active = isInterconPlanActive(billing);
@@ -864,11 +899,7 @@ function renderBilling() {
       + (trial.reserved ? ` ${trial.reserved} recipient send(s) awaiting confirmation.` : "")
       + " Adding contacts does not count. Meta WhatsApp charges are separate."
     : "";
-  const trialUsage = document.querySelector("[data-trial-usage]");
-  if (trialUsage) {
-    trialUsage.hidden = active || !trial;
-    trialUsage.textContent = trialText;
-  }
+  renderRecipientUsage(trial, active);
 
   if (billingStatus) {
     billingStatus.textContent = active ? "Active" : trial?.active ? "Free access" : trial ? "Free allowance used" : formatBillingStatus(billing.status);

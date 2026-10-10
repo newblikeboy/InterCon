@@ -610,17 +610,41 @@ async function run() {
   const paidBilling = tenant.billing;
   tenant.billing = { plan: "none", status: "not_started", active: false, platformAccess: true, trial: { limit: 20, used: 0, remaining: 20, reserved: 0, active: true } };
   await page.evaluate(() => loadBilling());
-  assert.match(await page.locator("[data-trial-usage]").innerText(), /0 of 20 unique WhatsApp recipients/);
+  assert.equal(await page.locator("[data-usage-used]").innerText(), "0");
+  assert.equal(await page.locator("[data-usage-limit]").innerText(), "20");
+  assert.equal(await page.locator("[data-usage-remaining]").innerText(), "20 remaining");
+  assert.equal(await page.locator("[data-usage-pending]").isVisible(), false);
+  for (const view of ["home", "setup", "send-whatsapp", "inbox", "chatbot", "reports", "payments", "api"]) {
+    await page.evaluate(view => showPortalView(view), view);
+    assert.equal(await page.locator("[data-trial-usage]").isVisible(), true, "Usage card remains visible in " + view);
+  }
   const billingCallsBeforeAction = apiCalls.filter(url => url.startsWith("/api/billing")).length;
   assert.equal(await page.evaluate(() => requirePlatformAccessBeforeAction(setSendMessage)), true);
   assert.equal(apiCalls.filter(url => url.startsWith("/api/billing")).length, billingCallsBeforeAction, "Allowed actions avoid a billing preflight request");
   await page.evaluate(() => { document.querySelector("[data-payment-history]").textContent = "Saved payment history"; });
   await page.evaluate(() => loadBilling({ summary: true }));
   assert.equal(await page.locator("[data-payment-history]").textContent(), "Saved payment history", "Usage refresh must preserve payment history");
+  tenant.billing.trial = { limit: 20, used: 8, remaining: 12, reserved: 3, active: true };
+  await page.evaluate(() => loadBilling());
+  await page.evaluate(() => showPortalView("home"));
+  assert.equal(await page.locator("[data-usage-progress]").getAttribute("aria-valuenow"), "8", "Pending sends do not count as used");
+  assert.equal(await page.locator("[data-usage-remaining]").innerText(), "12 remaining", "Remaining follows the server's confirmed recipient allowance");
+  assert.match(await page.locator("[data-usage-pending]").innerText(), /3 recipient sends awaiting confirmation/);
+  for (const width of [1440, 1024, 760, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1 && document.querySelector("[data-trial-usage]").scrollWidth <= document.querySelector("[data-trial-usage]").clientWidth + 1), "Recipient usage fits at " + width);
+    assert.equal(await page.locator("[data-usage-plan]").isVisible(), true);
+    await page.screenshot({ path: path.join(output, `recipient-usage-${width}.png`), animations: "disabled" });
+  }
+  await page.locator("[data-usage-plan]").focus();
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => !document.getElementById("billing").hidden);
   tenant.billing.trial = { limit: 20, used: 19, remaining: 1, reserved: 0, active: true };
   await page.evaluate(() => loadBilling());
   assert.equal(await page.evaluate(() => requirePlatformAccessBeforeAction(setTemplateMessage)), true);
-  assert.match(await page.locator("[data-trial-usage]").innerText(), /19 of 20/);
+  assert.equal(await page.locator("[data-usage-used]").innerText(), "19");
+  assert.equal(await page.locator("[data-trial-usage]").getAttribute("data-usage-state"), "low");
+  assert.equal(await page.locator("[data-usage-pending]").isVisible(), false, "Completed reservations disappear after refresh");
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Trial banner fits mobile");
   tenant.billing.trial = { limit: 20, used: 20, remaining: 0, reserved: 0, active: false };
   tenant.billing.platformAccess = false;
@@ -631,6 +655,9 @@ async function run() {
   assert.equal(await page.evaluate(() => requirePlatformAccessBeforeAction(setSendMessage)), false);
   await page.waitForFunction(() => !document.getElementById("billing").hidden);
   assert.match(await page.locator("[data-billing-message]").innerText(), /Free allowance complete/);
+  assert.equal(await page.locator("[data-trial-usage]").getAttribute("data-usage-state"), "complete");
+  assert.equal(await page.locator("[data-usage-plan]").innerText(), "Activate plan");
+  await page.screenshot({ path: path.join(output, "recipient-usage-complete-mobile.png"), animations: "disabled" });
   await page.reload();
   await page.waitForFunction(() => setupState.billing.trial?.used === 20);
   assert.equal(await page.evaluate(() => hasInterconPlatformAccess(setupState.billing)), false);
@@ -638,7 +665,7 @@ async function run() {
   await page.evaluate(() => loadBilling());
   assert.equal(await page.evaluate(() => requirePlatformAccessBeforeAction(setSendMessage)), true);
   assert.equal(await page.locator("[data-trial-usage]").isVisible(), false);
-  results.push({ check: "free usage shown at 0/20 and 19/20; actions allowed before limit; 20/20 prompts payment across reload; paid access restored", passed: true });
+  results.push({ check: "recipient usage across every main menu fits desktop/mobile; pending sends separate; keyboard plan link; 0/20 and 19/20 allow actions; 20/20 prompts payment across reload; paid access hides card", passed: true });
   await page.goto(origin + "/admin");
   await page.waitForFunction(() => document.querySelector("[data-admin-records]")?.textContent.includes("Test Shop"));
   await page.waitForFunction(() => document.querySelector("[data-admin-stats]")?.textContent.includes("20"));

@@ -933,7 +933,7 @@ async function markMessageUncertain(message, error) {
   };
 }
 
-async function acceptMessage(message, metaResponse = {}) {
+async function acceptMessage(message, metaResponse = {}, trialReservationToken) {
   const metaMessageId = metaResponse.messages?.[0]?.id || "";
   await Message.updateOne(
     { _id: message._id },
@@ -942,6 +942,7 @@ async function acceptMessage(message, metaResponse = {}) {
         status: "accepted",
         metaMessageId,
         acceptedAt: new Date(),
+        ...(trialReservationToken ? { trialReservationToken } : {}),
         lockedAt: null,
         lockedBy: "",
         error: ""
@@ -1084,9 +1085,9 @@ async function processQueuedMessage(message) {
     }
   );
 
-  let response, metaResponse;
+  let response, metaResponse, trialReservationToken;
   try {
-    ({ response, metaResponse } = await sendWhatsAppWithAccess(message.tenantId, message.to, `https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.phoneNumberId}/messages`, {
+    ({ response, metaResponse, trialReservationToken } = await sendWhatsAppWithAccess(message.tenantId, message.to, `https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.phoneNumberId}/messages`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${accessToken}`,
@@ -1133,7 +1134,7 @@ async function processQueuedMessage(message) {
   if (!metaResponse.messages?.[0]?.id) {
     return markMessageUncertain(message, "Provider returned success without a message reference. Review before retrying.");
   }
-  return acceptMessage(message, metaResponse);
+  return acceptMessage(message, metaResponse, trialReservationToken);
 }
 
 async function processNextQueuedMessage(workerId) {

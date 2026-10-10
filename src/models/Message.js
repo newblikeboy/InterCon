@@ -113,6 +113,7 @@ const messageSchema = new mongoose.Schema(
     acceptedAt: {
       type: Date
     },
+    trialReservationToken: { type: String, maxlength: 80 },
     idempotencyKey: {
       type: String,
       trim: true,
@@ -137,6 +138,7 @@ messageSchema.index({ tenantId: 1, createdAt: -1 });
 messageSchema.index({ tenantId: 1, batchId: 1 });
 messageSchema.index({ tenantId: 1, to: 1 });
 messageSchema.index({ tenantId: 1, to: 1, acceptedAt: -1 });
+messageSchema.index({ tenantId: 1, trialReservationToken: 1 }, { partialFilterExpression: { trialReservationToken: { $type: "string" } } });
 messageSchema.index({ status: 1, nextAttemptAt: 1, createdAt: 1 });
 messageSchema.index({ phoneNumberId: 1, status: 1, nextAttemptAt: 1 });
 messageSchema.index({ status: 1, lockedAt: 1 });

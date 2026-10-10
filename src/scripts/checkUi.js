@@ -697,8 +697,11 @@ async function run() {
   await page.evaluate(() => loadBilling());
   await page.evaluate(() => showPortalView("billing"));
   assert.equal(await page.locator("[data-usage-progress]").getAttribute("aria-valuenow"), "8", "Pending sends do not count as used");
-  assert.equal(await page.locator("[data-usage-remaining]").innerText(), "12 remaining", "Remaining follows the server's confirmed recipient allowance");
-  assert.match(await page.locator("[data-usage-pending]").innerText(), /3 recipient sends awaiting confirmation/);
+  assert.equal(await page.locator("[data-usage-remaining]").innerText(), "12 remaining", "Remaining follows the server's confirmed message allowance");
+  assert.equal(await page.locator("#recipient-usage-title").innerText(), "WhatsApp messages");
+  assert.match(await page.locator("[data-usage-description]").innerText(), /Every message counts/);
+  assert.match(await page.locator("[data-usage-progress]").getAttribute("aria-valuetext"), /8 of 20 WhatsApp messages sent/);
+  assert.match(await page.locator("[data-usage-pending]").innerText(), /3 messages awaiting confirmation/);
   for (const width of [1440, 1024, 760, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1 && document.querySelector("[data-trial-usage]").scrollWidth <= document.querySelector("[data-trial-usage]").clientWidth + 1), "Recipient usage fits at " + width);
@@ -736,7 +739,7 @@ async function run() {
   await page.evaluate(() => loadBilling());
   assert.equal(await page.evaluate(() => requirePlatformAccessBeforeAction(setSendMessage)), true);
   assert.equal(await page.locator("[data-trial-usage]").isVisible(), false);
-  results.push({ check: "recipient usage visible only on plan page and fits desktop/mobile; pending sends separate; keyboard plan link; 0/20 and 19/20 allow actions; 20/20 prompts payment across reload; paid access hides card", passed: true });
+  results.push({ check: "message usage visible only on plan page and fits desktop/mobile; repeat sends count; pending sends separate; keyboard plan link; 0/20 and 19/20 allow actions; 20/20 prompts payment across reload; paid access hides card", passed: true });
   await page.goto(origin + "/admin");
   await page.waitForFunction(() => document.querySelector("[data-admin-records]")?.textContent.includes("Test Shop"));
   await page.waitForFunction(() => document.querySelector("[data-admin-stats]")?.textContent.includes("20"));

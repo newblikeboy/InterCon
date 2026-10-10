@@ -56,6 +56,7 @@ const inboxMessageSchema = new mongoose.Schema(
       index: true
     },
     automationExecutionId: mongoose.Schema.Types.ObjectId,
+    trialReservationToken: { type: String, maxlength: 80 },
     automationStep: Number,
     providerStatusAt: { type: Date },
     status: {
@@ -92,6 +93,7 @@ const inboxMessageSchema = new mongoose.Schema(
 inboxMessageSchema.index({ conversationId: 1, createdAt: 1 });
 inboxMessageSchema.index({ automationExecutionId: 1, automationStep: 1 }, { unique: true, partialFilterExpression: { automationExecutionId: { $type: "objectId" } } });
 inboxMessageSchema.index({ tenantId: 1, customerPhone: 1, direction: 1, sentAt: -1 });
+inboxMessageSchema.index({ tenantId: 1, trialReservationToken: 1 }, { partialFilterExpression: { trialReservationToken: { $type: "string" } } });
 inboxMessageSchema.index({ tenantId: 1, conversationId: 1, _id: -1 });
 inboxMessageSchema.index(
   { tenantId: 1, metaMessageId: 1 },

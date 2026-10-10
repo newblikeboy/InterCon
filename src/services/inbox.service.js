@@ -230,7 +230,7 @@ async function sendReply(tenantId, conversationId, body = {}) {
   // Hold before sending so an in-flight bot cannot restore its state over the agent.
   if (!body.automationSend) await setAutomationControl(tenantId, conversationId, { action: "takeover" });
 
-  const { response, metaResponse } = await sendWhatsAppWithAccess(tenantId, conversation.customerPhone, `https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.phoneNumberId}/messages`, {
+  const { response, metaResponse, trialReservationToken } = await sendWhatsAppWithAccess(tenantId, conversation.customerPhone, `https://graph.facebook.com/${env.metaGraphApiVersion}/${tenant.meta.phoneNumberId}/messages`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${accessToken}`,
@@ -268,6 +268,7 @@ async function sendReply(tenantId, conversationId, body = {}) {
     type: "text",
     text,
     metaMessageId,
+    ...(trialReservationToken ? { trialReservationToken } : {}),
     ...(body.automationSend && body.automationExecutionId ? {
       automationExecutionId: body.automationExecutionId, automationStep: body.automationStep
     } : {}),

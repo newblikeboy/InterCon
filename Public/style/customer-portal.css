@@ -10196,7 +10196,7 @@ address {
   }
 }
 
-/* Free-recipient allowance on the Billing & Plan page. */
+/* Free-message allowance on the Billing & Plan page. */
 .recipient-usage {
   --usage-accent: #08724d;
   --usage-tint: #eaf7f0;

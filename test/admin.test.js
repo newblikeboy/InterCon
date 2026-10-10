@@ -86,6 +86,16 @@ test("record pagination, literal search, detail and CSV exports never expose cre
   assert.match(csv.text, /'=SUM\(1,2\)/); assert.doesNotMatch(csv.text, /accessToken|never-expose/);
   await request(app).get("/api/admin/records/tenants?status=unknown").set("Authorization", "Bearer " + signAuthToken(administrator)).expect(400);
 });
+test("admin usage and trial segments use message counts rather than recipient counts", async () => {
+  const workspace = await tenant({ trial: { recipients: ["919999999999"], messagesInitializedAt: new Date(), sentMessages: Array.from({ length: 20 }, (_, i) => `private-message-${i}`) } });
+  const rows = await admin.records("tenants", {});
+  assert.equal(rows.records.find(row => String(row._id) === String(workspace._id)).trialUsed, 20);
+  assert.ok(!(await admin.records("tenants", { segment: "trial" })).records.some(row => String(row._id) === String(workspace._id)));
+  const details = await admin.tenantDetails(String(workspace._id));
+  assert.equal(details.trial.used, 20);
+  assert.equal(details.trial.unit, "messages");
+  assert.doesNotMatch(JSON.stringify(details), /private-message-/);
+});
 test("disabling users revokes cached sessions and records the actor and reason atomically", async () => {
   const administrator = await actor(); const user = await member(await tenant()); const token = signAuthToken(user);
   await request(app).get("/api/auth/me").set("Authorization", "Bearer " + token).expect(200);

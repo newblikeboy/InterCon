@@ -160,8 +160,10 @@ const tenantSchema = new mongoose.Schema(
     },
     trial: {
       initializedAt: Date,
-      // Lifetime usage survives contact deletion, login, and sender-number changes.
+      // Keep the old recipient ledger for migration; new usage is per Meta message.
       recipients: { type: [String], default: [] },
+      messagesInitializedAt: Date,
+      sentMessages: { type: [String], default: [] },
       reservations: {
         type: [{ _id: false, token: String, recipient: String, createdAt: Date }],
         default: []

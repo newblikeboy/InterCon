@@ -14,6 +14,7 @@
     "audit:prod": "npm audit --omit=dev",
     "load:smoke": "node src/scripts/loadSmoke.js",
     "encrypt:tenant-tokens": "node src/scripts/encryptTenantTokens.js",
+    "migrate:trial-messages": "node src/scripts/migrateTrialMessages.js",
     "backfill:unsupported-messages": "node src/scripts/backfillUnsupportedMessages.js",
     "billing:activate": "node src/scripts/activateTenantPlan.js",
     "worker:billing": "node src/workers/billing.worker.js",

@@ -579,7 +579,7 @@ function getSetupSteps() {
       href: "#billing",
       action: "View usage and plans",
       done: paidPlanReady,
-      message: "Use InterCon free until you send to 20 unique WhatsApp recipients. Adding contacts does not count."
+      message: "Start with 20 free WhatsApp messages. Every send counts, including repeat sends to the same number."
     },
     {
       key: "templates",
@@ -874,16 +874,16 @@ function renderRecipientUsage(trial, paidPlanActive) {
     ? "Activate a plan to keep sending."
     : !trial.active ? "Check your plan or workspace status to send."
     : low ? "Your free allowance is nearly used."
-    : "The same number only counts once.";
+    : "Every message counts, even to the same number.";
   const progress = card.querySelector("[data-usage-progress]");
   progress.setAttribute("aria-valuemax", String(limit));
   progress.setAttribute("aria-valuenow", String(used));
-  progress.setAttribute("aria-valuetext", `${used} of ${limit} unique recipients used, ${remaining} remaining${reserved ? `, ${reserved} awaiting confirmation` : ""}`);
+  progress.setAttribute("aria-valuetext", `${used} of ${limit} WhatsApp messages sent, ${remaining} remaining${reserved ? `, ${reserved} awaiting confirmation` : ""}`);
   card.querySelector("[data-usage-fill]").style.width = `${limit ? used / limit * 100 : 0}%`;
   card.querySelector("[data-usage-pending-fill]").style.width = `${limit ? Math.min(reserved, limit - used) / limit * 100 : 0}%`;
   const pending = card.querySelector("[data-usage-pending]");
   pending.hidden = reserved === 0;
-  pending.textContent = reserved ? `${reserved} ${reserved === 1 ? "recipient send" : "recipient sends"} awaiting confirmation` : "";
+  pending.textContent = reserved ? `${reserved} ${reserved === 1 ? "message" : "messages"} awaiting confirmation` : "";
   const link = card.querySelector("[data-usage-plan]");
   link.firstChild.textContent = complete ? "Activate plan" : "View plans";
 }
@@ -911,9 +911,9 @@ function renderBilling() {
     billingMessage.classList.remove("error");
     billingMessage.textContent = active
       ? "Your plan is active" + (billing.currentPeriodEnd ? " through " + new Date(billing.currentPeriodEnd).toLocaleDateString() : "") + ". Renewals add time after your current paid period."
-      : trial?.active ? "Use your free recipient allowance, then activate a plan to keep sending."
+      : trial?.active ? "Send up to 20 free WhatsApp messages, then activate a plan to keep sending."
       : trial ? "Free allowance complete. Activate a plan to continue sending."
-      : "Start free with 20 unique WhatsApp recipients, then choose a plan for further sends.";
+      : "Start with 20 free WhatsApp messages, then choose a plan for further sends.";
   }
 
   if (billingPlanGrid) {
@@ -1093,7 +1093,7 @@ async function requirePlatformAccessBeforeAction(messageSetter) {
   }
   if (hasInterconPlatformAccess(setupState.billing)) return true;
 
-  const message = "Your free allowance of 20 unique WhatsApp recipients is complete. Activate a paid InterCon plan to continue.";
+  const message = "Your free allowance of 20 WhatsApp messages is complete. Activate a paid InterCon plan to continue.";
   messageSetter(message, true);
   showPortalView("billing");
   return false;
@@ -3833,7 +3833,7 @@ if (sendMessageForm) {
         eyebrow: "Bulk WhatsApp",
         title: `Queue this template for ${estimatedCount || "the selected"} recipient${estimatedCount === 1 ? "" : "s"}?`,
         message: "Each customer receives variables from the CSV row matching their unique phone number. Duplicate selections are deduplicated, and the batch is blocked if any eligible selected phone has no row. "
-          + (!isInterconPlanActive(setupState.billing) ? "Free sending stops after your 20th unique WhatsApp recipient; remaining queued messages will require a paid plan. " : "")
+          + (!isInterconPlanActive(setupState.billing) ? "Free sending stops after your 20th WhatsApp message; remaining queued messages will require a paid plan. " : "")
           + "Meta messaging charges may apply.",
         confirmText: "Queue messages"
       });

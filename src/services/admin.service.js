@@ -13,10 +13,15 @@ const HttpError = require("../utils/httpError");
 const { cursorFilter, pageSize } = require("../utils/pagination");
 const sessionCache = require("./sessionCache.service");
 const billing = require("./billing.service");
+const { getAccessTenant, publicTrial, FREE_MESSAGE_LIMIT } = require("./platformAccess.service");
 const { getRedisClient } = require("../config/redis");
 const env = require("../config/env");
 
 const customerFilter = { kind: { $ne: "platform" }, status: { $ne: "deleted" } };
+const trialUsedExpression = () => ({ $size: { $cond: [
+  { $ne: [{ $ifNull: ["$trial.messagesInitializedAt", null] }, null] },
+  { $ifNull: ["$trial.sentMessages", []] }, { $ifNull: ["$trial.recipients", []] }
+] } });
 const definitions = {
   tenants: { model: Tenant, fields: "businessName businessEmail status subscription billing.plan billing.currentPeriodEnd trialUsed meta.phoneNumberId createdAt", select: "businessName businessEmail contactPerson whatsappNumber kind status onboardingStatus billing.plan billing.status billing.amount billing.currency billing.currentPeriodEnd billing.accessSource meta.phoneNumberId meta.wabaId meta.qualityRating meta.connectedAt createdAt updatedAt", search: ["businessName", "businessEmail", "contactPerson", "whatsappNumber"] },
   users: { model: User, fields: "name email workspace role status isVerified lastLoginAt createdAt", select: "name email phone role status isVerified lastLoginAt createdAt tenantId", search: ["name", "email", "phone"] },
@@ -128,13 +133,13 @@ function recordsPipeline(kind, query = {}, paginate = true) {
         paid: { ...paid, "billing.accessSource": { $ne: "manual" } },
         expiring: { ...paid, "billing.accessSource": { $ne: "manual" }, "billing.currentPeriodEnd": { $gt: new Date(), $lte: new Date(Date.now() + 7 * 86400000) } },
         manual: { ...paid, "billing.accessSource": "manual" },
-        trial: { $nor: [paid], $expr: { $lt: [{ $size: { $ifNull: ["$trial.recipients", []] } }, 20] } },
+        trial: { $nor: [paid], $expr: { $lt: [trialUsedExpression(), FREE_MESSAGE_LIMIT] } },
         expired: { "billing.plan": { $in: ["monthly", "quarterly", "yearly"] }, "billing.currentPeriodEnd": { $lte: new Date() } },
         suspended: { status: "suspended" }, connected: { "meta.phoneNumberId": { $type: "string", $ne: "" } }
       };
       stages.push({ $match: segments[segment] });
     }
-    stages.push({ $addFields: { trialUsed: { $size: { $ifNull: ["$trial.recipients", []] } }, subscription: { $cond: [paidExpression(), { $cond: [{ $eq: ["$billing.accessSource", "manual"] }, "manual", "paid"] }, { $cond: [{ $and: [{ $in: ["$billing.plan", ["monthly", "quarterly", "yearly"]] }, { $lte: ["$billing.currentPeriodEnd", new Date()] }] }, "expired", "trial"] }] } } });
+    stages.push({ $addFields: { trialUsed: trialUsedExpression(), subscription: { $cond: [paidExpression(), { $cond: [{ $eq: ["$billing.accessSource", "manual"] }, "manual", "paid"] }, { $cond: [{ $and: [{ $in: ["$billing.plan", ["monthly", "quarterly", "yearly"]] }, { $lte: ["$billing.currentPeriodEnd", new Date()] }] }, "expired", "trial"] }] } } });
   } else {
     stages.push({ $match: filter });
     if (segment && kind !== "users") throw new HttpError(400, "This record type has no customer segments");
@@ -181,9 +186,9 @@ async function tenantDetails(id) {
     Payment.find({ tenantId }).select(definitions.payments.select).sort({ capturedAt: -1 }).limit(10).lean(),
     groupStatuses(Message, { tenantId }), groupStatuses(Contact, { tenantId }), groupStatuses(Template, { tenantId }),
     PlatformAudit.find({ tenantId }).select(definitions.audit.select).sort({ createdAt: -1 }).limit(10).lean(),
-    Tenant.aggregate([{ $match: { _id: tenantId } }, { $project: { used: { $size: { $ifNull: ["$trial.recipients", []] } }, reserved: { $size: { $ifNull: ["$trial.reservations", []] } } } }])
+    getAccessTenant(tenantId)
   ]);
-  return { tenant, users, payments, messages: statusMap(messages), contacts: statusMap(contacts), templates: statusMap(templates), audits, trial: { used: trial[0]?.used || 0, reserved: trial[0]?.reserved || 0, limit: 20 } };
+  return { tenant, users, payments, messages: statusMap(messages), contacts: statusMap(contacts), templates: statusMap(templates), audits, trial: publicTrial(trial) };
 }
 
 function reasonText(body) {

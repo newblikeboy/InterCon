@@ -788,7 +788,9 @@ async function freeWorkspace(used = 0) {
   await Tenant.updateOne({ _id: tenant._id }, { $set: {
     "billing.plan": "none", "billing.status": "not_started",
     "meta.wabaId": String(tenant._id), "meta.phoneNumberId": String(tenant._id),
-    ...(used ? { "trial.initializedAt": new Date(), "trial.recipients": Array.from({ length: used }, (_, i) => String(919800000000 + i)) } : {})
+    ...(used ? { "trial.initializedAt": new Date(), "trial.messagesInitializedAt": new Date(),
+      "trial.sentMessages": Array.from({ length: used }, (_, i) => `seed-message-${i}`),
+      "trial.recipients": Array.from({ length: used }, (_, i) => String(919800000000 + i)) } : {})
   } });
   return Tenant.findById(tenant._id);
 }
@@ -813,16 +815,17 @@ test("paid queued sends reuse their initial tenant read and skip capped quota wr
   assert.equal(writes.mock.callCount(), 0, "A completed lifetime counter needs no tenant writes");
 });
 
-test("paid usage counts new recipients but skips repeat writes and still checks suspension", async t => {
+test("paid lifetime usage counts each distinct message ID, including repeats, and still checks suspension", async t => {
   const tenant = await freeWorkspace(1);
   await Tenant.updateOne({ _id: tenant._id }, { $set: { "billing.plan": "monthly", "billing.status": "active" } });
-  const provider = t.mock.method(global, "fetch", async () => response({ messages: [{ id: "paid-counted" }] }));
+  let sent = 0;
+  const provider = t.mock.method(global, "fetch", async () => response({ messages: [{ id: `paid-counted-${++sent}` }] }));
   const writes = t.mock.method(Tenant, "updateOne");
   await trialSend(tenant._id, "919999999999");
   assert.equal(writes.mock.callCount(), 1);
   await trialSend(tenant._id, "919999999999");
-  assert.equal(writes.mock.callCount(), 1);
-  assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 2);
+  assert.equal(writes.mock.callCount(), 2);
+  assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 3);
   await Tenant.updateOne({ _id: tenant._id }, { $set: { status: "suspended" } });
   await assert.rejects(trialSend(tenant._id, "919999999999"), error => error.statusCode === 403);
   assert.equal(provider.mock.callCount(), 2);
@@ -839,7 +842,7 @@ test("free sends with available capacity avoid history scans and combine quota c
   assert.equal(bulkHistory.mock.callCount() + inboxHistory.mock.callCount(), 0);
   assert.equal(writes.mock.callCount(), 2, "Only reserve and complete are needed");
   const saved = await Tenant.findById(tenant._id);
-  assert.equal(saved.trial.recipients.length, 2);
+  assert.equal(saved.trial.sentMessages.length, 2);
   assert.deepEqual(saved.trial.reservations.map(item => item.token), ["unknown"]);
 });
 
@@ -847,12 +850,12 @@ test("capacity contention recovers accepted sends before deciding whether more m
   const tenant = await freeWorkspace(19);
   const createdAt = new Date(Date.now() - 1000);
   await Tenant.updateOne({ _id: tenant._id }, { $push: { "trial.reservations": { token: "recover-at-capacity", recipient: "919999999999", createdAt } } });
-  await Message.create({ tenantId: tenant._id, to: "919999999999", templateName: "accepted", status: "accepted", acceptedAt: new Date() });
+  await Message.create({ tenantId: tenant._id, to: "919999999999", templateName: "accepted", status: "accepted", acceptedAt: new Date(), metaMessageId: "recovered-at-capacity", trialReservationToken: "recover-at-capacity" });
   const provider = t.mock.method(global, "fetch", async () => response({ messages: [{ id: "must-not-send" }] }));
   await assert.rejects(trialSend(tenant._id, "919777777777"), error => error.statusCode === 402);
   assert.equal(provider.mock.callCount(), 0);
   const saved = await Tenant.findById(tenant._id);
-  assert.equal(saved.trial.recipients.length, 20);
+  assert.equal(saved.trial.sentMessages.length, 20);
   assert.equal(saved.trial.reservations.length, 0);
 });
 
@@ -869,7 +872,7 @@ test("billing summaries omit the payment query while the full billing response k
   assert.equal(history.mock.callCount(), 1);
 });
 
-test("free allowance ignores contacts and counts repeated normalized recipients once", async t => {
+test("free allowance ignores contacts and counts every message to the same normalized number", async t => {
   const tenant = await freeWorkspace();
   await Contact.insertMany(Array.from({ length: 100 }, (_, i) => ({ tenantId: tenant._id, name: "Imported", phone: String(919900000000 + i) })));
   assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 0);
@@ -878,16 +881,17 @@ test("free allowance ignores contacts and counts repeated normalized recipients 
   t.mock.method(global, "fetch", async () => response({ messages: [{ id: `trial-${++sent}` }] }));
   await trialSend(tenant._id, "+91 99999 99999");
   await trialSend(tenant._id, "9999999999");
-  assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 1);
+  assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 2);
   await Contact.deleteMany({ tenantId: tenant._id });
   await Tenant.updateOne({ _id: tenant._id }, { $set: { "meta.phoneNumberId": "new-sender" } });
   const reloaded = await billing.getBillingStatus(tenant._id);
-  assert.equal(reloaded.trial.used, 1);
-  assert.equal(reloaded.trial.remaining, 19);
+  assert.equal(reloaded.trial.used, 2);
+  assert.equal(reloaded.trial.remaining, 18);
+  assert.equal(reloaded.trial.unit, "messages");
   assert.equal(reloaded.active, false);
 });
 
-test("free allowance permits recipient 20 and blocks every further send until payment", async t => {
+test("free allowance permits message 20 and blocks every further send until payment", async t => {
   const tenant = await freeWorkspace(19);
   const provider = t.mock.method(global, "fetch", async () => response({ messages: [{ id: "twentieth" }] }));
   await trialSend(tenant._id, "919999999999");
@@ -906,7 +910,7 @@ test("free allowance permits recipient 20 and blocks every further send until pa
   assert.equal((await billing.getBillingStatus(other._id)).trial.used, 1);
 });
 
-test("free allowance reservations prevent concurrent sends from exceeding 20 recipients", async t => {
+test("free allowance reservations prevent concurrent sends from exceeding 20 messages", async t => {
   const tenant = await freeWorkspace();
   const provider = t.mock.method(global, "fetch", async (_url, options) => {
     await new Promise(resolve => setTimeout(resolve, 40));
@@ -937,21 +941,120 @@ test("free allowance releases rejected sends and holds unknown delivery outcomes
   assert.equal(provider.mock.callCount(), 2);
 });
 
-test("free allowance seeds historical outbound recipients and preserves usage when chats are deleted", async () => {
+test("twenty repeated sends to one number exhaust the free message allowance", async t => {
+  const tenant = await freeWorkspace();
+  let accepted = 0;
+  const provider = t.mock.method(global, "fetch", async () => response({ messages: [{ id: `repeat-${++accepted}` }] }));
+  for (let i = 0; i < 20; i++) await trialSend(tenant._id, "919999999999");
+  await assert.rejects(trialSend(tenant._id, "919999999999"), error => error.statusCode === 402);
+  assert.equal(provider.mock.callCount(), 20);
+  const state = await billing.getBillingStatus(tenant._id);
+  assert.equal(state.trial.used, 20);
+  assert.equal(state.trial.remaining, 0);
+});
+
+test("concurrent repeats to one number cannot bypass the 20 message cap", async t => {
+  const tenant = await freeWorkspace();
+  let accepted = 0;
+  const provider = t.mock.method(global, "fetch", async () => {
+    await new Promise(resolve => setTimeout(resolve, 40));
+    return response({ messages: [{ id: `concurrent-repeat-${++accepted}` }] });
+  });
+  const results = await Promise.allSettled(Array.from({ length: 35 }, () => trialSend(tenant._id, "919999999999")));
+  assert.equal(results.filter(result => result.status === "fulfilled").length, 20);
+  assert.equal(provider.mock.callCount(), 20);
+  const state = await billing.getBillingStatus(tenant._id);
+  assert.equal(state.trial.used, 20);
+  assert.equal(state.trial.reserved, 0);
+});
+
+test("message migration counts historic repeats and remains idempotent across deleted history", async () => {
+  const tenant = await freeWorkspace();
+  await Tenant.updateOne({ _id: tenant._id }, { $set: { "trial.initializedAt": new Date(), "trial.recipients": ["919999999999"] } });
+  await Message.insertMany(Array.from({ length: 22 }, (_, i) => ({ tenantId: tenant._id, to: "919999999999", templateName: "legacy_repeat", status: "accepted", acceptedAt: new Date(), metaMessageId: `legacy-repeat-${i}` })));
+  assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 20);
+  await Message.deleteMany({ tenantId: tenant._id });
+  assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 20);
+  assert.equal((await Tenant.findById(tenant._id)).trial.recipients.length, 1, "Legacy ledger is preserved for migration review");
+});
+
+test("message migration never resets legacy usage or uncertain send reservations", async () => {
+  const tenant = await freeWorkspace();
+  await Tenant.updateOne({ _id: tenant._id }, { $set: {
+    "trial.initializedAt": new Date(), "trial.recipients": Array.from({ length: 19 }, (_, i) => String(919800000000 + i)),
+    "trial.reservations": [{ token: "legacy-unknown", recipient: "919999999999", createdAt: new Date() }]
+  } });
+  const state = await billing.getBillingStatus(tenant._id);
+  assert.equal(state.trial.used, 19);
+  assert.equal(state.trial.reserved, 1);
+  const repeated = await billing.getBillingStatus(tenant._id);
+  assert.equal(repeated.trial.used, 19);
+  assert.equal(repeated.trial.reserved, 1);
+});
+
+test("trial message migration command initializes customer usage once and skips platform accounts", async () => {
+  const tenant = await freeWorkspace();
+  const platform = await Tenant.create({ kind: "platform", businessName: "Platform", contactPerson: "Admin", businessEmail: "admin@example.test", whatsappNumber: "919999999998" });
+  await Message.insertMany(Array.from({ length: 3 }, (_, i) => ({ tenantId: tenant._id, to: "919999999999", templateName: "legacy", status: "accepted", acceptedAt: new Date(), metaMessageId: `migration-cli-${i}` })));
+  const { spawnSync } = require("node:child_process");
+  const run = () => spawnSync(process.execPath, [require.resolve("../src/scripts/migrateTrialMessages")], {
+    env: { ...process.env, MONGODB_URI: database.getUri() }, encoding: "utf8", windowsHide: true, timeout: 60000
+  });
+  const first = run();
+  assert.equal(first.status, 0, first.stderr || first.stdout);
+  assert.match(first.stdout, /Initialized message-based free usage for 1 workspace/);
+  assert.equal((await Tenant.findById(tenant._id)).trial.sentMessages.length, 3);
+  assert.equal((await Tenant.findById(platform._id)).trial.messagesInitializedAt, undefined);
+  const second = run();
+  assert.equal(second.status, 0, second.stderr || second.stdout);
+  assert.match(second.stdout, /Initialized message-based free usage for 0 workspace/);
+  assert.equal((await Tenant.findById(tenant._id)).trial.sentMessages.length, 3);
+});
+
+test("message recovery correlates exact reservations, not another send to the same phone", async t => {
+  const tenant = await freeWorkspace(18);
+  await Tenant.updateOne({ _id: tenant._id }, { $push: { "trial.reservations": { $each: [
+    { token: "accepted-token", recipient: "919999999999", createdAt: new Date() },
+    { token: "unknown-token", recipient: "919999999999", createdAt: new Date() }
+  ] } } });
+  await Message.create({ tenantId: tenant._id, to: "919999999999", templateName: "accepted", status: "accepted", acceptedAt: new Date(), metaMessageId: "exact-message", trialReservationToken: "accepted-token" });
+  const conversation = await Conversation.create({ tenantId: tenant._id, customerPhone: "919999999999" });
+  await InboxMessage.create({ tenantId: tenant._id, conversationId: conversation._id, customerPhone: "919999999999", direction: "out", status: "sent", metaMessageId: "exact-message", trialReservationToken: "accepted-token" });
+  const state = await billing.getBillingStatus(tenant._id);
+  assert.equal(state.trial.used, 19, "Mirrored acceptance evidence counts once");
+  assert.equal(state.trial.reserved, 1, "The other same-phone send remains uncertain");
+  assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 19, "Recovery can be repeated safely");
+  const provider = t.mock.method(global, "fetch", async () => response({ messages: [{ id: "must-not-send" }] }));
+  await assert.rejects(trialSend(tenant._id, "919999999999"), error => error.details?.code === "INTERCON_TRIAL_BUSY");
+  assert.equal(provider.mock.callCount(), 0);
+});
+
+test("duplicate provider acceptance IDs do not double-charge free message usage", async t => {
+  const tenant = await freeWorkspace();
+  t.mock.method(global, "fetch", async () => response({ messages: [{ id: "same-provider-message" }] }));
+  await trialSend(tenant._id, "919999999999");
+  await trialSend(tenant._id, "919999999999");
+  const state = await billing.getBillingStatus(tenant._id);
+  assert.equal(state.trial.used, 1);
+  assert.equal(state.trial.reserved, 0);
+});
+
+test("free allowance seeds historical outbound messages, deduplicates inbox mirrors and survives chat deletion", async () => {
   const tenant = await freeWorkspace();
   const conversation = await Conversation.create({ tenantId: tenant._id, customerPhone: "919900000001" });
   await Message.insertMany([
-    { tenantId: tenant._id, to: "919900000000", templateName: "hello", status: "accepted", acceptedAt: new Date() },
+    { tenantId: tenant._id, to: "919900000000", templateName: "hello", status: "accepted", acceptedAt: new Date(), metaMessageId: "historical-first" },
+    { tenantId: tenant._id, to: "919900000000", templateName: "hello", status: "accepted", acceptedAt: new Date(), metaMessageId: "historical-repeat" },
     { tenantId: tenant._id, to: "919900000002", templateName: "hello", status: "queued" },
     { tenantId: tenant._id, to: "919900000003", templateName: "hello", status: "failed" }
   ]);
   await InboxMessage.insertMany([
-    { tenantId: tenant._id, conversationId: conversation._id, customerPhone: "919900000000", direction: "out", status: "sent" },
-    { tenantId: tenant._id, conversationId: conversation._id, customerPhone: "919900000001", direction: "out", status: "sent" },
+    { tenantId: tenant._id, conversationId: conversation._id, customerPhone: "919900000000", direction: "out", status: "sent", metaMessageId: "historical-first" },
+    { tenantId: tenant._id, conversationId: conversation._id, customerPhone: "919900000001", direction: "out", status: "sent", metaMessageId: "historical-inbox" },
     { tenantId: tenant._id, conversationId: conversation._id, customerPhone: "919900000004", direction: "in", status: "received" }
   ]);
   await inbox.deleteConversation(tenant._id, conversation._id);
-  assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 2);
+  assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 3);
   assert.equal(await InboxMessage.countDocuments({ tenantId: tenant._id }), 0);
 });
 
@@ -1019,7 +1122,7 @@ test("free allowance recovers a failed usage write without repeating accepted de
   const original = Tenant.updateOne.bind(Tenant);
   let failedWrite = false;
   t.mock.method(Tenant, "updateOne", (filter, update, ...rest) => {
-    if (update.$addToSet?.["trial.recipients"] && !failedWrite) {
+    if (update.$addToSet?.["trial.sentMessages"] && !failedWrite) {
       failedWrite = true;
       throw new Error("Simulated quota bookkeeping failure");
     }

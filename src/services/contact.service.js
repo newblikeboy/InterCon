@@ -123,6 +123,7 @@ async function updateContact(tenantId, contactId, body = {}, actorId) {
 
   const current = await Contact.findOne({ _id: contactId, tenantId }).lean();
   if (!current) throw new HttpError(404, "Contact not found");
+  if (current.status !== "active" && contact.phone !== current.phone) throw new HttpError(400, "Restore this contact with fresh consent before changing its blacklisted or opted-out number.");
   if (current.status !== "active" && status === "active" && (!contact.optIn.status || !contact.optIn.proof.trim())) throw new HttpError(400, "To restore this contact, confirm fresh consent and enter its evidence.");
   const existing = await Contact.findOne({
     tenantId,
@@ -137,9 +138,21 @@ async function updateContact(tenantId, contactId, body = {}, actorId) {
   let updated;
   try {
     await session.withTransaction(async () => {
-      updated = await Contact.findOneAndUpdate({ _id: contactId, tenantId, status: current.status }, {
-        $set: { ...contact, status }
-      }, { returnDocument: "after", runValidators: true, session });
+      const update = { $set: { ...contact, status } };
+      if (current.status !== status) {
+        if (status === "active") {
+          update.$unset = { suppression: 1 };
+          update.$set.suppressionClearedAt = new Date();
+        } else {
+          update.$set.suppression = {
+            kind: status === "opted_out" ? "opt_out" : "manual",
+            reason: contact.optIn.proof || "Contact status changed in contact editor",
+            recordedAt: new Date()
+          };
+        }
+      }
+      updated = await Contact.findOneAndUpdate({ _id: contactId, tenantId, status: current.status }, update,
+        { returnDocument: "after", runValidators: true, session });
       if (!updated) throw new HttpError(409, "This contact changed while you were editing. Reload it and try again.");
       if (current.status !== status) await require("../models/ContactStatusEvent").create([{
         tenantId, contactId, actorId, previousStatus: current.status, status,
@@ -211,6 +224,8 @@ async function suppressContact(tenantId, body = {}, actorId) {
   if (!["blocked", "opted_out"].includes(status)) throw new HttpError(400, "Choose blocked or opted out");
   const reason = String(body.reason || "").trim();
   if (!reason || reason.length > 1000) throw new HttpError(400, "Enter a reason of 1 to 1000 characters");
+  const kind = status === "opted_out" ? "opt_out" : String(body.kind || "manual");
+  if (status === "blocked" && !["manual", "customer_block"].includes(kind)) throw new HttpError(400, "Choose a manual block or a customer-reported block");
   const session = await mongoose.startSession();
   let contact;
   try {
@@ -219,11 +234,44 @@ async function suppressContact(tenantId, body = {}, actorId) {
       const previousStatus = contact?.status || "active";
       if (!contact) contact = new Contact({ tenantId, phone, name: phone, source: "manual_suppression" });
       contact.status = status;
+      contact.suppression = { kind, reason, recordedAt: new Date() };
       contact.optIn = { status: false, proof: reason.slice(0, 240), capturedAt: new Date() };
       await contact.save({ session });
       await require("../models/ContactStatusEvent").create([{ tenantId, contactId: contact._id, actorId, previousStatus, status, reason }], { session });
     });
     return contact;
+  } finally { await session.endSession(); }
+}
+
+// 131026 says the recipient cannot receive this message; it does not confirm
+// that they blocked the business. Suppress future sends without asserting that.
+async function suppressUndeliverableContact(tenantId, phone, error = {}, { metaMessageId, sentAt } = {}) {
+  if (Number(error?.code) !== 131026) return null;
+  phone = normalizePhone(phone);
+  assertValidWhatsappPhone(phone);
+  const reason = ["WhatsApp could not deliver (131026). Possible block or unavailable WhatsApp account.",
+    error.error_data?.details || error.title || error.message].filter(Boolean).join(" ").slice(0, 1000);
+  const session = await mongoose.startSession();
+  let result = null;
+  try {
+    await session.withTransaction(async () => {
+      result = null;
+      let contact = await Contact.findOne({ tenantId, phone }).session(session);
+      // Preserve manual blocks/opt-outs and make duplicate webhook events harmless.
+      if (contact && contact.status !== "active") return;
+      // A delayed failure from a send before fresh consent cannot undo restoration.
+      if (contact?.suppressionClearedAt && (!sentAt || new Date(sentAt) <= contact.suppressionClearedAt)) return;
+      if (!contact) contact = new Contact({ tenantId, phone, name: phone, source: "whatsapp_delivery_failure" });
+      contact.status = "blocked";
+      contact.suppression = { kind: "delivery_failure", reason, recordedAt: new Date(), errorCode: 131026, metaMessageId };
+      contact.optIn = { status: false, proof: reason.slice(0, 240), capturedAt: new Date() };
+      await contact.save({ session });
+      await require("../models/ContactStatusEvent").create([{
+        tenantId, contactId: contact._id, previousStatus: "active", status: "blocked", reason
+      }], { session });
+      result = contact;
+    });
+    return result;
   } finally { await session.endSession(); }
 }
 
@@ -380,6 +428,7 @@ async function deleteSegment(tenantId, segmentId) {
 }
 
 module.exports = {
+  suppressUndeliverableContact,
   suppressContact,
   listContacts,
   createContact,

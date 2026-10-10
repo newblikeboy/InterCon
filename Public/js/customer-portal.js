@@ -1974,21 +1974,14 @@ function renderSendVariableEditor() {
   )).join("");
 
   sendVariableEditor.innerHTML = `
-    <div class="send-variable-guide">
-      <p class="send-variable-guide-body">${guideBody}</p>
-      <ul class="send-variable-guide-list">${guideItems}</ul>
-    </div>
     <div class="send-variable-import">
       <div class="send-variable-actions">
-        <button type="button" data-download-variable-csv>Download CSV for selected recipients</button>
-        <label>
-          Upload completed file
-          <input type="file" accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden data-upload-variable-csv>
-        </label>
+        <button type="button" data-download-variable-csv aria-label="Download CSV for selected recipients"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5"/></svg>Download recipient CSV</button>
+        <button type="button" class="send-variable-upload" data-open-variable-file><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m-5 5 5-5 5 5M5 16v5h14v-5"/></svg>Upload completed file</button>
+        <input type="file" accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" aria-label="Completed recipient variable file" hidden data-upload-variable-csv>
         ${sendVariableDataState.rows.length ? `<button type="button" class="details" data-see-variable-details>See details</button>` : ""}
         ${sendVariableDataState.rows.length ? `<button type="button" class="clear" data-clear-variable-csv>Clear file</button>` : ""}
       </div>
-      <code>${headers.map((header) => escapeHtml(header)).join(",")}</code>
       <div class="send-variable-file-state${sendVariableDataState.rows.length ? " is-ready" : ""}">
         <strong>${sendVariableDataState.rows.length
           ? `${sendVariableDataState.rows.length} phone row${sendVariableDataState.rows.length === 1 ? "" : "s"} loaded`
@@ -2009,6 +2002,14 @@ function renderSendVariableEditor() {
             </div>
           `).join("")}
         </div>` : ""}
+      <details class="send-variable-format">
+        <summary>Template variables and file columns</summary>
+        <div class="send-variable-guide">
+          <p class="send-variable-guide-body">${guideBody}</p>
+          <ul class="send-variable-guide-list">${guideItems}</ul>
+          <code>${headers.map((header) => escapeHtml(header)).join(",")}</code>
+        </div>
+      </details>
     </div>`;
   updateSendRecipientSummary();
 }
@@ -2053,7 +2054,30 @@ function parseCsvMatrix(text) {
   let row = [];
   let value = "";
   let quoted = false;
-  const source = String(text || "").replace(/^\uFEFF/, "");
+  let source = String(text || "").replace(/^\uFEFF/, "");
+  // Excel uses the regional list separator when saving CSV files. Count only
+  // separators outside quoted header cells, so commas in sample values are safe.
+  const separatorDirective = source.match(/^sep=([,;\t])(?:\r\n|\n|\r)/i);
+  let separator = separatorDirective?.[1] || ",";
+  if (separatorDirective) {
+    source = source.slice(separatorDirective[0].length);
+  } else {
+    const counts = { ",": 0, ";": 0, "\t": 0 };
+    let inQuotes = false;
+    for (let index = 0; index < source.length; index += 1) {
+      const character = source[index];
+      if (character === '"') {
+        if (inQuotes && source[index + 1] === '"') index += 1;
+        else inQuotes = !inQuotes;
+      } else if (!inQuotes) {
+        if (character === "\r" || character === "\n") break;
+        if (Object.hasOwn(counts, character)) counts[character] += 1;
+      }
+    }
+    separator = Object.keys(counts).reduce((best, candidate) => (
+      counts[candidate] > counts[best] ? candidate : best
+    ), ",");
+  }
 
   for (let index = 0; index < source.length; index += 1) {
     const character = source[index];
@@ -2068,11 +2092,12 @@ function parseCsvMatrix(text) {
       }
     } else if (character === '"') {
       quoted = true;
-    } else if (character === ",") {
+    } else if (character === separator) {
       row.push(value);
       value = "";
-    } else if (character === "\n") {
-      row.push(value.replace(/\r$/, ""));
+    } else if (character === "\n" || character === "\r") {
+      if (character === "\r" && source[index + 1] === "\n") index += 1;
+      row.push(value);
       rows.push(row);
       row = [];
       value = "";
@@ -2086,7 +2111,7 @@ function parseCsvMatrix(text) {
   return rows;
 }
 
-async function parseSpreadsheetMatrix(file) {
+async function parseSpreadsheetMatrix(file, preservePhoneNumbers = false) {
   if (!window.XLSX) {
     throw new Error("Spreadsheet parser could not be loaded. Refresh the page and try again.");
   }
@@ -2099,15 +2124,25 @@ async function parseSpreadsheetMatrix(file) {
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   if (!sheet) return [];
 
-  return window.XLSX.utils.sheet_to_json(sheet, {
+  const rows = window.XLSX.utils.sheet_to_json(sheet, {
     header: 1,
     defval: "",
     raw: false
-  }).map((row) => row.map((value) => String(value ?? "").trim()));
+  });
+  if (preservePhoneNumbers) {
+    // A narrow Excel column can display a rounded scientific value while the
+    // numeric cell still stores the complete phone. Use that stored value only
+    // for phones; keep date/currency formatting in the template variable cells.
+    const rawRows = window.XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: true });
+    rows.forEach((row, index) => {
+      if (index > 0 && typeof rawRows[index]?.[0] === "number") row[0] = rawRows[index][0];
+    });
+  }
+  return rows.map((row) => row.map((value) => String(value ?? "").trim()));
 }
 
 async function parseRecipientVariableFile(file) {
-  if (isSpreadsheetFile(file)) return parseRecipientVariableRows(await parseSpreadsheetMatrix(file), "Spreadsheet");
+  if (isSpreadsheetFile(file)) return parseRecipientVariableRows(await parseSpreadsheetMatrix(file, true), "Spreadsheet");
   if (/\.csv$/i.test(file.name || "") || /csv/i.test(file.type || "")) {
     return parseRecipientVariableRows(parseCsvMatrix(await file.text()), "CSV");
   }
@@ -2137,10 +2172,7 @@ function parseRecipientVariableRows(matrix, fileKind = "CSV") {
     if (row.length !== expectedColumnCount) {
       throw new Error(`${fileKind} row ${rowNumber} must contain ${expectedColumnCount} columns.`);
     }
-    if (looksLikeExcelScientific(row[0])) {
-      throw new Error(`${fileKind} row ${rowNumber}: Excel converted the phone number to scientific notation ("${String(row[0]).trim()}"), which loses digits. Re-download the CSV and fill it again, or format the phone column as Number (0 decimals) before saving.`);
-    }
-    const phone = normalizeSendPhone(row[0]);
+    const phone = normalizeRecipientFilePhone(row[0], fileKind, rowNumber);
     const variables = row.slice(1).map((value) => String(value).trim());
     if (!/^\d{11,15}$/.test(phone)) throw new Error(`${fileKind} row ${rowNumber} has an invalid phone number.`);
     if (seenPhones.has(phone)) throw new Error(`Phone ${phone} appears more than once in the ${fileKind} file.`);
@@ -2156,15 +2188,35 @@ function escapeCsvValue(value) {
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-// Excel turns 12+ digit numbers into scientific notation (9.19877E+11) and saves
-// that back to the CSV, destroying the phone number. Emitting the cell as ="…"
-// forces Excel to keep it as text; phone normalization strips the wrapper on upload.
+// Return a CSV-escaped text formula so Excel preserves all phone digits and its
+// embedded quotation marks survive a standard CSV reader.
 function excelTextCell(value) {
-  return `="${String(value ?? "").replace(/"/g, "")}"`;
+  return escapeCsvValue(`="${String(value ?? "").replace(/"/g, "")}"`);
 }
 
 function looksLikeExcelScientific(value) {
-  return /^-?\d+(\.\d+)?E[+-]?\d+$/i.test(String(value ?? "").trim());
+  return /^[+-]?\d+([.,]\d+)?E[+-]?\d+$/i.test(String(value ?? "").trim());
+}
+
+function normalizeRecipientFilePhone(value, fileKind, rowNumber) {
+  let text = String(value ?? "").trim();
+  // Accept our downloaded text formula and older CSVs whose unescaped quotes
+  // were removed by the CSV reader before checking for scientific notation.
+  text = text.replace(/^="([^"]*)"$/, "$1").replace(/^=(?=[+\d-])/, "");
+  if (!looksLikeExcelScientific(text)) return normalizeSendPhone(text);
+
+  const match = text.match(/^\+?(\d+)(?:[.,](\d+))?E\+?(\d+)$/i);
+  if (match) {
+    const digits = match[1] + (match[2] || "");
+    const decimalPosition = match[1].length + Number(match[3]);
+    // Accept scientific notation only when every integer digit is present.
+    // Expanding a short mantissa with invented zeroes could target another phone.
+    if (decimalPosition <= 15 && decimalPosition <= digits.length
+      && /^0*$/.test(digits.slice(decimalPosition))) {
+      return normalizeSendPhone(digits.slice(0, decimalPosition));
+    }
+  }
+  throw new Error(`${fileKind} row ${rowNumber}: Excel saved the phone number in rounded scientific notation ("${text}"). Upload the original Excel workbook (.xlsx/.xls), or download a fresh CSV and keep the phone column as Text. Formatting an already rounded CSV cannot restore the original digits.`);
 }
 
 async function downloadRecipientVariableCsv() {
@@ -3079,6 +3131,8 @@ function renderTemplateLibraryItems() {
   if (!host) return;
   const moreHost = document.querySelector("[data-lib-more-host]");
   if (moreHost) moreHost.hidden = !templateLibraryState.nextCursor;
+  const resultCount = document.querySelector('[data-lib-results]');
+  if (resultCount) resultCount.textContent = `${templateLibraryState.items.length} template${templateLibraryState.items.length === 1 ? '' : 's'}${templateLibraryState.nextCursor ? ' loaded' : ''}`;
 
   if (!templateLibraryState.items.length) {
     host.innerHTML = '<div class="empty-row">No library templates matched. Try a different search or topic.</div>';
@@ -3093,22 +3147,24 @@ function renderTemplateLibraryItems() {
       return `<span class="lib-cta">${icon}${escapeText(label)}</span>`;
     }).join("");
     const meta = [formatLibraryLabel(tpl.topic), formatLibraryLabel(tpl.usecase)].filter(Boolean).join(" · ");
+    const language = [...document.querySelector('[data-lib-language]').options].find(option => option.value === tpl.language)?.textContent || tpl.language;
     return `
     <article class="lib-card">
+      <div class="lib-card-heading">
+        <span class="lib-badge cat-${escapeText(tpl.category)}">${LIB_CATEGORY_LABEL[tpl.category] || escapeText(tpl.category)}</span>
+        <h3>${escapeText(formatLibraryLabel(tpl.name))}</h3>
+        <p class="lib-meta">${escapeText(meta || "General")}</p>
+      </div>
       <div class="lib-preview">
+        <span class="lib-preview-label">Message preview</span>
         <div class="lib-bubble">
           <p>${renderLibraryBodyHtml(tpl)}</p>
-          <span class="lib-bubble-time">11:45</span>
         </div>
         ${buttons ? `<div class="lib-ctas">${buttons}</div>` : ""}
       </div>
       <div class="lib-card-info">
-        <div class="lib-card-title">
-          <h3>${escapeText(formatLibraryLabel(tpl.name))}</h3>
-          <span class="lib-badge cat-${escapeText(tpl.category)}">${LIB_CATEGORY_LABEL[tpl.category] || escapeText(tpl.category)}</span>
-        </div>
-        <p class="lib-meta">${escapeText(meta || "General")} · ${escapeText(tpl.language)}</p>
-        <button class="btn btn-small" type="button" data-use-library-template="${index}">Use template</button>
+        <span class="lib-language-tag">${escapeText(language)}</span>
+        <button class="btn btn-small" type="button" data-use-library-template="${index}" aria-label="Use ${escapeText(formatLibraryLabel(tpl.name))} template">Use template <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
       </div>
     </article>`;
   }).join("");
@@ -3118,9 +3174,15 @@ async function loadTemplateLibrary({ append = false } = {}) {
   const host = document.querySelector("[data-template-library]");
   if (!host || templateLibraryState.loading) return;
   templateLibraryState.loading = true;
+  host.setAttribute('aria-busy', 'true');
+  const controls = document.querySelectorAll('[data-lib-refresh], [data-lib-reload], [data-lib-more]');
+  controls.forEach(button => { button.disabled = true; });
   if (!append) {
     templateLibraryState.nextCursor = "";
     host.innerHTML = '<div class="empty-row">Loading Meta\'s template library...</div>';
+    const resultCount = document.querySelector('[data-lib-results]');
+    if (resultCount) resultCount.textContent = 'Loading templates...';
+    document.querySelector('[data-lib-more-host]').hidden = true;
   }
   setLibraryMessage("");
 
@@ -3143,8 +3205,11 @@ async function loadTemplateLibrary({ append = false } = {}) {
   } catch (error) {
     if (!append) host.innerHTML = `<div class="empty-row">${escapeText(error.message)}</div>`;
     setLibraryMessage(error.message, true);
+    if (!append) document.querySelector('[data-lib-results]').textContent = 'Templates unavailable';
   } finally {
     templateLibraryState.loading = false;
+    host.setAttribute('aria-busy', 'false');
+    controls.forEach(button => { button.disabled = false; });
   }
 }
 
@@ -3782,6 +3847,11 @@ if (sendLanguageSelect) {
 }
 
 sendVariableEditor?.addEventListener("click", (event) => {
+  const uploadButton = event.target.closest("[data-open-variable-file]");
+  if (uploadButton) {
+    sendVariableEditor.querySelector("[data-upload-variable-csv]")?.click();
+    return;
+  }
   const downloadButton = event.target.closest("[data-download-variable-csv]");
   const detailsButton = event.target.closest("[data-see-variable-details]");
   const clearButton = event.target.closest("[data-clear-variable-csv]");
@@ -4009,6 +4079,7 @@ templateCtaList?.addEventListener("input", (event) => {
 
 // Template Library: search/filter Meta's library and adopt templates into the WABA.
 document.querySelector("[data-lib-refresh]")?.addEventListener("click", () => loadTemplateLibrary());
+document.querySelector("[data-lib-reload]")?.addEventListener("click", () => loadTemplateLibrary());
 document.querySelector("[data-lib-language]")?.addEventListener("change", () => loadTemplateLibrary());
 document.querySelector("[data-lib-more]")?.addEventListener("click", () => loadTemplateLibrary({ append: true }));
 
@@ -4018,11 +4089,23 @@ document.querySelector("[data-lib-topics]")?.addEventListener("click", (event) =
   templateLibraryState.topic = option.dataset.libTopicOption || "";
   document.querySelectorAll("[data-lib-topic-option]").forEach((button) => {
     button.classList.toggle("is-active", button === option);
+    button.setAttribute('aria-pressed', String(button === option));
   });
   loadTemplateLibrary();
 });
 
 let libSearchDebounce = null;
+document.querySelector('[data-lib-clear]')?.addEventListener('click', () => {
+  clearTimeout(libSearchDebounce);
+  document.querySelector('[data-lib-search]').value = '';
+  document.querySelector('[data-lib-language]').value = '';
+  templateLibraryState.topic = '';
+  document.querySelectorAll('[data-lib-topic-option]').forEach(button => {
+    const active = button.dataset.libTopicOption === '';
+    button.classList.toggle('is-active', active); button.setAttribute('aria-pressed', String(active));
+  });
+  loadTemplateLibrary();
+});
 document.querySelector("[data-lib-search]")?.addEventListener("input", () => {
   clearTimeout(libSearchDebounce);
   libSearchDebounce = setTimeout(() => loadTemplateLibrary(), 450);
@@ -6571,28 +6654,100 @@ if (inboxRailBadge) {
 
 async function loadSuppressionList(status) {
   const host = document.querySelector('[data-suppression-list="' + status + '"]');
+  if (!host) return;
+  const count = document.querySelector('[data-suppression-count="' + status + '"]');
+  host.classList.add('table-panel', 'suppression-table');
+  const showState = (message) => {
+    const state = document.createElement('div');
+    state.className = 'empty-row'; state.textContent = message;
+    host.replaceChildren(state);
+  };
+  showState('Loading contacts...');
   try {
     const data = await requestAllPages('/api/contacts?status=' + status, 'contacts');
     host.replaceChildren();
-    if (!data.contacts.length) { host.textContent = 'No contacts in this list.'; return; }
-    for (const contact of data.contacts) {
-      const row = document.createElement('div'), text = document.createElement('p'), button = document.createElement('button');
-      text.textContent = contact.name + ' ? +' + contact.phone + ' ? ' + (contact.optIn?.proof || 'No reason recorded');
-      button.type = 'button'; button.className = 'btn-link'; button.textContent = 'Edit contact';
-      button.addEventListener('click', async () => { await loadContacts(); openContactEditModal(contact._id); });
-      row.append(text, button); host.append(row);
+    if (count) count.textContent = data.contacts.length;
+    if (!data.contacts.length) {
+      showState(status === 'blocked' ? 'No numbers on this list. Blocked numbers will appear here.' : 'No opted-out contacts yet. Customer opt-outs will appear here.');
+      return;
     }
-  } catch (error) { host.textContent = error.message; }
+    host.setAttribute('role', 'table');
+    host.setAttribute('aria-label', status === 'blocked' ? 'Blocked numbers' : 'Opted-out contacts');
+    const header = document.createElement('div');
+    header.className = 'table-row suppression-table-row table-head'; header.setAttribute('role', 'row');
+    const typeLabel = status === 'blocked' ? 'Block type' : 'Status';
+    for (const label of ['Contact', typeLabel, 'Reason', 'Recorded', 'Action']) {
+      const cell = document.createElement('span'); cell.textContent = label; cell.setAttribute('role', 'columnheader'); header.append(cell);
+    }
+    host.append(header);
+    for (const contact of data.contacts) {
+      const row = document.createElement('div'), text = document.createElement('strong'), button = document.createElement('button');
+      row.className = 'table-row suppression-table-row suppression-entry'; row.setAttribute('role', 'row');
+      text.className = 'suppression-contact'; text.setAttribute('role', 'cell');
+      const name = document.createElement('span'), phone = document.createElement('small');
+      name.textContent = contact.name === contact.phone ? 'WhatsApp contact' : contact.name;
+      phone.textContent = '+' + contact.phone; text.append(name, phone);
+      const type = document.createElement('span'), reason = document.createElement('span'), date = document.createElement('span'), action = document.createElement('span');
+      for (const [cell, label] of [[type, typeLabel], [reason, 'Reason'], [date, 'Recorded'], [action, 'Action']]) {
+        cell.setAttribute('role', 'cell'); cell.dataset.label = label;
+      }
+      const labels = { customer_block: 'Customer reported blocking us', delivery_failure: 'Unable to receive — possible block', manual: 'Manual blacklist', opt_out: 'Customer opted out' };
+      const kind = contact.suppression?.kind || (status === 'blocked' ? 'manual' : 'opt_out');
+      const badge = document.createElement('em'); badge.className = kind === 'delivery_failure' ? 'pending' : 'rejected';
+      badge.textContent = { customer_block: 'Customer-reported', delivery_failure: 'Possible block', manual: 'Manual blacklist', opt_out: 'Opted out' }[kind];
+      badge.title = labels[kind]; type.append(badge);
+      const reasonText = document.createElement('span'); reason.className = 'suppression-reason';
+      reasonText.textContent = contact.suppression?.reason || contact.optIn?.proof || 'No reason recorded'; reason.append(reasonText);
+      const recordedAt = contact.suppression?.recordedAt;
+      const dateValue = document.createElement('span'); dateValue.className = 'suppression-date';
+      if (recordedAt) {
+        const day = document.createElement('span'), time = document.createElement('small'), value = new Date(recordedAt);
+        day.textContent = value.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+        time.textContent = value.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); dateValue.append(day, time);
+      } else dateValue.textContent = 'Unavailable';
+      date.append(dateValue);
+      button.type = 'button'; button.className = 'suppression-edit'; button.textContent = 'Edit contact';
+      button.setAttribute('aria-label', 'Edit contact +' + contact.phone);
+      button.addEventListener('click', async () => {
+        await loadContacts();
+        if (!setupState.contacts.some(item => item._id === contact._id)) setupState.contacts.push(contact);
+        openContactEditModal(contact._id);
+      });
+      action.className = 'suppression-row-action'; action.append(button);
+      row.append(text, type, reason, date, action); host.append(row);
+    }
+  } catch (error) { showState(error.message); if (count) count.textContent = '—'; }
 }
+function setSuppressionFormOpen(status, open) {
+  const form = document.querySelector('[data-suppression-form="' + status + '"]');
+  const toggle = document.querySelector('[data-toggle-suppression="' + status + '"]');
+  if (!form || !toggle) return;
+  form.hidden = !open; toggle.setAttribute('aria-expanded', String(open));
+  if (open) form.querySelector('[name="phone"]').focus();
+  else toggle.focus();
+}
+document.querySelectorAll('[data-toggle-suppression]').forEach(button => button.addEventListener('click', () => {
+  setSuppressionFormOpen(button.dataset.toggleSuppression, button.getAttribute('aria-expanded') !== 'true');
+}));
+document.querySelectorAll('[data-cancel-suppression]').forEach(button => button.addEventListener('click', () => {
+  setSuppressionFormOpen(button.dataset.cancelSuppression, false);
+}));
+document.querySelectorAll('[data-refresh-suppression]').forEach(button => button.addEventListener('click', async () => {
+  button.disabled = true;
+  try { await loadSuppressionList(button.dataset.refreshSuppression); }
+  finally { button.disabled = false; }
+}));
 document.querySelectorAll('[data-suppression-form]').forEach(form => form.addEventListener('submit', async event => {
   event.preventDefault();
   const status = form.dataset.suppressionForm, button = form.querySelector('button[type=submit]');
   const note = document.querySelector('[data-suppression-status="' + status + '"]');
-  button.disabled = true; note.textContent = 'Saving?';
+  button.disabled = true; note.textContent = 'Saving...';
+  note.classList.remove('error');
   try {
     await requestJson('/api/contacts/suppress', { method: 'POST', body: JSON.stringify({ ...Object.fromEntries(new FormData(form)), status }) });
     form.reset(); note.textContent = 'Saved. This number is excluded from sending.';
+    setSuppressionFormOpen(status, false);
     await loadSuppressionList(status); await loadContacts();
-  } catch (error) { note.textContent = error.message; }
+  } catch (error) { note.textContent = error.message; note.classList.add('error'); }
   finally { button.disabled = false; }
 }));

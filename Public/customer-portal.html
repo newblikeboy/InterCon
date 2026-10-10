@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>InterCon Customer Portal</title>
   <meta name="description" content="InterCon customer portal for connecting WhatsApp Business, managing contacts, creating templates, sending messages, and checking billing readiness.">
-  <link rel="stylesheet" href="style/customer-portal.css?v=20260906-ws1">
+  <link rel="stylesheet" href="style/customer-portal.css?v=20261010-send1">
 </head>
 <body class="portal-body console-body">
   <div class="portal-shell console-shell">
@@ -515,129 +515,149 @@ Hi
       </section>
 
       <section class="portal-section portal-view" id="send-whatsapp" data-portal-view hidden>
-        <div class="send-whatsapp-layout">
-          <form class="send-form" data-send-message-form>
-            <div class="send-form-topline">
-              <strong>Message details</strong>
-              <button class="btn btn-outline btn-small" type="button" data-refresh-send-data>Refresh</button>
+        <div class="contact-panel send-panel">
+          <div class="portal-section-head compact send-panel-head">
+            <div>
+              <p class="eyebrow">WhatsApp messaging</p>
+              <h2>Prepare your message</h2>
+              <p>Choose your recipients, personalise an approved template, and review the preview.</p>
             </div>
-            <section class="send-recipient-picker" data-send-recipient-picker>
-              <div class="send-recipient-head">
-                <div>
-                  <strong>Recipients</strong>
-                  <small>Select individual customers, complete groups, or both.</small>
+            <div class="template-actions send-panel-actions">
+              <button class="btn btn-outline btn-small" type="button" data-refresh-send-data><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1"/></svg>Refresh</button>
+            </div>
+          </div>
+          <div class="send-whatsapp-layout">
+            <form class="send-form" data-send-message-form>
+              <section class="send-recipient-picker" data-send-recipient-picker>
+                <div class="send-recipient-head">
+                  <div>
+                    <strong>Recipients</strong>
+                    <small>Select individual customers, complete groups, or both.</small>
+                  </div>
+                  <span data-send-recipient-count>0 selected</span>
                 </div>
-                <span data-send-recipient-count>0 selected</span>
-              </div>
-              <div class="send-recipient-tools">
-                <label>
-                  <span class="sr-only">Search recipients</span>
-                  <input type="search" placeholder="Search contacts or groups" data-send-recipient-search>
-                </label>
-                <button type="button" data-send-select-all>Select all contacts</button>
-                <button type="button" data-send-clear-recipients>Clear</button>
-              </div>
-              <div class="send-recipient-columns">
-                <div class="send-recipient-column">
-                  <div class="send-recipient-column-title">
-                    <strong>Contacts</strong>
-                    <small>Active and opted-in only</small>
+                <div class="send-recipient-tools">
+                  <label>
+                    <span class="sr-only">Search recipients</span>
+                    <input type="search" placeholder="Search contacts or groups" data-send-recipient-search>
+                  </label>
+                  <button type="button" data-send-select-all>Select all contacts</button>
+                  <button type="button" data-send-clear-recipients>Clear</button>
+                </div>
+                <div class="send-recipient-columns">
+                  <div class="send-recipient-column">
+                    <div class="send-recipient-column-title">
+                      <strong>Contacts</strong>
+                      <small>Active and opted-in only</small>
+                    </div>
+                    <div class="send-recipient-list" data-send-contact-list>
+                      <div class="send-recipient-empty">Loading contacts...</div>
+                    </div>
                   </div>
-                  <div class="send-recipient-list" data-send-contact-list>
-                    <div class="send-recipient-empty">Loading contacts...</div>
+                  <div class="send-recipient-column">
+                    <div class="send-recipient-column-title">
+                      <strong>Groups</strong>
+                      <small>Members are deduplicated</small>
+                    </div>
+                    <div class="send-recipient-list" data-send-group-list>
+                      <div class="send-recipient-empty">Loading groups...</div>
+                    </div>
                   </div>
                 </div>
-                <div class="send-recipient-column">
-                  <div class="send-recipient-column-title">
-                    <strong>Groups</strong>
-                    <small>Members are deduplicated</small>
-                  </div>
-                  <div class="send-recipient-list" data-send-group-list>
-                    <div class="send-recipient-empty">Loading groups...</div>
-                  </div>
+              </section>
+              <section class="send-template-section" aria-labelledby="send-template-heading">
+                <div class="send-section-head">
+                  <h3 id="send-template-heading">Message template</h3>
+                  <p>Choose the approved message you want to send.</p>
                 </div>
+                <div class="send-template-fields">
+                  <label>
+                    Approved template
+                    <select name="templateName" required data-send-template-select>
+                      <option value="">Loading approved templates...</option>
+                    </select>
+                  </label>
+                  <label>
+                    Language
+                    <select name="language" data-send-language-select>
+                      <option value="en_US">English (US)</option>
+                      <option value="en">English</option>
+                      <option value="hi">Hindi</option>
+                      <option value="en_IN">English (India)</option>
+                    </select>
+                  </label>
+                  <label class="send-media-field" data-send-media-field hidden>
+                    Header media
+                    <select name="mediaId" data-send-media-select>
+                      <option value="">Choose media</option>
+                    </select>
+                    <small data-send-media-hint>Choose the media shown in this approved template.</small>
+                  </label>
+                </div>
+              </section>
+              <section class="send-variable-builder">
+                <div class="send-section-head">
+                  <h3>Personalise for each recipient</h3>
+                  <p>Match each phone number with its own template values.</p>
+                </div>
+                <div class="send-variable-editor" data-send-variable-editor>
+                  <div class="send-variable-empty">Select a template to configure its variables.</div>
+                </div>
+                <p class="form-note" data-send-variable-hint>Select a template to see required variables.</p>
+              </section>
+              <div class="send-submit-area">
+                <p class="send-submit-note">Review your recipients and message before sending.</p>
+                <button class="btn" type="submit" data-send-submit disabled>Select recipients</button>
+                <p class="contact-message" role="status" aria-live="polite" data-send-message-status></p>
               </div>
-            </section>
-            <label>
-              Approved template
-              <select name="templateName" required data-send-template-select>
-                <option value="">Loading approved templates...</option>
-              </select>
-            </label>
-            <label>
-              Language
-              <select name="language" data-send-language-select>
-                <option value="en_US">English (US)</option>
-                <option value="en">English</option>
-                <option value="hi">Hindi</option>
-                <option value="en_IN">English (India)</option>
-              </select>
-            </label>
-            <label class="send-media-field" data-send-media-field hidden>
-              Header media
-              <select name="mediaId" data-send-media-select>
-                <option value="">Choose media</option>
-              </select>
-              <small data-send-media-hint>Choose the media shown in this approved template.</small>
-            </label>
-            <section class="send-variable-builder">
-              <div class="send-variable-head">
-                <strong>Recipient variables</strong>
-                <small>Each phone number carries its own template values.</small>
-              </div>
-              <div class="send-variable-editor" data-send-variable-editor>
-                <div class="send-variable-empty">Select a template to configure its variables.</div>
-              </div>
-              <p class="form-note" data-send-variable-hint>Select a template to see required variables.</p>
-            </section>
-            <button class="btn" type="submit" data-send-submit disabled>Select recipients</button>
-            <p class="contact-message" data-send-message-status></p>
-          </form>
+            </form>
 
-          <aside class="whatsapp-phone-preview" aria-label="WhatsApp message preview">
-            <div class="preview-panel-head">
-              <span>Live preview</span>
-              <strong>Customer view</strong>
-            </div>
-            <div class="phone-shell">
-              <div class="phone-screen">
-                <div class="phone-statusbar" aria-hidden="true">
-                  <span data-preview-time>Now</span>
-                  <div><i></i><i></i><i></i></div>
-                </div>
-                <div class="wa-preview-topbar">
-                  <span class="wa-back" aria-hidden="true"></span>
-                  <span class="wa-avatar">IC</span>
-                  <div class="wa-contact-copy">
-                    <strong data-preview-contact>Customer</strong>
-                    <small>Business Account</small>
+            <aside class="whatsapp-phone-preview" aria-label="WhatsApp message preview">
+              <div class="preview-panel-head">
+                <div><strong>Message preview</strong><small>What your customer sees</small></div>
+                <span class="send-preview-live"><i aria-hidden="true"></i>Live</span>
+              </div>
+              <div class="phone-shell">
+                <div class="phone-screen">
+                  <div class="phone-statusbar" aria-hidden="true">
+                    <span data-preview-time>Now</span>
+                    <div><i></i><i></i><i></i></div>
                   </div>
-                  <span class="wa-menu-dots" aria-hidden="true"></span>
-                </div>
-                <div class="wa-chat-area">
-                  <div class="wa-encryption-note">
-                    Messages are end-to-end encrypted. This preview shows how the template may appear.
+                  <div class="wa-preview-topbar">
+                    <span class="wa-back" aria-hidden="true"></span>
+                    <span class="wa-avatar">IC</span>
+                    <div class="wa-contact-copy">
+                      <strong data-preview-contact>Customer</strong>
+                      <small>Business Account</small>
+                    </div>
+                    <span class="wa-menu-dots" aria-hidden="true"></span>
                   </div>
-                  <div class="wa-date-chip">Today</div>
-                  <div class="wa-template-meta">
-                    <span data-preview-template>Template preview</span>
-                    <strong data-preview-category>Approved message</strong>
+                  <div class="wa-chat-area">
+                    <div class="wa-encryption-note">
+                      Messages are end-to-end encrypted. This preview shows how the template may appear.
+                    </div>
+                    <div class="wa-date-chip">Today</div>
+                    <div class="wa-template-meta">
+                      <span data-preview-template>Template preview</span>
+                      <strong data-preview-category>Approved message</strong>
+                    </div>
+                    <div class="wa-message-bubble">
+                      <div class="wa-preview-media" data-preview-media hidden></div>
+                      <p data-preview-message>Select a template to preview the WhatsApp message.</p>
+                      <span data-preview-bubble-time>Now</span>
+                      <em aria-hidden="true"></em>
+                    </div>
                   </div>
-                  <div class="wa-message-bubble">
-                    <div class="wa-preview-media" data-preview-media hidden></div>
-                    <p data-preview-message>Select a template to preview the WhatsApp message.</p>
-                    <span data-preview-bubble-time>Now</span>
-                    <em aria-hidden="true"></em>
+                  <div class="wa-composer" aria-hidden="true">
+                    <span></span>
+                    <strong>Message</strong>
+                    <i></i>
                   </div>
-                </div>
-                <div class="wa-composer" aria-hidden="true">
-                  <span></span>
-                  <strong>Message</strong>
-                  <i></i>
                 </div>
               </div>
-            </div>
-          </aside>
+              <p class="send-preview-note">Preview your template as you fill in the details.</p>
+            </aside>
+          </div>
         </div>
       </section>
 
@@ -875,40 +895,34 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
         </div>
       </section>
 
-      <section class="portal-view" id="template-library" data-portal-view hidden>
-        <div class="lib-head">
-          <div class="lib-search-wrap">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 3a7.5 7.5 0 1 0 4.55 13.46l4.24 4.25a1 1 0 0 0 1.42-1.42l-4.25-4.24A7.5 7.5 0 0 0 10.5 3Zm-5.5 7.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0Z"/></svg>
-            <input class="lib-search" type="search" maxlength="100" placeholder="Search payment reminders, delivery updates, OTP..." aria-label="Search Meta's template library" data-lib-search>
-            <button class="btn btn-small" type="button" data-lib-refresh>Search</button>
+      <section class="portal-section portal-view" id="template-library" data-portal-view hidden>
+        <div class="contact-panel lib-panel">
+          <div class="portal-section-head compact lib-panel-head">
+            <div><p class="eyebrow">Meta template library</p><h2>Ready-to-use templates</h2><p class="lib-hint">Choose a message, review the details, and add it to your WhatsApp account.</p></div>
+            <div class="template-actions lib-actions"><button class="btn btn-outline btn-small" type="button" data-lib-reload><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1"/></svg>Refresh</button></div>
           </div>
-          <p class="lib-hint">Pre-approved templates from Meta's Template Library. Add one unchanged and it is usually ready to send instantly — no review wait.</p>
-          <p class="contact-message" data-lib-message></p>
-        </div>
-
-        <div class="lib-layout">
-          <aside class="lib-sidebar" aria-label="Template library filters">
-            <p class="lib-sidebar-title">Topics</p>
-            <div class="lib-topics" data-lib-topics>
-              <button type="button" class="lib-topic is-active" data-lib-topic-option="">All templates</button>
-              <button type="button" class="lib-topic" data-lib-topic-option="ORDER_MANAGEMENT">Order management</button>
-              <button type="button" class="lib-topic" data-lib-topic-option="PAYMENTS">Payments</button>
-              <button type="button" class="lib-topic" data-lib-topic-option="ACCOUNT_UPDATE">Account updates</button>
-              <button type="button" class="lib-topic" data-lib-topic-option="CUSTOMER_FEEDBACK">Customer feedback</button>
+          <div class="lib-filter-panel" role="region" aria-label="Template library filters">
+            <div class="lib-toolbar">
+              <div class="lib-search-wrap">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 3a7.5 7.5 0 1 0 4.55 13.46l4.24 4.25a1 1 0 0 0 1.42-1.42l-4.25-4.24A7.5 7.5 0 0 0 10.5 3Zm-5.5 7.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0Z"/></svg>
+                <input class="lib-search" type="search" maxlength="100" placeholder="Search templates..." aria-label="Search Meta's template library" data-lib-search>
+                <button class="btn btn-small" type="button" data-lib-refresh>Search</button>
+              </div>
+              <label class="lib-language-control"><span>Language</span><select class="lib-filter" data-lib-language>
+                <option value="">All languages</option><option value="en_US">English (US)</option><option value="en_GB">English (UK)</option><option value="hi">Hindi</option><option value="es">Spanish</option><option value="pt_BR">Portuguese (BR)</option><option value="ar">Arabic</option>
+              </select></label>
             </div>
-            <p class="lib-sidebar-title">Language</p>
-            <select class="lib-filter" data-lib-language aria-label="Filter by language">
-              <option value="">All languages</option>
-              <option value="en_US">English (US)</option>
-              <option value="en_GB">English (UK)</option>
-              <option value="hi">Hindi</option>
-              <option value="es">Spanish</option>
-              <option value="pt_BR">Portuguese (BR)</option>
-              <option value="ar">Arabic</option>
-            </select>
-          </aside>
-
+            <div class="lib-topic-bar"><div class="lib-topics" data-lib-topics role="group" aria-label="Filter by topic">
+              <button type="button" class="lib-topic is-active" data-lib-topic-option="" aria-pressed="true">All templates</button>
+              <button type="button" class="lib-topic" data-lib-topic-option="ORDER_MANAGEMENT" aria-pressed="false">Order management</button>
+              <button type="button" class="lib-topic" data-lib-topic-option="PAYMENTS" aria-pressed="false">Payments</button>
+              <button type="button" class="lib-topic" data-lib-topic-option="ACCOUNT_UPDATE" aria-pressed="false">Account updates</button>
+              <button type="button" class="lib-topic" data-lib-topic-option="CUSTOMER_FEEDBACK" aria-pressed="false">Customer feedback</button>
+            </div><button class="lib-reset" type="button" data-lib-clear>Clear filters</button></div>
+          </div>
+          <p class="contact-message lib-message" role="status" aria-live="polite" data-lib-message></p>
           <div class="lib-main">
+            <div class="lib-results-head"><strong data-lib-results aria-live="polite">Browse templates</strong><span>Preview before adding</span></div>
             <div class="lib-grid" data-template-library>
               <div class="empty-row">Loading template library...</div>
             </div>
@@ -916,6 +930,7 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
               <button class="btn btn-outline btn-small" type="button" data-lib-more>Load more templates</button>
             </div>
           </div>
+          <details class="lib-help"><summary>About pre-approved templates</summary><p>Add a library template unchanged and it is usually approved instantly. Editing its content or button types sends it through normal Meta review.</p></details>
         </div>
       </section>
 
@@ -943,10 +958,25 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
         </div>
       </section>
 
-      <section class="portal-view" id="optout" data-portal-view hidden>
-        <div class="console-panel"><h2>Opted-out contacts</h2><p>These contacts are excluded from new and queued sends. To restore a contact, edit it and record fresh consent.</p>
-          <form data-suppression-form="opted_out" class="form-grid"><label>WhatsApp number including country code<input type="tel" name="phone" required maxlength="16" placeholder="919876543210"></label><label>Reason or customer request<input type="text" name="reason" required maxlength="1000"></label><button class="btn" type="submit">Record opt-out</button></form>
-          <p role="status" aria-live="polite" data-suppression-status="opted_out"></p><div data-suppression-list="opted_out">Loading contacts?</div>
+      <section class="portal-section portal-view suppression-view" id="optout" data-portal-view hidden>
+        <div class="contact-panel suppression-panel">
+          <div class="portal-section-head compact suppression-head">
+            <div><p class="eyebrow">Contact preferences</p><h2>Opted-out contacts <span class="suppression-count" data-suppression-count="opted_out" aria-live="polite">0</span></h2></div>
+            <div class="template-actions suppression-actions">
+              <button class="btn" type="button" data-toggle-suppression="opted_out" aria-expanded="false" aria-controls="optout-add-form"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add opt-out</button>
+              <button class="btn btn-outline btn-small" type="button" data-refresh-suppression="opted_out"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1"/></svg>Refresh</button>
+            </div>
+          </div>
+          <div class="suppression-notice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8 12 3 3 5-6"/></svg><p>These customers have opted out of WhatsApp messages.</p><span>Excluded from all sends</span></div>
+          <form id="optout-add-form" data-suppression-form="opted_out" class="form-grid suppression-add-form" hidden>
+            <div class="suppression-form-head"><h3>Record a customer opt-out</h3><p>The number will be excluded from all WhatsApp sends.</p></div>
+            <label>WhatsApp number<input type="tel" name="phone" required maxlength="16" placeholder="919876543210" autocomplete="tel"><small>Include the country code.</small></label>
+            <label>Reason or customer request<input type="text" name="reason" required maxlength="1000" placeholder="For example, the customer asked to unsubscribe"></label>
+            <div class="suppression-form-actions"><button class="btn" type="submit">Record opt-out</button><button class="btn btn-outline" type="button" data-cancel-suppression="opted_out">Cancel</button></div>
+          </form>
+          <p class="contact-message suppression-message" role="status" aria-live="polite" data-suppression-status="opted_out"></p>
+          <div data-suppression-list="opted_out"><div class="empty-row">Loading opted-out contacts...</div></div>
+          <details class="suppression-help"><summary>Restoring an opted-out contact</summary><p>To resume sending, edit the contact and record fresh consent with evidence. Importing the number again will keep its opt-out in place.</p></details>
         </div>
       </section>
 
@@ -989,10 +1019,26 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
         </div>
       </section>
 
-      <section class="portal-view" id="blacklist" data-portal-view hidden>
-        <div class="console-panel"><h2>Blocked numbers</h2><p>These contacts are excluded from new and queued sends. To restore a contact, edit it and record fresh consent.</p>
-          <form data-suppression-form="blocked" class="form-grid"><label>WhatsApp number including country code<input type="tel" name="phone" required maxlength="16" placeholder="919876543210"></label><label>Reason or customer request<input type="text" name="reason" required maxlength="1000"></label><button class="btn" type="submit">Block number</button></form>
-          <p role="status" aria-live="polite" data-suppression-status="blocked"></p><div data-suppression-list="blocked">Loading contacts?</div>
+      <section class="portal-section portal-view suppression-view" id="blacklist" data-portal-view hidden>
+        <div class="contact-panel suppression-panel">
+          <div class="portal-section-head compact suppression-head">
+            <div><p class="eyebrow">Contact protection</p><h2>Blocked numbers <span class="suppression-count" data-suppression-count="blocked" aria-live="polite">0</span></h2></div>
+            <div class="template-actions suppression-actions">
+              <button class="btn" type="button" data-toggle-suppression="blocked" aria-expanded="false" aria-controls="blacklist-add-form"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add number</button>
+              <button class="btn btn-outline btn-small" type="button" data-refresh-suppression="blocked"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1"/></svg>Refresh</button>
+            </div>
+          </div>
+          <div class="suppression-notice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8 12 3 3 5-6"/></svg><p>Sending is disabled for every number on this list.</p><span>Campaigns, inbox &amp; chatbot</span></div>
+          <form id="blacklist-add-form" data-suppression-form="blocked" class="form-grid suppression-add-form" hidden>
+            <div class="suppression-form-head"><h3>Add a blocked number</h3><p>The number will be excluded from all WhatsApp sends.</p></div>
+            <label>WhatsApp number<input type="tel" name="phone" required maxlength="16" placeholder="919876543210" autocomplete="tel"><small>Include the country code.</small></label>
+            <label>Block type<select name="kind"><option value="customer_block">Customer-reported block</option><option value="manual">Manual blacklist</option></select></label>
+            <label class="suppression-form-reason">Reason or evidence<input type="text" name="reason" required maxlength="1000" placeholder="For example, the customer confirmed blocking us"></label>
+            <div class="suppression-form-actions"><button class="btn" type="submit">Add to blacklist</button><button class="btn btn-outline" type="button" data-cancel-suppression="blocked">Cancel</button></div>
+          </form>
+          <p class="contact-message suppression-message" role="status" aria-live="polite" data-suppression-status="blocked"></p>
+          <div data-suppression-list="blocked"><div class="empty-row">Loading blocked numbers...</div></div>
+          <details class="suppression-help"><summary>About automatic blocks and restoring contacts</summary><p>WhatsApp does not confirm who blocked you. An undeliverable number is added automatically as “Unable to receive — possible block”; other delivery issues can cause the same result. Record a customer-reported block when you have confirmation.</p><p>To resume sending, edit the contact and record fresh consent after the customer can receive your messages again.</p></details>
         </div>
       </section>
 
@@ -1340,7 +1386,7 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
   </div>
 
   <script src="vendor/xlsx.full.min.js?v=20260906"></script>
-  <script src="js/customer-portal.js?v=20260921-billing1"></script>
+  <script src="js/customer-portal.js?v=20261010-send1"></script>
   <script src="/js/dialog-accessibility.js?v=20260906" defer></script>
 </body>
 </html>

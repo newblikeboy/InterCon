@@ -40,6 +40,7 @@ app.use(cookieParser());
 if (env.nodeEnv !== "test") {
   app.use(pinoHttp({
     level: env.nodeEnv === "production" ? "info" : "debug",
+    redact: { paths: ["res.headers['set-cookie']"], censor: "[redacted]" },
     genReqId: (req) => req.id,
     autoLogging: {
       ignore: (req) => /^\/api\/health(?:\/|$)/.test(req.url.split("?")[0])
@@ -57,8 +58,19 @@ if (env.nodeEnv !== "test") {
   }));
 }
 
-app.get(["/admin", "/admin-portal.html"], require("./middleware/authenticate"), require("./middleware/platformAdmin"), (req, res) => {
+app.get("/admin/login", (req, res) => {
   res.set("Cache-Control", "no-store");
+  res.set("X-Robots-Tag", "noindex, nofollow");
+  res.sendFile(path.join(__dirname, "views", "admin-login.html"));
+});
+app.get(["/admin", "/admin-portal.html"], (req, res, next) => {
+  require("./middleware/authenticate")(req, res, error => {
+    if (error?.statusCode === 401) return res.redirect("/admin/login");
+    next(error);
+  });
+}, require("./middleware/platformAdmin"), (req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.set("X-Robots-Tag", "noindex, nofollow");
   res.sendFile(path.join(__dirname, "views", "admin-portal.html"));
 });
 

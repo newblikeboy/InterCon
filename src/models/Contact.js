@@ -62,6 +62,17 @@ const contactSchema = new mongoose.Schema(
         type: Date
       }
     },
+    suppression: {
+      type: new mongoose.Schema({
+        kind: { type: String, enum: ["manual", "customer_block", "delivery_failure", "opt_out"], required: true },
+        reason: { type: String, required: true, maxlength: 1000 },
+        recordedAt: { type: Date, required: true },
+        errorCode: Number,
+        metaMessageId: { type: String, maxlength: 160 }
+      }, { _id: false }),
+      default: undefined
+    },
+    suppressionClearedAt: Date,
     status: {
       type: String,
       enum: ["active", "opted_out", "blocked"],

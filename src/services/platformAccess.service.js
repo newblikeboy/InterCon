@@ -3,6 +3,8 @@ const mongoose = require("mongoose");
 const Tenant = require("../models/Tenant");
 const Message = require("../models/Message");
 const InboxMessage = require("../models/InboxMessage");
+const Contact = require("../models/Contact");
+const { suppressUndeliverableContact } = require("./contact.service");
 const HttpError = require("../utils/httpError");
 const { fetchWithPolicy } = require("../utils/httpClient");
 
@@ -147,7 +149,16 @@ async function completeTrialSend(tenantId, recipient, token) {
 
 async function sendWhatsAppWithAccess(tenantId, phone, url, options) {
   const recipient = normalizeRecipient(phone);
+  const assertNotSuppressed = async () => {
+    if (await Contact.exists({ tenantId, phone: recipient, status: { $ne: "active" } })) {
+      throw new HttpError(403, "This contact is blocked or opted out. WhatsApp message was not sent.", { code: "CONTACT_SUPPRESSED" });
+    }
+  };
+  await assertNotSuppressed();
   const { token, trackRecipient } = await reserveTrialSend(tenantId, recipient);
+  try { await assertNotSuppressed(); }
+  catch (error) { await releaseTrialSend(tenantId, token); throw error; }
+  const sentAt = new Date();
   let response;
   try {
     response = await fetchWithPolicy(url, options);
@@ -160,6 +171,7 @@ async function sendWhatsAppWithAccess(tenantId, phone, url, options) {
   const metaResponse = await response.json().catch(() => ({}));
   if (!response.ok || metaResponse.error) {
     await releaseTrialSend(tenantId, token);
+    await suppressUndeliverableContact(tenantId, recipient, metaResponse.error, { sentAt });
   } else if (metaResponse.messages?.[0]?.id && trackRecipient) {
     try {
       await completeTrialSend(tenantId, recipient, token);

@@ -1,32 +1,37 @@
 const router = require("express").Router();
 const asyncHandler = require("../utils/asyncHandler");
-const HttpError = require("../utils/httpError");
-const { cursorFilter } = require("../utils/pagination");
-const Tenant = require("../models/Tenant");
-const Message = require("../models/Message");
-const Payment = require("../models/Payment");
-const WebhookEvent = require("../models/WebhookEvent");
-const Template = require("../models/Template");
-const collections = {
-  tenants: [Tenant, "businessName businessEmail status onboardingStatus billing.plan billing.currentPeriodEnd meta.phoneNumberId createdAt"],
-  messages: [Message, "tenantId to templateName status error createdAt"],
-  payments: [Payment, "tenantId providerOrderId providerPaymentId plan amount currency status capturedAt"],
-  webhooks: [WebhookEvent, "tenantId eventType status attempts error createdAt"],
-  templates: [Template, "tenantId name language category status updatedAt"]
-};
+const admin = require("../services/admin.service");
 router.use(require("../middleware/authenticate"), require("../middleware/platformAdmin"));
-router.get("/overview", asyncHandler(async (req, res) => {
-  const [tenants, queued, uncertain, failedWebhooks, payments] = await Promise.all([
-    Tenant.countDocuments(), Message.countDocuments({ status: { $in: ["queued", "scheduled", "processing"] } }),
-    Message.countDocuments({ status: "uncertain" }), WebhookEvent.countDocuments({ status: "failed" }), Payment.countDocuments({ status: "captured" })
-  ]);
-  res.json({ success: true, counts: { tenants, queued, uncertain, failedWebhooks, payments } });
-}));
-router.get("/records/:kind", asyncHandler(async (req, res) => {
-  const definition = Object.hasOwn(collections, req.params.kind) && collections[req.params.kind];
-  if (!definition) throw new HttpError(404, "Unknown record type");
-  const [model, fields] = definition;
-  const records = await model.find(cursorFilter(req.query.after)).select(fields).sort({ _id: -1 }).limit(100).lean();
-  res.json({ success: true, records, fields: fields.split(" "), nextCursor: records.length === 100 ? String(records.at(-1)._id) : null });
+router.use((req, res, next) => { res.set("Cache-Control", "no-store"); next(); });
+router.get("/me", (req, res) => res.json({ success: true, user: { id: req.adminActor._id, name: req.adminActor.name, email: req.adminActor.email, platformRole: "admin" } }));
+router.get("/overview", asyncHandler(async (req, res) => res.json({ success: true, ...await admin.overview(req.query) })));
+router.get("/records/:kind", asyncHandler(async (req, res) => res.json({ success: true, ...await admin.records(req.params.kind, req.query) })));
+router.get("/tenants/:id", asyncHandler(async (req, res) => res.json({ success: true, ...await admin.tenantDetails(req.params.id) })));
+router.post("/tenants/:id/actions", asyncHandler(async (req, res) => res.json({ success: true, ...await admin.tenantAction(req.adminActor, req.params.id, req.body) })));
+router.post("/users/:id/actions", asyncHandler(async (req, res) => res.json({ success: true, ...await admin.userAction(req.adminActor, req.params.id, req.body) })));
+router.post("/messages/:id/actions", asyncHandler(async (req, res) => res.json({ success: true, ...await admin.operationAction(req.adminActor, "message", req.params.id, req.body) })));
+router.post("/webhooks/:id/actions", asyncHandler(async (req, res) => res.json({ success: true, ...await admin.operationAction(req.adminActor, "webhook", req.params.id, req.body) })));
+router.get("/export/:kind", asyncHandler(async (req, res) => {
+  const definition = admin.recordDefinition(req.params.kind);
+  const cursor = admin.exportCursor(req.params.kind, req.query);
+  res.set({ "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="intercon-${req.params.kind}.csv"` });
+  const fields = definition.fields.split(" ");
+  const valueAt = (row, field) => field.split(".").reduce((value, key) => value?.[key], row);
+  try {
+    res.write("\uFEFF" + fields.map(admin.csvCell).join(",") + "\r\n");
+    for await (const row of cursor) {
+      if (res.destroyed) break;
+      if (!res.write(fields.map(field => admin.csvCell(valueAt(row, field))).join(",") + "\r\n")) {
+        await new Promise(resolve => {
+          const done = () => { res.off("drain", done); res.off("close", done); resolve(); };
+          res.once("drain", done); res.once("close", done);
+        });
+      }
+    }
+    if (!res.destroyed) res.end();
+  } catch (error) {
+    if (!res.headersSent) throw error;
+    res.destroy(error);
+  } finally { await cursor.close(); }
 }));
 module.exports = router;

@@ -1,6 +1,79 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>InterCon Platform Administration</title><link rel="stylesheet" href="/style/admin-portal.css?v=20260906"><link rel="stylesheet" href="/style/admin-data.css?v=20260906"></head>
-<body><header class="admin-header"><a href="/customer">InterCon</a><span>Platform administration</span><button type="button" data-admin-logout>Log out</button></header>
-<main class="admin-content"><h1>Platform overview</h1><p>Live database counts and records. Delivery status comes from provider callbacks.</p><p role="status" aria-live="polite" data-admin-status>Loading platform data?</p><div class="admin-stats" data-admin-stats></div>
-<nav class="admin-tabs" aria-label="Platform records"><button type="button" data-records="tenants">Workspaces</button><button type="button" data-records="messages">Messages</button><button type="button" data-records="payments">Payments</button><button type="button" data-records="webhooks">Webhooks</button><button type="button" data-records="templates">Templates</button><button type="button" data-admin-refresh>Refresh</button></nav>
-<h2 data-admin-title>Workspaces</h2><p>Amounts in payment records are in the currency?s smallest unit: 100 paise = ?1.</p><div class="admin-table" tabindex="0" role="region" aria-label="Platform records" data-admin-records></div><button type="button" data-admin-more hidden>Load more records</button></main><script src="/js/admin-portal.js?v=20260906" defer></script></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>InterCon · Business administration</title>
+  <link rel="stylesheet" href="/style/admin-data.css?v=20261010-business1">
+</head>
+<body class="admin-app">
+  <aside class="admin-sidebar">
+    <a class="admin-brand" href="/admin"><img src="/InterIcon.jpg" alt="" width="38" height="38"><div>InterCon<small>Business administration</small></div></a>
+    <nav class="admin-nav" aria-label="Administration">
+      <p>Business</p>
+      <button type="button" data-admin-view="overview" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Overview</button>
+      <button type="button" data-records="tenants"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V4h16v17M8 8h2m4 0h2M8 12h2m4 0h2M10 21v-5h4v5"/></svg>Workspaces</button>
+      <button type="button" data-records="users"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6m2 4a6 6 0 0 1 3 5"/></svg>Users</button>
+      <button type="button" data-records="tenants" data-segment="paid"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>Paid customers</button>
+      <button type="button" data-records="payments"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h4"/></svg>Payments &amp; revenue</button>
+      <button type="button" data-records="orders"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Zm3 5h6m-6 4h6"/></svg>Checkout attempts</button>
+      <p>Operations</p>
+      <button type="button" data-records="messages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 18-8-8 18-2-8-8-2Zm8 2L21 3"/></svg>Message delivery</button>
+      <button type="button" data-records="templates"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8m-8 4h5"/></svg>Templates</button>
+      <button type="button" data-records="webhooks"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14m-4-4 4 4-4 4M19 17H5m4 4-4-4 4-4"/></svg>Webhook queue</button>
+      <p>Administration</p>
+      <button type="button" data-records="audit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5H5v16h14V5h-4M9 3h6v4H9V3Zm0 8h6m-6 4h6"/></svg>Activity &amp; audit</button>
+      <button type="button" data-admin-view="health"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>System health</button>
+    </nav>
+    <div class="admin-sidebar-foot"><a href="/customer">Open customer portal ↗</a><small>Admin access is checked on every request.</small></div>
+  </aside>
+  <div class="admin-workspace">
+    <header class="admin-topbar"><div><p class="eyebrow">InterCon control centre</p><h1 data-admin-heading>Business overview</h1></div><div class="admin-account"><span data-admin-identity>Administrator</span><button class="button secondary" type="button" data-admin-logout>Log out</button></div></header>
+    <main class="admin-content">
+      <div class="admin-page-intro"><p data-admin-description>Your customers, revenue and messaging operations in one place.</p><button class="button secondary" type="button" data-admin-refresh>↻ Refresh data</button></div>
+      <p class="admin-status" role="status" aria-live="polite" data-admin-status>Loading business data…</p>
+      <section data-admin-overview aria-label="Business overview">
+        <div class="admin-stats" data-admin-stats></div>
+        <section class="admin-panel revenue-panel" aria-labelledby="revenue-heading">
+          <div class="panel-head"><div><p class="eyebrow">Payment performance</p><h2 id="revenue-heading">Revenue overview</h2></div><label class="inline-label">Currency<select data-admin-currency aria-label="Revenue currency"><option>INR</option></select></label></div>
+          <form class="admin-date-controls" data-admin-dates><label>From<input type="date" name="from" required></label><label>To<input type="date" name="to" required></label><button class="button secondary" type="submit">Apply dates</button><span>India time · captured payments</span></form>
+          <div class="revenue-totals" data-admin-revenue></div>
+          <div class="admin-chart" data-admin-chart role="group" aria-label="Captured revenue by month"></div>
+          <p class="admin-note" data-admin-revenue-note></p>
+        </section>
+        <div class="admin-two-columns">
+          <section class="admin-panel"><div class="panel-head"><div><p class="eyebrow">New customers</p><h2>Latest workspaces</h2></div><button class="text-button" type="button" data-records="tenants">View all ↗</button></div><div data-admin-recent-tenants></div></section>
+          <section class="admin-panel"><div class="panel-head"><div><p class="eyebrow">Collections</p><h2>Recent payments</h2></div><button class="text-button" type="button" data-records="payments">View all ↗</button></div><div data-admin-recent-payments></div></section>
+        </div>
+        <section class="admin-panel"><div class="panel-head"><div><p class="eyebrow">Needs attention</p><h2>Operational alerts</h2></div><span class="admin-note">Live database totals</span></div><div class="admin-alerts" data-admin-alerts></div></section>
+      </section>
+      <section class="admin-panel admin-record-panel" data-admin-record-panel hidden>
+        <div class="panel-head"><div><p class="eyebrow">Business records</p><h2 data-admin-title>Workspaces</h2></div><button class="button secondary" type="button" data-admin-export>↓ Export CSV</button></div>
+        <form class="admin-record-filters" data-admin-filters>
+          <label class="admin-search"><span class="sr-only">Search records</span><input type="search" name="q" placeholder="Search name, email or number…" aria-label="Search records"></label>
+          <label>Status<select name="status" data-admin-filter-status><option value="">All statuses</option></select></label>
+          <label data-admin-plan-filter>Plan<select name="plan"><option value="">All plans</option><option value="none">No paid plan</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option></select></label>
+          <label data-admin-segment-filter>Customer type<select name="segment"><option value="">All customers</option><option value="paid">Active paid plan</option><option value="expiring">Expiring in 7 days</option><option value="trial">Free / trial access</option><option value="manual">Manual plan access</option><option value="expired">Expired subscription</option><option value="suspended">Suspended workspace</option><option value="connected">WhatsApp connected</option></select></label>
+          <button class="button secondary" type="submit">Apply filters</button><button class="text-button" type="button" data-admin-clear-filters>Clear</button>
+        </form>
+        <p class="admin-note" data-admin-record-note></p>
+        <div class="admin-table" tabindex="0" role="region" aria-label="Platform records" data-admin-records></div>
+        <div class="admin-table-footer"><span data-admin-record-count></span><button class="button secondary" type="button" data-admin-more hidden>Load more records</button></div>
+      </section>
+      <section data-admin-health-panel hidden>
+        <section class="admin-panel"><div class="panel-head"><div><p class="eyebrow">Platform status</p><h2>System health</h2></div><span class="admin-note">API process and database queues</span></div><div class="admin-health-grid" data-admin-health></div><p class="admin-note">Queue totals do not confirm that a worker is running. Message and webhook workers must be operated separately.</p></section>
+        <section class="admin-panel"><div class="panel-head"><div><p class="eyebrow">Product</p><h2>Current plan catalogue</h2></div></div><div class="admin-health-grid" data-admin-plans></div><p class="admin-note">Existing subscribers keep their recorded price. Manual grants are listed separately from paid plans.</p></section>
+      </section>
+      <footer class="admin-page-footer"><span>InterCon · Platform administration</span><span data-admin-updated></span></footer>
+    </main>
+  </div>
+  <dialog class="admin-detail-dialog" data-admin-detail><div class="dialog-head"><div><p class="eyebrow">Workspace details</p><h2 data-admin-detail-title>Workspace</h2></div><button class="icon-button" type="button" data-close-detail aria-label="Close workspace details">×</button></div><div data-admin-detail-body></div></dialog>
+  <dialog class="admin-action-dialog" data-admin-action-dialog>
+    <form data-admin-action-form><div class="dialog-head"><h2 data-admin-action-title>Confirm action</h2><button class="icon-button" type="button" data-close-action aria-label="Close action">×</button></div><p data-admin-action-description></p>
+      <div class="admin-grant-fields" data-admin-grant-fields hidden><label>Plan<select name="plan"><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option></select></label><label>Access expires<input type="date" name="endDate"></label></div>
+      <label>Reason<textarea name="reason" rows="3" minlength="5" maxlength="1000" required placeholder="Explain why you are making this change…"></textarea></label>
+      <p class="admin-status" role="status" data-admin-action-status></p><div class="dialog-actions"><button class="button secondary" type="button" data-close-action>Cancel</button><button class="button" type="submit" data-admin-confirm>Confirm action</button></div>
+    </form>
+  </dialog>
+  <script src="/js/admin-portal.js?v=20261010-business1" defer></script>
+</body>
+</html>

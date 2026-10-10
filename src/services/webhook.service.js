@@ -12,6 +12,7 @@ const HttpError = require("../utils/httpError");
 const { publishInboxUpdated } = require("./realtime.service");
 const automationService = require("./automation.service");
 const automationQueue = require("./automationQueue.service");
+const { suppressUndeliverableContact } = require("./contact.service");
 
 function getWebhookAppSecret() {
   return env.facebookAppSecret || env.metaAppSecret;
@@ -168,6 +169,7 @@ async function processTemplateStatus(tenantId, value) {
 async function processMessageStatuses(tenantId, statuses = []) {
   const messageOperations = [];
   const inboxOperations = [];
+  const undeliverable = [];
   for (const status of statuses) {
     const metaMessageId = status.id;
     const mappedStatus = status.status;
@@ -180,6 +182,7 @@ async function processMessageStatuses(tenantId, statuses = []) {
 
     if (!metaMessageId || !predecessors) continue;
     const error = status.errors?.[0];
+    if (mappedStatus === "failed" && Number(error?.code) === 131026) undeliverable.push({ metaMessageId, error });
     const errorMessage = error
       ? [error.code, error.title || error.message, error.error_data?.details]
         .filter(Boolean)
@@ -204,6 +207,19 @@ async function processMessageStatuses(tenantId, statuses = []) {
     messageOperations.length ? Message.bulkWrite(messageOperations, { ordered: false }) : null,
     inboxOperations.length ? InboxMessage.bulkWrite(inboxOperations, { ordered: false }) : null
   ]);
+  for (const { metaMessageId, error } of undeliverable) {
+    // Resolve the phone from our own outbound record, never from recipient_id.
+    // A late failure cannot suppress a delivered/read message or another tenant.
+    const [message, reply] = await Promise.all([
+      Message.findOne({ tenantId, metaMessageId }).select("to status acceptedAt lastAttemptAt createdAt").lean(),
+      InboxMessage.findOne({ tenantId, metaMessageId, direction: "out" }).select("customerPhone status sentAt").lean()
+    ]);
+    if ([message, reply].some(item => ["delivered", "read"].includes(item?.status))) continue;
+    const failed = message?.status === "failed" ? message : reply?.status === "failed" ? reply : null;
+    if (failed) await suppressUndeliverableContact(tenantId, failed.to || failed.customerPhone, error, {
+      metaMessageId, sentAt: failed.acceptedAt || failed.lastAttemptAt || failed.sentAt || failed.createdAt
+    });
+  }
   if (inboxOperations.length) {
     const affected = await InboxMessage.find({
       tenantId, direction: "out", metaMessageId: { $in: inboxOperations.map(operation => operation.updateOne.filter.metaMessageId) }

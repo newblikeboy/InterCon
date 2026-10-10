@@ -89,7 +89,7 @@ test("public pages expose canonical metadata and private pages remain protected"
     assert.doesNotMatch(page.text, /noindex/i);
   }
 
-  await request(app).get("/admin").expect(401);
+  await request(app).get("/admin").expect(302).expect("Location", "/admin/login");
   await request(app).get("/api/auth/me").expect(401);
 });
 

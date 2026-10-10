@@ -18,7 +18,7 @@ const { fetchWithPolicy } = require("../utils/httpClient");
 const wabaSendHealthCache = new Map();
 const WABA_SEND_HEALTH_TTL_MS = 30 * 1000;
 let lastStaleRecoveryAt = 0;
-const MESSAGE_REPORT_STATUSES = new Set(["queued", "scheduled", "processing", "accepted", "sent", "delivered", "read", "failed", "uncertain"]);
+const MESSAGE_REPORT_STATUSES = new Set(["queued", "scheduled", "processing", "accepted", "sent", "delivered", "read", "failed", "uncertain", "cancelled"]);
 
 function normalizeVariables(variables) {
   if (Array.isArray(variables)) {

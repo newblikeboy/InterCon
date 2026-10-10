@@ -408,7 +408,7 @@ test("platform admin pages and data reject ordinary tenant owners and static byp
   const tenant = await workspace();
   const user = await User.create({ tenantId: tenant._id, name: "Owner", email: "admin@example.test", passwordHash: "unused", isVerified: true });
   const token = signAuthToken(user);
-  await request(app).get("/admin").expect(401);
+  await request(app).get("/admin").expect(302).expect("Location", "/admin/login");
   await request(app).get("/%61dmin-portal.html").expect(404);
   await request(app).get("/admin-portal.html").set("Authorization", "Bearer " + token).expect(403);
   await request(app).get("/api/admin/overview").set("Authorization", "Bearer " + token).expect(403);
@@ -453,6 +453,124 @@ test("suppression is recorded and restoring a contact requires fresh consent evi
   await assert.rejects(contacts.updateContact(tenant._id, contact._id, { name: "Customer", phone: contact.phone, status: "active", optIn: true }), /fresh consent/);
   await contacts.updateContact(tenant._id, contact._id, { name: "Customer", phone: contact.phone, status: "active", optIn: true, optInProof: "New signed consent received" });
   assert.equal(await require("../src/models/ContactStatusEvent").countDocuments(), 2);
+});
+
+test("undeliverable webhooks blacklist the stored recipient once and stop every send path", async t => {
+  const tenant = await workspace();
+  const other = await Tenant.create({ businessName: "Other", contactPerson: "Other", businessEmail: "other@example.test", whatsappNumber: "9876543211" });
+  const phone = "919999999999";
+  const contact = await Contact.create({ tenantId: tenant._id, phone, name: "Customer", status: "active", optIn: { status: true } });
+  await Contact.create({ tenantId: other._id, phone, name: "Other customer", optIn: { status: true } });
+  const conversation = await Conversation.create({ tenantId: tenant._id, contactId: contact._id, customerPhone: phone, lastInboundAt: new Date() });
+  await Message.create({ tenantId: tenant._id, contactId: contact._id, to: phone, templateName: "order_update", status: "sent", metaMessageId: "wamid-undeliverable" });
+  await Message.create({ tenantId: tenant._id, contactId: contact._id, to: phone, phoneNumberId: "123456", templateName: "order_update" });
+  const failed = { id: "wamid-undeliverable", status: "failed", recipient_id: "919888888888", errors: [{ code: 131026, title: "Message undeliverable" }] };
+  await webhook.processMessageStatuses(tenant._id, [failed, failed]);
+  await webhook.processMessageStatuses(tenant._id, [failed]);
+  const saved = await Contact.findById(contact._id);
+  assert.equal(saved.status, "blocked");
+  assert.equal(saved.optIn.status, false);
+  assert.equal(saved.suppression.kind, "delivery_failure");
+  assert.equal(saved.suppression.errorCode, 131026);
+  assert.equal(saved.suppression.metaMessageId, failed.id);
+  assert.ok(saved.suppression.recordedAt);
+  assert.equal(await require("../src/models/ContactStatusEvent").countDocuments(), 1);
+  assert.equal((await Contact.findOne({ tenantId: other._id, phone })).status, "active");
+  assert.equal(await Contact.countDocuments({ phone: failed.recipient_id }), 0);
+  assert.equal((await contacts.listContacts(tenant._id, { status: "blocked" }))[0].suppression.kind, "delivery_failure");
+  await Template.create({ tenantId: tenant._id, name: "order_update", category: "utility", language: "en", status: "approved", body: "Ready", parameterCount: 0 });
+  const provider = t.mock.method(global, "fetch", async () => { throw new Error("Must not send"); });
+  assert.equal((await messages.processNextQueuedMessage("suppression-test")).action, "failed");
+  await assert.rejects(messages.sendTemplateMessage(tenant._id, { phone, optIn: true, templateName: "order_update" }), /active opted-in/);
+  await assert.rejects(messages.previewBulkTemplateMessages(tenant._id, { contactIds: [String(contact._id)], templateName: "order_update" }), /active opted-in/);
+  await assert.rejects(inbox.sendReply(tenant._id, conversation._id, { text: "Reply" }), /blocked or opted out/);
+  await assert.rejects(inbox.sendReply(tenant._id, conversation._id, { text: "Bot reply", automationSend: true }), /blocked or opted out/);
+  await assert.rejects(trialSend(tenant._id, phone), error => error.details?.code === "CONTACT_SUPPRESSED");
+  assert.equal(provider.mock.callCount(), 0);
+});
+
+test("inbox failure webhooks also suppress recipients but unrelated failures do not", async () => {
+  const tenant = await workspace();
+  const phone = "919999999999";
+  const contact = await Contact.create({ tenantId: tenant._id, phone, name: "Customer", optIn: { status: true } });
+  const conversation = await Conversation.create({ tenantId: tenant._id, contactId: contact._id, customerPhone: phone });
+  await InboxMessage.create({ tenantId: tenant._id, conversationId: conversation._id, customerPhone: phone, direction: "out", status: "sent", metaMessageId: "reply-failure" });
+  for (const code of [131049, 131048, 131000, 131042]) {
+    await webhook.processMessageStatuses(tenant._id, [{ id: "reply-failure", status: "failed", errors: [{ code }] }]);
+    assert.equal((await Contact.findById(contact._id)).status, "active");
+  }
+  await webhook.processMessageStatuses(tenant._id, [{ id: "reply-failure", status: "failed", errors: [{ code: "131026" }] }]);
+  assert.equal((await Contact.findById(contact._id)).suppression.kind, "delivery_failure");
+});
+
+test("synchronous undeliverable responses stop subsequent provider sends and release free quota", async t => {
+  const tenant = await freeWorkspace(0);
+  const provider = t.mock.method(global, "fetch", async () => ({ ok: false, status: 400, json: async () => ({ error: { code: 131026, message: "Receiver is incapable" } }) }));
+  await trialSend(tenant._id, "9999999999");
+  const contact = await Contact.findOne({ tenantId: tenant._id, phone: "919999999999" });
+  assert.equal(contact.suppression.kind, "delivery_failure");
+  assert.equal(contact.status, "blocked");
+  await assert.rejects(trialSend(tenant._id, "+91 99999 99999"), /blocked or opted out/);
+  assert.equal(provider.mock.callCount(), 1);
+  const saved = await Tenant.findById(tenant._id);
+  assert.equal(saved.trial.recipients.length, 0);
+  assert.equal(saved.trial.reservations.length, 0);
+});
+
+test("suppression added while reserving quota is rechecked before the provider and releases its slot", async t => {
+  const tenant = await freeWorkspace(0);
+  const original = Tenant.updateOne;
+  t.mock.method(Tenant, "updateOne", async function (filter, update, ...args) {
+    const result = await original.call(this, filter, update, ...args);
+    if (update.$push?.["trial.reservations"]) await contacts.suppressContact(tenant._id, { phone: "919999999999", reason: "Customer blocked us", kind: "customer_block" });
+    return result;
+  });
+  const provider = t.mock.method(global, "fetch", async () => { throw new Error("Must not send"); });
+  await assert.rejects(trialSend(tenant._id, "919999999999"), /blocked or opted out/);
+  assert.equal(provider.mock.callCount(), 0);
+  assert.equal((await Tenant.findById(tenant._id)).trial.reservations.length, 0);
+});
+
+test("manual suppression metadata survives imports and delivery failures and cannot be moved to another phone", async () => {
+  const tenant = await workspace();
+  const reason = "Customer confirmed blocking our business. " + "Evidence ".repeat(50);
+  const contact = await contacts.suppressContact(tenant._id, { phone: "919999999999", kind: "customer_block", reason });
+  await contacts.importContacts(tenant._id, [{ name: "Imported customer", phone: contact.phone, optIn: true, proof: "Old consent" }]);
+  await contacts.suppressUndeliverableContact(tenant._id, contact.phone, { code: 131026 }, { sentAt: new Date() });
+  const saved = await Contact.findById(contact._id);
+  assert.equal(saved.status, "blocked");
+  assert.equal(saved.suppression.kind, "customer_block");
+  assert.equal(saved.suppression.reason, reason.trim());
+  assert.equal(await require("../src/models/ContactStatusEvent").countDocuments(), 1);
+  await assert.rejects(contacts.updateContact(tenant._id, contact._id, { name: "Customer", phone: "919888888888", status: "blocked" }), /before changing/);
+  await assert.rejects(contacts.suppressContact(tenant._id, { phone: contact.phone, kind: "delivery_failure", reason }), /manual block/);
+});
+
+test("unmatched, inbound, cross-tenant and already-delivered failure notices cannot blacklist a contact", async () => {
+  const tenant = await workspace();
+  const contact = await Contact.create({ tenantId: tenant._id, phone: "919999999999", name: "Customer", optIn: { status: true } });
+  const conversation = await Conversation.create({ tenantId: tenant._id, customerPhone: contact.phone });
+  await InboxMessage.create({ tenantId: tenant._id, conversationId: conversation._id, customerPhone: contact.phone, direction: "in", metaMessageId: "inbound-only" });
+  await Message.create({ tenantId: tenant._id, to: contact.phone, templateName: "hello", status: "read", metaMessageId: "already-read" });
+  const notice = id => ({ id, status: "failed", recipient_id: contact.phone, errors: [{ code: 131026 }] });
+  await webhook.processMessageStatuses(tenant._id, [notice("unknown"), notice("inbound-only"), notice("already-read")]);
+  await webhook.processMessageStatuses(new mongoose.Types.ObjectId(), [notice("already-read")]);
+  assert.equal((await Contact.findById(contact._id)).status, "active");
+  assert.equal(await require("../src/models/ContactStatusEvent").countDocuments(), 0);
+});
+
+test("fresh consent clears suppression and delayed failures from older sends cannot undo it", async () => {
+  const tenant = await workspace();
+  const contact = await contacts.suppressContact(tenant._id, { phone: "919999999999", reason: "Could not receive" });
+  await Message.create({ tenantId: tenant._id, to: contact.phone, templateName: "hello", status: "sent", metaMessageId: "old-send", acceptedAt: new Date(Date.now() - 60000) });
+  await contacts.updateContact(tenant._id, contact._id, { name: "Customer", phone: contact.phone, status: "active", optIn: true, optInProof: "Fresh consent after unblocking" });
+  await webhook.processMessageStatuses(tenant._id, [{ id: "old-send", status: "failed", timestamp: String(Math.floor(Date.now() / 1000) + 10), errors: [{ code: 131026 }] }]);
+  const restored = await Contact.findById(contact._id);
+  assert.equal(restored.status, "active");
+  assert.equal(restored.suppression, undefined);
+  assert.ok(restored.suppressionClearedAt);
+  await contacts.suppressUndeliverableContact(tenant._id, contact.phone, { code: 131026 }, { sentAt: new Date(restored.suppressionClearedAt.getTime() + 1) });
+  assert.equal((await Contact.findById(contact._id)).status, "blocked");
 });
 
 test("unfinished scheduled campaigns cannot falsely activate", async () => {

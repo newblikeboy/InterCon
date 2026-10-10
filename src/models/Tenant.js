@@ -3,6 +3,7 @@ const { decryptSecret, encryptSecret } = require("../utils/crypto");
 
 const tenantSchema = new mongoose.Schema(
   {
+    kind: { type: String, enum: ["customer", "platform"], default: "customer" },
     businessName: {
       type: String,
       required: true,
@@ -167,6 +168,7 @@ const tenantSchema = new mongoose.Schema(
       }
     },
     billing: {
+      accessSource: { type: String, enum: ["payment", "manual"] },
       plan: {
         type: String,
         enum: ["none", "monthly", "quarterly", "yearly"],

@@ -1689,6 +1689,29 @@ address {
   display: none;
 }
 
+[data-suppression-form] {
+  margin: 20px 0;
+  align-items: end;
+}
+
+[data-suppression-form] label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+[data-suppression-form] input,
+[data-suppression-form] select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink);
+  background: var(--paper);
+}
+
 .contact-table-row {
   grid-template-columns:
     minmax(130px, 1.2fr)
@@ -7822,6 +7845,62 @@ address {
   }
 }
 
+/* Template catalogue follows the portal's contact-panel and control styles. */
+.console-body #template-library .lib-panel { margin-top: 0; }
+.lib-panel-head .lib-hint { margin-top: 6px; font-weight: 400; }
+.console-body #template-library .lib-actions { justify-content: flex-end; align-items: flex-end; }
+.lib-actions svg, .lib-card-info .btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.console-body #template-library .lib-actions .btn { min-height: 40px; padding: 9px 14px; font-size: 13px; color: var(--brand-dark); background: #fff; box-shadow: none; }
+.lib-filter-panel { margin: 18px 0 20px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--soft); }
+.lib-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; }
+.console-body #template-library .lib-search-wrap { max-width: none; min-width: 0; border-radius: 10px; box-shadow: none; padding: 4px 4px 4px 12px; gap: 8px; }
+.console-body #template-library .lib-search { width: 0; font-size: 13px; min-height: 36px; font-weight: 400; }
+.console-body #template-library .lib-search-wrap .btn { min-height: 36px; padding: 8px 13px; border-radius: 8px; font-size: 12px; background: var(--brand); box-shadow: none; }
+.lib-language-control { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--muted); font-size: 12px; font-weight: 600; }
+.console-body #template-library .lib-filter { min-width: 155px; min-height: 44px; border-radius: 10px; font-size: 13px; font-weight: 500; }
+.lib-topic-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+.console-body #template-library .lib-topics { flex-direction: row; flex-wrap: wrap; gap: 7px; }
+.console-body #template-library .lib-topic { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 12px; font-weight: 600; }
+.console-body #template-library .lib-topic.is-active { border-color: rgba(31, 111, 235, .3); background: #eaf2ff; color: var(--brand-dark); }
+.lib-reset { flex: 0 0 auto; padding: 6px 0; border: 0; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; }
+.lib-reset:hover { color: var(--brand-dark); }
+.console-body #template-library .lib-message { min-height: 0; margin: 12px 0; font-size: 13px; }
+.lib-message:empty { display: none; }
+.lib-results-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; font-size: 13px; }
+.lib-results-head strong { color: var(--ink); font-weight: 650; }
+.lib-results-head > span { color: var(--muted); font-size: 12px; }
+.console-body #template-library .lib-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+.lib-grid > .empty-row { grid-column: 1 / -1; padding: 40px 20px; border: 1px dashed var(--line); border-radius: 12px; background: var(--soft); }
+.console-body #template-library .lib-card { border-radius: 12px; box-shadow: none; min-width: 0; }
+.console-body #template-library .lib-card:hover { transform: none; border-color: #b8cef0; box-shadow: 0 6px 18px rgba(15, 30, 52, .05); }
+.lib-card-heading { padding: 18px 16px 14px; }
+.lib-card-heading h3 { margin: 10px 0 5px; font-size: 15px; font-weight: 750; overflow-wrap: anywhere; }
+.console-body #template-library .lib-badge { border-radius: 6px; padding: 4px 7px; font-size: 10px; font-weight: 700; letter-spacing: .3px; }
+.console-body #template-library .lib-meta { font-size: 11px; font-weight: 400; line-height: 1.55; overflow-wrap: anywhere; }
+.console-body #template-library .lib-preview { min-height: 172px; margin: 0 12px; padding: 12px; border-radius: 10px; background: #f4f7fa; gap: 8px; }
+.lib-preview-label { color: var(--muted); font-size: 9px; font-weight: 650; letter-spacing: .6px; text-transform: uppercase; }
+.console-body #template-library .lib-bubble { padding: 12px; border: 1px solid var(--line); border-radius: 4px 10px 10px 10px; box-shadow: none; }
+.console-body #template-library .lib-bubble p { white-space: pre-wrap; font-size: 12px; line-height: 1.65; }
+.console-body #template-library .lib-var { background: #eaf2ff; color: var(--brand-dark); font-size: inherit; font-weight: 500; }
+.console-body #template-library .lib-cta { padding: 8px; border: 1px solid var(--line); border-radius: 7px; box-shadow: none; font-size: 11px; font-weight: 600; overflow-wrap: anywhere; }
+.console-body #template-library .lib-card-info { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; padding: 16px; border-top: 0; }
+.lib-language-tag { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.console-body #template-library .lib-card-info .btn { flex: 0 0 auto; margin: 0; align-self: center; padding: 8px 11px; min-height: 36px; border-radius: 8px; background: var(--brand); box-shadow: none; font-size: 11px; }
+.console-body #template-library .lib-card-info .btn:hover, .console-body #template-library .lib-search-wrap .btn:hover { color: #fff; background: var(--brand-dark); }
+.lib-help { margin-top: 20px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.lib-help summary { width: fit-content; cursor: pointer; font-weight: 600; }
+.lib-help p { max-width: 760px; margin: 10px 0 0; }
+#template-library :is(button, input, select, summary):focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+@media (max-width: 1180px) { .lib-toolbar { grid-template-columns: minmax(0, 1fr); } .lib-language-control { justify-content: space-between; } .lib-topic-bar { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 700px) {
+  .console-body #template-library { padding: 14px; }
+  .console-body #template-library .lib-panel { padding: 14px; }
+  .lib-filter-panel { padding: 12px; }
+  .console-body #template-library .lib-grid { grid-template-columns: 1fr; }
+  .lib-results-head > span { display: none; }
+  .console-body #template-library .lib-actions .btn { width: auto; }
+}
+
 /* ==========================================================================
    Manage Template — status filter chips + draft pill
    ========================================================================== */
@@ -9344,6 +9423,776 @@ address {
 
   .inbox-back {
     display: none;
+  }
+}
+
+/* Contact suppression uses the same surfaces and table layout as Contacts. */
+.console-body .suppression-panel {
+  margin-top: 0;
+}
+
+.suppression-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.suppression-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: var(--soft);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.suppression-actions svg,
+.suppression-notice svg {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.console-body .suppression-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 9px 14px;
+  font-size: 13px;
+}
+
+.console-body .suppression-actions .btn-outline,
+.console-body .suppression-form-actions .btn-outline {
+  color: var(--brand-dark);
+  background: #fff;
+  box-shadow: none;
+}
+
+.console-body .suppression-actions .btn:not(.btn-outline) {
+  color: #fff;
+  background: var(--brand);
+}
+
+.console-body .suppression-actions .btn:not(.btn-outline):hover {
+  color: #fff;
+  background: var(--brand-dark);
+}
+
+.suppression-notice {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 14px;
+  border: 1px solid #dbe8f9;
+  border-radius: 10px;
+  background: #f5f9ff;
+  color: var(--brand-dark);
+  font-size: 13px;
+}
+
+.suppression-notice p {
+  margin: 0;
+  font-weight: 600;
+}
+
+.suppression-notice > span {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.console-body .suppression-message {
+  min-height: 0;
+  margin: 12px 0;
+  font-size: 13px;
+}
+
+.suppression-message:empty {
+  display: none;
+}
+
+.suppression-table {
+  margin-top: 18px;
+}
+
+.console-body .table-row.suppression-table-row {
+  grid-template-columns: minmax(130px, 1fr) minmax(145px, 1fr) minmax(150px, 1.6fr) minmax(105px, .8fr) 100px;
+  gap: 16px;
+  padding: 16px;
+  font-size: 13px;
+}
+
+.console-body .suppression-table-row.table-head {
+  padding-block: 12px;
+  font-size: 11px;
+  letter-spacing: .4px;
+}
+
+.suppression-contact,
+.suppression-date {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+}
+
+.suppression-contact small,
+.suppression-date small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.suppression-contact small {
+  font-variant-numeric: tabular-nums;
+}
+
+.suppression-reason {
+  color: var(--muted);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.console-body .suppression-table-row em {
+  display: inline-block;
+  max-width: 100%;
+  padding: 5px 9px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.console-body .table-row .suppression-edit {
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--brand-dark);
+  background: #fff;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.console-body .table-row .suppression-edit:hover {
+  border-color: var(--brand);
+  background: #f5f9ff;
+}
+
+.suppression-help {
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.suppression-help summary {
+  width: fit-content;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.suppression-help p {
+  max-width: 760px;
+  margin: 10px 0 0;
+}
+
+.console-body .suppression-add-form {
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--soft);
+  gap: 18px;
+}
+
+.suppression-form-head,
+.suppression-form-reason,
+.suppression-form-actions {
+  grid-column: 1 / -1;
+}
+
+.suppression-form-head h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.suppression-form-head p,
+.suppression-add-form label small {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.suppression-add-form label {
+  align-content: start;
+  align-self: start;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.suppression-add-form input,
+.suppression-add-form select {
+  font-size: 13px;
+}
+
+.suppression-form-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.console-body .suppression-form-actions .btn {
+  min-height: 40px;
+  padding: 9px 14px;
+  font-size: 13px;
+}
+
+.suppression-view :is(button, input, select, summary):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+
+@media (max-width: 1180px) and (min-width: 701px) {
+  .console-body .suppression-table-row {
+    grid-template-columns: minmax(130px, 1fr) minmax(140px, 1fr) minmax(150px, 1.5fr) 100px 85px;
+    min-width: 700px;
+  }
+}
+
+@media (max-width: 700px) {
+  .console-body .suppression-view {
+    padding: 14px;
+  }
+
+  .console-body .suppression-panel {
+    padding: 14px;
+  }
+
+  .console-body .suppression-actions {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+  }
+
+  .console-body .suppression-actions .btn {
+    flex: 1;
+    width: auto;
+    padding: 9px 10px;
+  }
+
+  .suppression-notice {
+    align-items: flex-start;
+    font-size: 12px;
+  }
+
+  .suppression-notice > span {
+    display: none;
+  }
+
+  .console-body .suppression-table .table-row:not(.table-head) {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .console-body .suppression-table-row > strong.suppression-contact {
+    display: grid;
+    gap: 4px;
+    font-size: 14px;
+  }
+
+  .console-body .suppression-table-row .suppression-date {
+    display: grid;
+    gap: 3px;
+  }
+
+  .suppression-table-row .suppression-reason {
+    align-items: start;
+  }
+
+  .suppression-table-row .suppression-reason > span {
+    max-width: 70%;
+    font-size: 12px;
+  }
+
+  .suppression-table-row > .suppression-row-action {
+    justify-content: flex-end;
+  }
+
+  .suppression-table-row > .suppression-row-action::before {
+    display: none;
+  }
+
+  .console-body .suppression-add-form {
+    padding: 14px;
+  }
+}
+
+/* Send WhatsApp uses the same panel and controls as the other working views.
+   The recipient picker keeps its established layout and styling. */
+.console-body #send-whatsapp .send-panel {
+  margin-top: 0;
+  padding: 20px;
+}
+
+.send-panel-head > div > p:not(.eyebrow) {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.send-panel-actions svg,
+#send-whatsapp .send-variable-actions svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.console-body #send-whatsapp .send-panel-actions .btn {
+  min-height: 40px;
+  padding: 9px 14px;
+  background: #fff;
+  box-shadow: none;
+  font-size: 13px;
+}
+
+.console-body #send-whatsapp .send-whatsapp-layout {
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.console-body #send-whatsapp .send-form {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.send-template-section,
+.send-template-fields,
+.send-submit-area {
+  min-width: 0;
+}
+
+.send-section-head {
+  margin-bottom: 14px;
+}
+
+.send-section-head h3 {
+  margin: 0 0 4px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.send-section-head p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.send-template-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.console-body #send-whatsapp .send-template-fields label {
+  align-content: start;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.console-body #send-whatsapp .send-template-fields select {
+  min-height: 44px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.send-template-fields .send-media-field {
+  grid-column: 1 / -1;
+}
+
+.send-template-fields .send-media-field small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.console-body #send-whatsapp .send-variable-builder {
+  gap: 0;
+  padding: 20px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.console-body #send-whatsapp .send-variable-import {
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--soft);
+}
+
+.console-body #send-whatsapp .send-variable-actions {
+  gap: 8px;
+}
+
+.console-body #send-whatsapp .send-variable-actions button {
+  gap: 7px;
+  min-height: 40px;
+  padding: 9px 11px;
+  border-color: var(--line);
+  border-radius: 8px;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  text-align: left;
+  line-height: 1.4;
+}
+
+.console-body #send-whatsapp .send-variable-actions .send-variable-upload {
+  color: #fff;
+  border-color: var(--brand);
+  background: var(--brand);
+}
+
+.console-body #send-whatsapp .send-variable-actions button:hover {
+  border-color: var(--brand);
+  background: #eaf2ff;
+}
+
+.console-body #send-whatsapp .send-variable-actions .send-variable-upload:hover {
+  color: #fff;
+  background: var(--brand-dark);
+}
+
+.console-body #send-whatsapp .send-variable-actions .clear {
+  margin-left: auto;
+  color: #9b2c2c;
+  border-color: transparent;
+  background: transparent;
+}
+
+.console-body #send-whatsapp .send-variable-actions .clear:hover {
+  border-color: #f3cccc;
+  background: #fff0f0;
+}
+
+.console-body #send-whatsapp .send-variable-file-state {
+  gap: 5px;
+  padding: 12px;
+  color: var(--muted);
+  border-color: var(--line);
+  background: #fff;
+  overflow-wrap: anywhere;
+}
+
+.console-body #send-whatsapp .send-variable-file-state.is-ready {
+  border-color: #c0e5d8;
+  background: #f2faf6;
+}
+
+.console-body #send-whatsapp .send-variable-file-state strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.console-body #send-whatsapp .send-variable-file-state small {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+#send-whatsapp .send-variable-format {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+#send-whatsapp .send-variable-format summary {
+  width: fit-content;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.console-body #send-whatsapp .send-variable-guide {
+  gap: 12px;
+  margin: 12px 0 0;
+  padding: 12px;
+  background: #fff;
+}
+
+#send-whatsapp .send-variable-guide-body {
+  padding: 0;
+  box-shadow: none;
+  white-space: pre-wrap;
+}
+
+#send-whatsapp .send-variable-guide code {
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+#send-whatsapp .send-variable-guide .lib-var {
+  color: var(--brand-dark);
+  background: #eaf2ff;
+}
+
+#send-whatsapp .send-variable-preview-row span {
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+#send-whatsapp .send-variable-preview-row.head {
+  background: #f7f9fc;
+}
+
+#send-whatsapp .send-variable-preview-row.head span {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.console-body #send-whatsapp .send-variable-builder .form-note {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+#send-whatsapp .send-variable-empty {
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.send-submit-area {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.send-submit-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.console-body #send-whatsapp .send-submit-area .btn {
+  grid-column: 2;
+  justify-self: end;
+  min-height: 42px;
+  padding: 10px 16px;
+  border-radius: 9px;
+  background: var(--brand);
+  box-shadow: none;
+  font-size: 13px;
+}
+
+.console-body #send-whatsapp .send-submit-area .btn:hover:not(:disabled) {
+  background: var(--brand-dark);
+}
+
+.console-body #send-whatsapp .send-submit-area .btn:disabled {
+  color: #5a6b82;
+  background: #e9eef6;
+  border-color: #e3e9f2;
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.console-body #send-whatsapp .send-submit-area .contact-message {
+  min-height: 0;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.send-submit-area .contact-message:empty {
+  display: none;
+}
+
+.console-body #send-whatsapp .whatsapp-phone-preview {
+  width: 100%;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--soft);
+}
+
+.console-body #send-whatsapp .preview-panel-head {
+  width: 100%;
+  align-items: center;
+}
+
+.send-panel .preview-panel-head > div {
+  display: grid;
+  gap: 3px;
+}
+
+.send-panel .preview-panel-head strong {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.send-panel .preview-panel-head small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.console-body #send-whatsapp .send-preview-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: var(--wa-dark);
+  background: #e4f4ed;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: none;
+}
+
+.send-preview-live i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--wa);
+}
+
+.console-body #send-whatsapp .phone-shell {
+  box-shadow: 0 12px 24px rgba(17, 33, 29, 0.12);
+}
+
+.send-preview-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+#send-whatsapp :is(button, select, summary):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+
+@media (max-width: 1180px) {
+  .console-body #send-whatsapp .send-whatsapp-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .console-body #send-whatsapp .whatsapp-phone-preview {
+    position: static;
+    justify-self: center;
+    max-width: 360px;
+  }
+}
+
+@media (max-width: 700px) {
+  .console-body #send-whatsapp {
+    padding: 14px;
+  }
+
+  .console-body #send-whatsapp .send-panel {
+    padding: 14px;
+  }
+
+  .console-body #send-whatsapp .send-panel-head {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .console-body #send-whatsapp .send-panel-actions {
+    justify-self: start;
+  }
+
+  .console-body #send-whatsapp .send-panel-actions .btn {
+    width: auto;
+  }
+
+  .console-body #send-whatsapp .send-template-fields,
+  .console-body #send-whatsapp .send-submit-area {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .console-body #send-whatsapp .send-variable-import {
+    padding: 12px;
+  }
+
+  .console-body #send-whatsapp .send-variable-actions button {
+    justify-content: center;
+  }
+
+  .console-body #send-whatsapp .send-variable-actions :is([data-download-variable-csv], [data-open-variable-file]) {
+    width: 100%;
+  }
+
+  .console-body #send-whatsapp .send-submit-area .btn {
+    grid-column: 1;
+    justify-self: stretch;
+    width: 100%;
+  }
+
+  .console-body #send-whatsapp .whatsapp-phone-preview {
+    padding: 16px 0 0;
+    border: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .console-body #send-whatsapp .preview-panel-head {
+    flex-direction: row;
+  }
+
+  .console-body #send-whatsapp .wa-preview-topbar {
+    grid-template-columns: 18px 32px minmax(0, 1fr) 12px;
+    gap: 6px;
+    padding-inline: 10px;
+  }
+
+  .console-body #send-whatsapp .wa-avatar {
+    width: 32px;
+    height: 32px;
   }
 }
 

@@ -180,6 +180,7 @@ async function activatePlan(tenantId, planId = "", payment = {}) {
       $set: {
         "billing.plan": plan.id,
         "billing.status": "active",
+        "billing.accessSource": payment.razorpayPaymentId ? "payment" : "manual",
         "billing.amount": plan.amount,
         "billing.currency": plan.currency,
         "billing.selectedAt": currentTenant.billing?.selectedAt || activatedAt,

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>InterCon Customer Portal</title>
   <meta name="description" content="InterCon customer portal for connecting WhatsApp Business, managing contacts, creating templates, sending messages, and checking billing readiness.">
-  <link rel="stylesheet" href="style/customer-portal.css?v=20261010-usage2">
+  <link rel="stylesheet" href="style/customer-portal.css?v=20261010-plans1">
 </head>
 <body class="portal-body console-body">
   <div class="portal-shell console-shell">
@@ -819,7 +819,7 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
         </div>
       </section>
 
-      <section class="portal-section portal-view mini" id="billing" data-portal-view hidden>
+      <section class="portal-section portal-view billing-view" id="billing" data-portal-view hidden>
         <section class="recipient-usage" data-trial-usage aria-labelledby="recipient-usage-title" hidden>
           <div class="recipient-usage-intro">
             <span class="recipient-usage-icon" aria-hidden="true">
@@ -842,27 +842,56 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
             </div>
             <p class="recipient-usage-pending" data-usage-pending hidden></p>
           </div>
-          <a class="recipient-usage-plan" href="#billing" data-usage-plan>View plans<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></a>
-          <p class="recipient-usage-note">Only unique numbers messaged count. Adding contacts is free. Meta WhatsApp charges are separate.</p>
+          <button class="recipient-usage-plan" type="button" data-usage-plan>View plans<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></button>
+          <p class="recipient-usage-note">Only unique numbers messaged count. Adding contacts is free.</p>
         </section>
-        <div class="billing-status-card">
-          <div>
-            <span>Current plan</span>
+
+        <div class="billing-overview">
+          <article class="billing-status-card">
+            <div class="billing-card-heading">
+              <span class="billing-section-label">Your access</span>
+              <span class="status-pill warning" data-billing-status>Checking</span>
+            </div>
             <strong data-billing-current-plan>No active plan</strong>
+            <p data-billing-message role="status" aria-live="polite">Checking your plan...</p>
+          </article>
+          <aside class="billing-meta-card" aria-labelledby="billing-meta-title">
+            <span class="billing-meta-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h4"/></svg></span>
+            <div>
+              <h2 id="billing-meta-title">Two bills, clearly explained</h2>
+              <p>Your InterCon plan covers platform access. Meta bills WhatsApp messaging separately.</p>
+              <div class="billing-meta-links">
+                <a href="https://business.facebook.com/settings/payments" target="_blank" rel="noreferrer">Open Meta payments <span aria-hidden="true">&#8599;</span></a>
+                <a href="#connect">Check Meta billing <span aria-hidden="true">&#8594;</span></a>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <section class="billing-plans-section" id="billing-plans" aria-labelledby="billing-plans-title">
+          <div class="billing-section-heading">
+            <div>
+              <span class="billing-section-label">Choose your plan</span>
+              <h2 id="billing-plans-title">A simple plan for every stage</h2>
+              <p>Choose how long you want access. Renewals extend your current paid period.</p>
+            </div>
+            <span class="billing-checkout-note"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></svg>Checkout with Razorpay</span>
           </div>
-          <span class="status-pill warning" data-billing-status>Checking</span>
-          <p data-billing-message>InterCon plan billing and Meta WhatsApp billing are separate.</p>
-        </div>
+          <div class="billing-plan-grid" data-billing-plan-grid>
+            <div class="empty-row">Loading plans...</div>
+          </div>
+          <p class="billing-plans-note">All plans include the same platform tools. Meta WhatsApp charges are separate.</p>
+        </section>
 
-        <div class="billing-plan-grid" data-billing-plan-grid>
-          <div class="empty-row">Loading plans...</div>
-        </div>
-
-        <div class="template-actions billing-meta-actions">
-          <a class="btn btn-outline" href="https://business.facebook.com/settings/payments" target="_blank" rel="noreferrer">Open Meta payments</a>
-          <a class="btn btn-outline" href="#connect">Check Meta billing</a>
-        </div>
-      <div class="console-panel"><h3>Payment history</h3><p>If payment was deducted but access has not updated, refresh this page shortly. Do not pay again while confirmation is pending.</p><div data-payment-history>Loading payments?</div></div>
+        <section class="billing-history" aria-labelledby="billing-history-title">
+          <div class="billing-history-heading">
+            <div><h2 id="billing-history-title">Payment history</h2><p data-payment-count>Your recent InterCon payments</p></div>
+            <button class="billing-refresh" type="button" data-billing-refresh><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 11-1l3 6M4 12l3 6a7 7 0 0 0 11-1"/></svg><span>Refresh</span></button>
+          </div>
+          <p class="billing-history-error" data-billing-history-error role="status" hidden></p>
+          <div class="billing-history-body" data-payment-history>Loading payments...</div>
+          <p class="billing-history-note"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></svg>If payment was deducted but access has not updated, refresh shortly. Do not pay again while confirmation is pending.</p>
+        </section>
       </section>
 
       <!-- ============ Coexistence Onboarding (WhatsApp Business app users) ============ -->
@@ -1409,7 +1438,7 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
   </div>
 
   <script src="vendor/xlsx.full.min.js?v=20260906"></script>
-  <script src="js/customer-portal.js?v=20261010-usage1"></script>
+  <script src="js/customer-portal.js?v=20261010-plans1"></script>
   <script src="/js/dialog-accessibility.js?v=20260906" defer></script>
 </body>
 </html>

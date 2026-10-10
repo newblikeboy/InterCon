@@ -211,6 +211,14 @@ async function run() {
   const automationMutations = [];
   const adminMutations = [];
   let adminFails = false;
+  let billingFails = false, checkoutFails = false;
+  let billingPayments = [];
+  const billingPlans = [
+    { id: "monthly", name: "Monthly", amount: 1500, currency: "INR", interval: "month", months: 1 },
+    { id: "quarterly", name: "Quarterly", amount: 4000, currency: "INR", interval: "quarter", months: 3 },
+    { id: "yearly", name: "Yearly", amount: 10000, currency: "INR", interval: "year", months: 12 }
+  ];
+  const selectedBillingPlans = [];
   const adminTenant = { ...tenant, _id: tenant.id, businessEmail: "shop@example.test", contactPerson: "Owner", whatsappNumber: "919999999999", trialUsed: 2, subscription: "paid", billing: { ...tenant.billing, accessSource: "payment" } };
   await context.route("**/*", async route => {
     const url = new URL(route.request().url());
@@ -242,7 +250,17 @@ async function run() {
         data.flow = liveFlow;
       }
     }
-    if (url.pathname === "/api/billing") Object.assign(data, { billing: tenant.billing, plans: [{ id: "monthly", name: "Monthly", amount: 1500, currency: "INR", interval: "month" }], ...(url.searchParams.get("summary") === "1" ? {} : { payments: [] }) });
+    if (url.pathname === "/api/billing") {
+      if (billingFails) return route.fulfill({ status: 503, json: { message: "Billing temporarily unavailable" } });
+      Object.assign(data, { billing: tenant.billing, plans: billingPlans, ...(url.searchParams.get("summary") === "1" ? {} : { payments: billingPayments }) });
+    }
+    if (url.pathname === "/api/billing/select-plan") {
+      const body = route.request().postDataJSON();
+      selectedBillingPlans.push(body.plan);
+      if (checkoutFails) return route.fulfill({ status: 503, json: { message: "Checkout temporarily unavailable" } });
+      const plan = billingPlans.find(plan => plan.id === body.plan);
+      Object.assign(data, { billing: tenant.billing, checkout: { key: "test_key", orderId: "order_mock", amount: plan.amount * 100, currency: plan.currency, name: "InterCon", description: plan.name + " plan" } });
+    }
     if (url.pathname === "/api/messages/send-template" && tenant.billing.platformAccess === false) {
       return route.fulfill({ status: 402, json: { message: "Free allowance complete", details: { code: "INTERCON_PLAN_REQUIRED", trial: tenant.billing.trial } } });
     }
@@ -367,12 +385,61 @@ async function run() {
   await checkRecipientExcelRoundTrip(page);
   await checkSendTemplateStates(page);
   await page.evaluate(() => showPortalView("billing"));
-  await page.waitForFunction(() => document.querySelector("[data-select-plan]")?.textContent === "Renew plan");
-  assert.equal(await page.locator("[data-select-plan]").isEnabled(), true);
+  await page.waitForFunction(() => document.querySelector('[data-select-plan="monthly"]')?.textContent === "Renew plan");
+  assert.equal(await page.locator('[data-select-plan="monthly"]').isEnabled(), true);
   assert.match(await page.locator("[data-billing-current-plan]").innerText(), /1,000/);
   assert.match(await page.locator(".billing-plan-card strong").first().innerText(), /1,500/);
   assert.equal(await page.evaluate(() => isInterconPlanActive({ plan: "monthly", status: "active" })), false);
   results.push({ check: "billing preserves the purchased price, shows the new renewal price, and rejects missing expiry", passed: true });
+  assert.equal(await page.locator(".billing-plan-card").count(), 3);
+  assert.match(await page.locator("[data-payment-history]").innerText(), /No completed payments yet/);
+  billingPayments = [
+    { plan: "monthly", amount: 150000, currency: "INR", status: "captured", capturedAt: "2026-10-01T12:00:00Z", providerPaymentId: '<img src=x onerror="window.paymentXss=true">' },
+    { plan: "quarterly", amount: 400055, currency: "INR", status: "refunded", capturedAt: "2026-10-02T12:00:00Z", providerPaymentId: "pay_" + "reference".repeat(14) }
+  ];
+  await page.evaluate(() => loadBilling());
+  assert.equal(await page.locator(".billing-history-table tbody tr").count(), 2);
+  assert.match(await page.locator(".billing-history-table").innerText(), /1,500/);
+  assert.match(await page.locator(".billing-history-table").innerText(), /4,000\.55/, "Payment amounts preserve minor currency units");
+  assert.match(await page.locator(".billing-history-table").innerText(), /Refunded/, "Refunded payments keep their actual status");
+  assert.equal(await page.locator("[data-payment-history] img").count(), 0, "Payment references are text, never markup");
+  assert.equal(await page.locator("[data-payment-count]").innerText(), "2 recent payments");
+  for (const width of [1440, 1024, 760, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Plan comparison and payment history fit at " + width);
+    await page.screenshot({ path: path.join(output, `billing-paid-${width}.png`), animations: "disabled" });
+    if ([1440, 320].includes(width)) await page.locator(".billing-history").screenshot({ path: path.join(output, `billing-history-${width}.png`), animations: "disabled" });
+  }
+  billingFails = true;
+  await page.locator("[data-billing-refresh]").click();
+  await page.waitForFunction(() => !document.querySelector("[data-billing-history-error]").hidden);
+  assert.equal(await page.locator(".billing-history-table tbody tr").count(), 2, "Failed refresh preserves previous payment records");
+  billingFails = false;
+  await page.locator("[data-billing-refresh]").click();
+  await page.waitForFunction(() => !document.querySelector("[data-billing-refresh]").disabled && document.querySelector("[data-billing-history-error]").hidden);
+  await page.evaluate(() => {
+    window.Razorpay = class {
+      constructor(options) { this.options = options; }
+      on() {}
+      open() { this.options.modal.ondismiss(); }
+    };
+  });
+  await page.locator('[data-select-plan="monthly"]').click();
+  await page.waitForFunction(() => document.querySelector("[data-billing-message]").textContent.includes("Payment was not completed"));
+  assert.equal(await page.locator('[data-select-plan="monthly"]').isEnabled(), true);
+  assert.equal(selectedBillingPlans.at(-1), "monthly");
+  checkoutFails = true;
+  await page.locator('[data-select-plan="quarterly"]').click();
+  await page.waitForFunction(() => document.querySelector("[data-billing-message]").textContent.includes("Checkout temporarily unavailable"));
+  assert.equal(selectedBillingPlans.at(-1), "quarterly");
+  assert.equal(await page.locator('[data-select-plan="quarterly"]').isEnabled(), true);
+  assert.equal(await page.evaluate(() => hasInterconPlatformAccess(setupState.billing)), true, "Checkout failure preserves existing paid access");
+  checkoutFails = false;
+  billingPayments = [];
+  await page.evaluate(() => loadBilling());
+  await page.evaluate(() => window.scrollTo(0, 0));
+  results.push({ check: "three plan prices and current plan; responsive payment records and empty state; safe reference text; refresh failure preserves history and recovers; renewal cancellation and checkout failure preserve access", passed: true });
   await page.evaluate(() => showPortalView("contacts"));
   await page.goBack();
   await page.waitForFunction(() => !document.getElementById("billing").hidden);
@@ -636,11 +703,12 @@ async function run() {
     await page.setViewportSize({ width, height: 900 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1 && document.querySelector("[data-trial-usage]").scrollWidth <= document.querySelector("[data-trial-usage]").clientWidth + 1), "Recipient usage fits at " + width);
     assert.equal(await page.locator("[data-usage-plan]").isVisible(), true);
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: path.join(output, `recipient-usage-${width}.png`), animations: "disabled" });
   }
   await page.locator("[data-usage-plan]").focus();
   await page.keyboard.press("Enter");
-  await page.waitForFunction(() => !document.getElementById("billing").hidden);
+  await page.waitForFunction(() => document.activeElement?.hasAttribute("data-select-plan"));
   tenant.billing.trial = { limit: 20, used: 19, remaining: 1, reserved: 0, active: true };
   await page.evaluate(() => loadBilling());
   assert.equal(await page.evaluate(() => requirePlatformAccessBeforeAction(setTemplateMessage)), true);
@@ -659,6 +727,7 @@ async function run() {
   assert.match(await page.locator("[data-billing-message]").innerText(), /Free allowance complete/);
   assert.equal(await page.locator("[data-trial-usage]").getAttribute("data-usage-state"), "complete");
   assert.equal(await page.locator("[data-usage-plan]").innerText(), "Activate plan");
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: path.join(output, "recipient-usage-complete-mobile.png"), animations: "disabled" });
   await page.reload();
   await page.waitForFunction(() => setupState.billing.trial?.used === 20);

@@ -318,7 +318,7 @@ const VIEW_META = {
   blacklist: { title: "Blacklist Numbers", related: ["contacts", "optout"] },
   "send-whatsapp": { title: "Send WhatsApp", related: ["templates", "contacts"] },
   chatbot: { title: "ChatBot Builder", related: ["inbox", "templates", "contacts"] },
-  billing: { title: "Billing", related: ["connect"] },
+  billing: { title: "Billing & Plan", related: ["connect"] },
   "developer-api": { title: "API Access", related: ["contacts", "templates"] }
 };
 
@@ -873,8 +873,8 @@ function renderRecipientUsage(trial, paidPlanActive) {
   card.querySelector("[data-usage-description]").textContent = complete
     ? "Activate a plan to keep sending."
     : !trial.active ? "Check your plan or workspace status to send."
-    : low ? "Nearly there. Choose a plan for your next sends."
-    : "Reach new customers, one conversation at a time.";
+    : low ? "Your free allowance is nearly used."
+    : "The same number only counts once.";
   const progress = card.querySelector("[data-usage-progress]");
   progress.setAttribute("aria-valuemax", String(limit));
   progress.setAttribute("aria-valuenow", String(used));
@@ -893,12 +893,6 @@ function renderBilling() {
   const active = isInterconPlanActive(billing);
   const selectedPlan = setupState.plans.find((plan) => plan.id === billing.plan);
   const trial = billing.trial;
-  const trialText = trial
-    ? `${trial.used} of ${trial.limit} unique WhatsApp recipients used. `
-      + (trial.active ? `${trial.remaining} remaining before a paid plan is required.` : "Free allowance complete. Activate a plan to continue sending.")
-      + (trial.reserved ? ` ${trial.reserved} recipient send(s) awaiting confirmation.` : "")
-      + " Adding contacts does not count. Meta WhatsApp charges are separate."
-    : "";
   renderRecipientUsage(trial, active);
 
   if (billingStatus) {
@@ -910,14 +904,16 @@ function renderBilling() {
   if (billingCurrentPlan) {
     billingCurrentPlan.textContent = selectedPlan
       ? `${selectedPlan.name} - ${formatCurrency(billing.amount, billing.currency)}`
-      : trial?.active ? "Free access · 20 unique recipients" : "No active plan";
+      : trial?.active ? "Free access" : "No active plan";
   }
 
   if (billingMessage) {
     billingMessage.classList.remove("error");
     billingMessage.textContent = active
       ? "Your plan is active" + (billing.currentPeriodEnd ? " through " + new Date(billing.currentPeriodEnd).toLocaleDateString() : "") + ". Renewals add time after your current paid period."
-      : trialText || "Start free with 20 unique WhatsApp recipients. A paid plan is required for further sends after your 20th recipient.";
+      : trial?.active ? "Use your free recipient allowance, then activate a plan to keep sending."
+      : trial ? "Free allowance complete. Activate a plan to continue sending."
+      : "Start free with 20 unique WhatsApp recipients, then choose a plan for further sends.";
   }
 
   if (billingPlanGrid) {
@@ -928,13 +924,22 @@ function renderBilling() {
         const isSelected = plan.id === billing.plan;
         const isActive = isSelected && active;
         const buttonText = isActive ? "Renew plan" : "Pay now";
+        const months = plan.interval === "quarter" ? 3 : plan.interval === "year" ? 12 : 1;
+        const period = months === 1 ? "month" : months === 12 ? "year" : "3 months";
+        const cycle = months === 1 ? "Billed monthly" : months === 12 ? "Billed yearly" : "Billed every 3 months";
+        const check = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>';
 
         return `
           <article class="billing-plan-card ${isSelected ? "selected" : ""}">
-            <span>${plan.name}</span>
-            <strong>${formatCurrency(plan.amount, plan.currency)}</strong>
-            <small>${plan.interval === "quarter" ? "Every 3 months" : `Per ${plan.interval}`}</small>
-            <button class="btn ${isSelected ? "btn-outline" : ""}" type="button" data-select-plan="${plan.id}" >${buttonText}</button>
+            <div class="billing-plan-heading"><h3>${escapeHtml(plan.name)}</h3><span class="billing-plan-badge">${isActive ? "Current plan" : isSelected ? "Selected plan" : `${months} ${months === 1 ? "month" : "months"} access`}</span></div>
+            <div class="billing-plan-price"><strong>${escapeHtml(formatCurrency(plan.amount, plan.currency))}</strong><span>/ ${period}</span></div>
+            <p class="billing-plan-cycle">${cycle}${months > 1 ? ` &middot; about ${escapeHtml(formatCurrency(plan.amount / months, plan.currency))}/month` : ""}</p>
+            <ul class="billing-plan-features">
+              <li>${check}WhatsApp messaging access</li>
+              <li>${check}Contacts, templates &amp; reports</li>
+              <li>${check}${months} ${months === 1 ? "month" : "months"} of platform access</li>
+            </ul>
+            <button class="btn ${isSelected ? "btn-outline" : ""}" type="button" data-select-plan="${escapeHtml(plan.id)}" aria-label="${buttonText} &mdash; ${escapeHtml(plan.name)}">${buttonText}</button>
           </article>
         `;
       }).join("");
@@ -951,17 +956,44 @@ async function loadBilling({ summary = false } = {}) {
     active: isInterconPlanActive(data.billing || {})
   };
   setupState.plans = data.plans || [];
-  const history = document.querySelector("[data-payment-history]");
-  if (history && Array.isArray(data.payments)) {
-    history.replaceChildren();
-    for (const payment of data.payments || []) {
-      const row = document.createElement("p");
-      row.textContent = new Date(payment.capturedAt).toLocaleDateString() + " ? " + payment.plan + " ? " + formatCurrency(payment.amount / 100, payment.currency) + " ? " + payment.status + " ? " + payment.providerPaymentId;
-      history.append(row);
-    }
-    if (!history.childElementCount) history.textContent = "No completed payments yet.";
-  }
+  if (Array.isArray(data.payments)) renderPaymentHistory(data.payments);
   renderBilling();
+}
+
+function renderPaymentHistory(payments) {
+  const history = document.querySelector("[data-payment-history]");
+  if (!history) return;
+  const count = document.querySelector("[data-payment-count]");
+  if (count) count.textContent = `${payments.length} recent ${payments.length === 1 ? "payment" : "payments"}`;
+  history.replaceChildren();
+  if (!payments.length) {
+    history.innerHTML = '<div class="billing-history-empty"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z"/><path d="M9 8h6M9 12h6"/></svg></span><strong>No completed payments yet</strong><p>Your payment details will appear here once a payment is confirmed.</p></div>';
+    return;
+  }
+  const table = document.createElement("table");
+  table.className = "billing-history-table";
+  table.innerHTML = '<caption class="sr-only">Recent InterCon payments</caption><thead><tr><th scope="col">Plan</th><th scope="col">Paid on</th><th scope="col">Status</th><th scope="col">Amount</th><th scope="col">Payment ID</th></tr></thead><tbody></tbody>';
+  const body = table.querySelector("tbody");
+  for (const payment of payments) {
+    const date = new Date(payment.capturedAt);
+    const row = document.createElement("tr");
+    const statusLabel = { captured: "Paid", refunded: "Refunded", disputed: "Disputed" }[payment.status] || String(payment.status || "Pending");
+    const amount = new Intl.NumberFormat("en-IN", { style: "currency", currency: payment.currency || "INR" }).format(Number(payment.amount || 0) / 100);
+    const values = [formatPlanName(payment.plan), Number.isFinite(date.getTime()) ? date.toLocaleDateString() : "Pending", statusLabel, amount, payment.providerPaymentId || "Pending"];
+    ["Plan", "Paid on", "Status", "Amount", "Payment ID"].forEach((label, index) => {
+      const cell = document.createElement("td");
+      cell.dataset.label = label;
+      if (index === 2) {
+        const status = document.createElement("span");
+        status.className = payment.status === "captured" ? "billing-payment-status is-paid" : "billing-payment-status";
+        status.textContent = values[index];
+        cell.append(status);
+      } else cell.textContent = values[index];
+      row.append(cell);
+    });
+    body.append(row);
+  }
+  history.append(table);
 }
 
 function loadRazorpayCheckout() {
@@ -3496,6 +3528,33 @@ document.querySelectorAll("a[href^='#']").forEach((link) => {
 
 window.addEventListener("hashchange", () => {
   showPortalView(window.location.hash.replace("#", ""), false);
+});
+
+document.querySelector("[data-usage-plan]")?.addEventListener("click", () => {
+  const plans = document.getElementById("billing-plans");
+  const target = plans?.querySelector("[data-select-plan]") || document.getElementById("billing-plans-title");
+  if (!plans || !target) return;
+  if (!target.matches("button")) target.setAttribute("tabindex", "-1");
+  target.focus({ preventScroll: true });
+  plans.scrollIntoView({ behavior: "auto", block: "start" });
+});
+
+document.querySelector("[data-billing-refresh]")?.addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const label = button.querySelector("span");
+  const errorMessage = document.querySelector("[data-billing-history-error]");
+  button.disabled = true;
+  label.textContent = "Refreshing...";
+  errorMessage.hidden = true;
+  try {
+    await loadBilling();
+  } catch (error) {
+    errorMessage.textContent = `Could not refresh billing. ${error.message}`;
+    errorMessage.hidden = false;
+  } finally {
+    button.disabled = false;
+    label.textContent = "Refresh";
+  }
 });
 
 document.addEventListener("click", (event) => {

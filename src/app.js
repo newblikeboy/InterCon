@@ -23,6 +23,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use(metrics.middleware);
+app.use("/api", (req, res, next) => { res.set("Cache-Control", "no-store, private"); next(); });
 securityMiddleware(app);
 
 app.use(compression());
@@ -133,6 +134,8 @@ app.get("/whatsapp-bulk-messaging", (req, res) => {
 app.get("/privacy-policy", (req, res) => {
   sendHtml(res, "privacy-policy.html");
 });
+app.get("/data-processing-policy", (req, res) => sendHtml(res, "data-processing-policy.html"));
+app.get("/privacy-center", require("./middleware/authenticate"), (req, res) => sendAuthenticatedHtml(res, "privacy-center.html"));
 
 app.use("/api", routes);
 

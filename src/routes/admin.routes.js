@@ -5,6 +5,8 @@ router.use(require("../middleware/authenticate"), require("../middleware/platfor
 router.use((req, res, next) => { res.set("Cache-Control", "no-store"); next(); });
 router.get("/me", (req, res) => res.json({ success: true, user: { id: req.adminActor._id, name: req.adminActor.name, email: req.adminActor.email, platformRole: "admin" } }));
 router.get("/overview", asyncHandler(async (req, res) => res.json({ success: true, ...await admin.overview(req.query) })));
+router.get("/privacy/requests", asyncHandler(async (req, res) => res.json({ requests: await require("../services/privacy.service").listRequests(req.adminActor, req.query, true) })));
+router.patch("/privacy/requests/:id", asyncHandler(async (req, res) => res.json({ request: await require("../services/privacy.service").reviewRequest(req.adminActor, req.params.id, req.body, true) })));
 router.get("/records/:kind", asyncHandler(async (req, res) => res.json({ success: true, ...await admin.records(req.params.kind, req.query) })));
 router.get("/tenants/:id", asyncHandler(async (req, res) => res.json({ success: true, ...await admin.tenantDetails(req.params.id) })));
 router.post("/tenants/:id/actions", asyncHandler(async (req, res) => res.json({ success: true, ...await admin.tenantAction(req.adminActor, req.params.id, req.body) })));
@@ -32,6 +34,6 @@ router.get("/export/:kind", asyncHandler(async (req, res) => {
   } catch (error) {
     if (!res.headersSent) throw error;
     res.destroy(error);
-  } finally { await cursor.close(); }
+  } finally { await cursor.return(); }
 }));
 module.exports = router;

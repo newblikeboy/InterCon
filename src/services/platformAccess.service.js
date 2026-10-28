@@ -151,6 +151,9 @@ async function completeTrialSend(tenantId, messageId, token) {
 async function sendWhatsAppWithAccess(tenantId, phone, url, options) {
   const recipient = normalizeRecipient(phone);
   const assertNotSuppressed = async () => {
+    const erased = await require("../models/SuppressionEntry").exists({ tenantId,
+      recipientHash: require("./privacy.service").suppressionHash(tenantId, recipient) });
+    if (erased) throw new HttpError(403, "This recipient has an erasure suppression. Fresh verified permission is required before restoring messaging.");
     if (await Contact.exists({ tenantId, phone: recipient, status: { $ne: "active" } })) {
       throw new HttpError(403, "This contact is blocked or opted out. WhatsApp message was not sent.", { code: "CONTACT_SUPPRESSED" });
     }

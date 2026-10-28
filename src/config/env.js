@@ -61,7 +61,7 @@ const env = {
   outboundHttpTimeoutMs: Number(process.env.OUTBOUND_HTTP_TIMEOUT_MS || 10000),
   webhookWorkerPollMs: Number(process.env.WEBHOOK_WORKER_POLL_MS || 250),
   webhookQueueLockMs: Number(process.env.WEBHOOK_QUEUE_LOCK_MS || 30000),
-  webhookRetentionDays: Number(process.env.WEBHOOK_RETENTION_DAYS || 30),
+  webhookRetentionDays: Number(process.env.WEBHOOK_RETENTION_DAYS || 366),
   metricsToken: process.env.METRICS_TOKEN || "",
   messageWorkerPollMs: Number(process.env.MESSAGE_WORKER_POLL_MS || 1000),
   messageQueueLockMs: Number(process.env.MESSAGE_QUEUE_LOCK_MS || 60 * 1000),

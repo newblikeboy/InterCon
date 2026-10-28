@@ -8,7 +8,9 @@ function assertProductionEnvironment() {
   if (!env.clientOrigin?.startsWith("https://")) missing.push("CLIENT_ORIGIN (HTTPS)");
   if (!env.jwtSecret || env.jwtSecret.length < 32) missing.push("JWT_SECRET (32+ characters)");
   if (!env.dataEncryptionKey || env.dataEncryptionKey.length < 32) missing.push("DATA_ENCRYPTION_KEY (32+ characters)");
+  if (!process.env.DATA_ENCRYPTION_KEY) missing.push("explicit DATA_ENCRYPTION_KEY (do not rely on the JWT fallback)");
   if (!env.redisUrl) missing.push("REDIS_URL");
+  if (!Number.isInteger(env.webhookRetentionDays) || env.webhookRetentionDays < 366) missing.push("WEBHOOK_RETENTION_DAYS (366 or greater)");
   if (!env.metricsToken || env.metricsToken.length < 32) missing.push("METRICS_TOKEN (32+ characters)");
   if (!env.facebookAppSecret && !env.metaAppSecret) missing.push("FB_APP_SECRET or META_APP_SECRET");
   if (!env.metaWebhookVerifyToken) missing.push("META_WEBHOOK_VERIFY_TOKEN");

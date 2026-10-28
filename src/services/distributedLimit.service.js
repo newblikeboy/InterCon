@@ -1,4 +1,5 @@
 const { getRedisClient } = require("../config/redis");
+const { lookup } = require("../utils/privateData");
 
 const localSlots = new Map();
 const localLeases = new Map();
@@ -72,7 +73,7 @@ async function reserveDailyRecipient(key, recipient, limit) {
     arguments: [
       String(now - 24 * 60 * 60 * 1000),
       String(now),
-      String(recipient),
+      lookup(recipient, `redis.daily:${key}`),
       String(limit)
     ]
   }));
@@ -85,7 +86,7 @@ async function reserveDailyRecipient(key, recipient, limit) {
 async function releaseDailyRecipient(key, recipient) {
   const redis = getRedisClient();
   if (redis?.isReady) {
-    await redis.zRem(`intercon:daily:${key}`, String(recipient));
+    await redis.zRem(`intercon:daily:${key}`, lookup(recipient, `redis.daily:${key}`));
   }
 }
 

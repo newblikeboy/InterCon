@@ -60,7 +60,11 @@ const contactSchema = new mongoose.Schema(
       },
       capturedAt: {
         type: Date
-      }
+      },
+      recordedBy: mongoose.Schema.Types.ObjectId,
+      scope: { type: String, enum: ["business_messages", "service_only"], default: "business_messages" },
+      purpose: { type: String, maxlength: 240 },
+      noticeVersion: { type: String, maxlength: 80 }
     },
     suppression: {
       type: new mongoose.Schema({
@@ -88,5 +92,16 @@ const contactSchema = new mongoose.Schema(
 contactSchema.index({ tenantId: 1, phone: 1 }, { unique: true });
 contactSchema.index({ tenantId: 1, tags: 1 });
 contactSchema.index({ tenantId: 1, status: 1, tags: 1 });
+
+contactSchema.plugin(require("./plugins/privateFields"), {
+  namespace: "Contact",
+  fields: {
+    name: { max: 140, search: true },
+    phone: { lookup: true, max: 32, search: true },
+    email: { lowercase: true, max: 160 },
+    city: { max: 80 }, source: { max: 120 },
+    "optIn.proof": { max: 240 }, "optIn.purpose": { max: 240 }, "suppression.reason": { max: 1000 }
+  }
+});
 
 module.exports = mongoose.model("Contact", contactSchema);

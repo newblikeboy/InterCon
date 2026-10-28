@@ -47,11 +47,8 @@ const messageSchema = new mongoose.Schema(
       maxlength: 80,
       index: true
     },
-    variables: [{
-      type: String,
-      trim: true,
-      maxlength: 300
-    }],
+    // A single encrypted envelope also protects personalized names/numbers.
+    variables: { type: mongoose.Schema.Types.Mixed, default: [] },
     mediaId: {
       type: String,
       trim: true,
@@ -150,5 +147,19 @@ messageSchema.index(
   { tenantId: 1, idempotencyKey: 1 },
   { unique: true, partialFilterExpression: { idempotencyKey: { $type: "string" } } }
 );
+
+messageSchema.plugin(require("./plugins/privateFields"), {
+  namespace: "Message",
+  fields: {
+    to: { lookup: true, max: 32, search: true },
+    mediaUrl: { max: 4096, trim: false },
+    variables: { json: true, normalize(value) {
+      const variables = (Array.isArray(value) ? value : [value]).map(item => item == null ? item : String(item).trim());
+      if (variables.some(item => typeof item === "string" && item.length > 300)) throw new Error("Message variable exceeds its maximum length");
+      return variables;
+    } },
+    error: { trim: false, max: 1000 }
+  }
+});
 
 module.exports = mongoose.model("Message", messageSchema);

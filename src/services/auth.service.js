@@ -114,6 +114,7 @@ async function signupCustomer(body) {
   }
 
   const normalizedEmail = payload.email.toLowerCase().trim();
+  if (![true, "true", "on"].includes(body.processingTermsAccepted)) throw new HttpError(400, "Accept the Data Processing Terms before creating an account");
   const existingUser = await User.findOne({ email: normalizedEmail });
   if (existingUser) {
     throw new HttpError(409, "An account with this email already exists");
@@ -141,12 +142,16 @@ async function signupCustomer(body) {
         email: normalizedEmail,
         phone: payload.whatsappNumber,
         passwordHash,
+        policyAcceptance: { version: "2026-10-29", acceptedAt: new Date() },
         role: "owner",
         isVerified: false,
         emailVerificationTokenHash: tokenHash,
         emailVerificationExpires: expires,
         emailVerificationSentAt: new Date()
       }], { session });
+      await Tenant.updateOne({ _id: tenant._id }, { $set: { processingTerms: {
+        version: "2026-10-29", acceptedAt: new Date(), acceptedBy: user._id
+      } } }, { session });
     });
   } catch (error) {
     if (error?.code === 11000) {

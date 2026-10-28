@@ -5,12 +5,13 @@ const inboxController = require("../controllers/inbox.controller");
 const router = express.Router();
 
 router.use(authenticate);
+router.use(require("../middleware/privacyAudit")("inbox"));
 
 router.get("/conversations", inboxController.listConversations);
 router.get("/unread", inboxController.getUnreadSummary);
 router.get("/conversations/:conversationId/messages", inboxController.getConversationMessages);
 router.post("/conversations/:conversationId/read", inboxController.markConversationRead);
-router.delete("/conversations/:conversationId", inboxController.deleteConversation);
+router.delete("/conversations/:conversationId", require("../middleware/authorize")("owner", "admin"), inboxController.deleteConversation);
 router.post("/conversations/:conversationId/reply", inboxController.sendReply);
 router.patch("/conversations/:conversationId/automation", inboxController.setAutomationControl);
 

@@ -1074,7 +1074,8 @@ test("free allowance bulk queue sends only 20 and enforces the limit again at de
   for (let i = 0; i < 23; i++) await messages.processNextQueuedMessage("trial-worker");
   assert.equal(sent, 20);
   assert.equal(await Message.countDocuments({ tenantId: tenant._id, status: "accepted" }), 20);
-  assert.equal(await Message.countDocuments({ tenantId: tenant._id, status: "failed", error: /free allowance/ }), 3);
+  const failed = await Message.find({ tenantId: tenant._id, status: "failed" }).select("error").lean();
+  assert.equal(failed.filter(message => /free allowance/.test(message.error)).length, 3);
   assert.equal((await billing.getBillingStatus(tenant._id)).trial.used, 20);
   await assert.rejects(messages.sendTemplateMessage(tenant._id, { contactId: String(selected[0]._id), templateName: "trial_update" }), error => error.statusCode === 402);
   const { key } = await require("../src/services/apiKey.service").createApiKey(tenant._id);

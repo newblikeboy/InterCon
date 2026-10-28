@@ -91,4 +91,9 @@ webhookEventSchema.index(
   { expireAfterSeconds: Math.max(1, Number(env.webhookRetentionDays || 30)) * 24 * 60 * 60 }
 );
 
+webhookEventSchema.plugin(require("./plugins/privateFields"), {
+  namespace: "WebhookEvent",
+  fields: { payload: { json: true }, error: { trim: false, max: 500 } }
+});
+
 module.exports = mongoose.model("WebhookEvent", webhookEventSchema);

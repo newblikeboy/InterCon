@@ -110,7 +110,7 @@ async function checkRecipientExcelRoundTrip(page) {
     await page.setViewportSize({ width, height: 1000 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Send WhatsApp overflow at " + width);
     const formBox = await page.locator('[data-send-message-form]').boundingBox();
-    const previewBox = await page.locator('.whatsapp-phone-preview').boundingBox();
+    const previewBox = await page.locator('[data-shared-send-layout] .whatsapp-phone-preview').boundingBox();
     if (width === 1440) assert.ok(previewBox.x >= formBox.x + formBox.width, "Desktop preview stays beside the form");
     else assert.ok(previewBox.y >= formBox.y + formBox.height, "Preview follows the form at " + width);
     await page.screenshot({ path: path.join(output, `send-whatsapp-${width}.png`), fullPage: true });

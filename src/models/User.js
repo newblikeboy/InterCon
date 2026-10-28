@@ -27,6 +27,7 @@ const userSchema = new mongoose.Schema(
       trim: true,
       maxlength: 32
     },
+    policyAcceptance: { version: String, acceptedAt: Date },
     passwordHash: {
       type: String,
       required: true,

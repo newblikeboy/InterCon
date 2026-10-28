@@ -104,4 +104,13 @@ conversationSchema.index({ tenantId: 1, customerPhone: 1 }, { unique: true });
 conversationSchema.index({ tenantId: 1, "automation.flowId": 1, "automation.status": 1 });
 conversationSchema.index({ "automationLock.expiresAt": 1 });
 
+conversationSchema.plugin(require("./plugins/privateFields"), {
+  namespace: "Conversation",
+  fields: {
+    customerPhone: { lookup: true, max: 32 },
+    customerName: { max: 140 },
+    lastMessageText: { max: 1000 }
+  }
+});
+
 module.exports = mongoose.model("Conversation", conversationSchema);

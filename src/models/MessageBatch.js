@@ -6,4 +6,8 @@ const schema = new mongoose.Schema({
   result: { type: mongoose.Schema.Types.Mixed, required: true }
 }, { timestamps: true });
 schema.index({ tenantId: 1, key: 1 }, { unique: true });
+schema.plugin(require("./plugins/privateFields"), {
+  namespace: "MessageBatch",
+  fields: { result: { json: true } }
+});
 module.exports = mongoose.model("MessageBatch", schema);

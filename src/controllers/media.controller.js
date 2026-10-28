@@ -7,7 +7,7 @@ const listMedia = asyncHandler(async (req, res) => {
 });
 
 const createMedia = asyncHandler(async (req, res) => {
-  const media = await mediaService.createMedia(req.tenantId, req.file, req.body);
+  const media = await mediaService.createMedia(req.tenantId, req.file, req.body, req.user._id);
   res.status(201).json({ success: true, message: "Media uploaded", media });
 });
 

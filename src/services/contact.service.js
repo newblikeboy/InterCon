@@ -28,9 +28,13 @@ function assertValidWhatsappPhone(phone) {
   }
 }
 
-function normalizeContact(input) {
+function normalizeContact(input, actorId) {
+  const consentScope = input.consentScope || input.consent_scope || "business_messages";
+  if (!["business_messages", "service_only"].includes(consentScope)) throw new HttpError(400, "Choose a valid consent scope");
   const optInStatus = ["true", "yes", "1", true].includes(input.optIn || input.opt_in || input.consent);
   const optInAtRaw = input.optInAt || input.opt_in_at;
+  const capturedAt = optInAtRaw ? new Date(optInAtRaw) : (optInStatus ? new Date() : undefined);
+  if (capturedAt && (!Number.isFinite(capturedAt.getTime()) || capturedAt.getTime() > Date.now() + 300000)) throw new HttpError(400, "Consent date must be valid and cannot be in the future");
 
   return {
     name: String(input.name || input.customer_name || "").trim(),
@@ -41,10 +45,14 @@ function normalizeContact(input) {
     tags: normalizeTags(input.tags),
     optIn: {
       status: optInStatus,
-      proof: input.optInProof || input.opt_in_proof || input.proof || "",
+      proof: input.optInProof || input.opt_in_proof || input.proof || (optInStatus ? "Client declaration: permission obtained; underlying evidence retained by the client" : ""),
+      purpose: input.consentPurpose || "WhatsApp business messages requested by the client",
+      noticeVersion: input.consentNoticeVersion || "",
+      recordedBy: actorId,
+      scope: consentScope,
       // Timestamp every attested opt-in for the business's audit trail: use the
       // provided date, otherwise default to now when opt-in is claimed.
-      capturedAt: optInAtRaw ? new Date(optInAtRaw) : (optInStatus ? new Date() : undefined)
+      capturedAt
     }
   };
 }
@@ -56,22 +64,33 @@ async function listContacts(tenantId, query = {}) {
     filter.status = query.status;
   }
 
-  if (query.search) {
-    const search = String(query.search).trim();
-    if (search.length > 100) throw new HttpError(400, "Search must be 100 characters or fewer");
-    const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    filter.$or = [
-      { name: new RegExp(escapedSearch, "i") },
-      { phone: new RegExp(escapedSearch, "i") }
-    ];
-  }
+  const search = String(query.search || "").trim().toLowerCase();
+  if (search.length > 100) throw new HttpError(400, "Search must be 100 characters or fewer");
+  if (search) Object.assign(filter, Contact.privateSearchFilter(search));
 
   if (query.tag) {
     filter.tags = String(query.tag).trim();
   }
 
+  async function findContacts() {
+    const limit = pageSize(query.limit);
+    if (!search) return Contact.find(filter).sort({ _id: -1 }).limit(limit).lean();
+    const matches = [];
+    let after = query.after;
+    while (matches.length < limit) {
+      const batch = await Contact.find({ ...filter, ...cursorFilter(after) }).sort({ _id: -1 }).limit(200).lean();
+      if (!batch.length) break;
+      for (const contact of batch) {
+        if (contact.name.toLowerCase().includes(search) || contact.phone.toLowerCase().includes(search)) matches.push(contact);
+        if (matches.length === limit) break;
+      }
+      if (batch.length < 200) break;
+      after = String(batch.at(-1)._id);
+    }
+    return matches;
+  }
   const [contacts, segments] = await Promise.all([
-    Contact.find(filter).sort({ _id: -1 }).limit(pageSize(query.limit)).lean(),
+    findContacts(),
     ContactSegment.find({ tenantId }).select("_id name tag").lean()
   ]);
   const groupByTag = new Map(
@@ -90,13 +109,14 @@ async function listContacts(tenantId, query = {}) {
   }));
 }
 
-async function createContact(tenantId, body) {
-  const contact = normalizeContact(body);
+async function createContact(tenantId, body, actorId) {
+  const contact = normalizeContact(body, actorId);
 
   if (!contact.name || !contact.phone) {
     throw new HttpError(400, "Contact name and phone are required");
   }
   assertValidWhatsappPhone(contact.phone);
+  if (await require("../models/SuppressionEntry").exists({ tenantId, recipientHash: require("./privacy.service").suppressionHash(tenantId, contact.phone) })) throw new HttpError(409, "This recipient was erased. Record fresh verified consent through the privacy workflow before adding them again");
 
   return Contact.findOneAndUpdate(
     { tenantId, phone: contact.phone },
@@ -110,7 +130,7 @@ async function updateContact(tenantId, contactId, body = {}, actorId) {
     throw new HttpError(400, "Contact ID is invalid");
   }
 
-  const contact = normalizeContact(body);
+  const contact = normalizeContact(body, actorId);
   if (!contact.name || !contact.phone) {
     throw new HttpError(400, "Contact name and phone are required");
   }
@@ -124,7 +144,8 @@ async function updateContact(tenantId, contactId, body = {}, actorId) {
   const current = await Contact.findOne({ _id: contactId, tenantId }).lean();
   if (!current) throw new HttpError(404, "Contact not found");
   if (current.status !== "active" && contact.phone !== current.phone) throw new HttpError(400, "Restore this contact with fresh consent before changing its blacklisted or opted-out number.");
-  if (current.status !== "active" && status === "active" && (!contact.optIn.status || !contact.optIn.proof.trim())) throw new HttpError(400, "To restore this contact, confirm fresh consent and enter its evidence.");
+  const explicitProof = String(body.optInProof || body.opt_in_proof || body.proof || "").trim();
+  if (current.status !== "active" && status === "active" && (!contact.optIn.status || !explicitProof)) throw new HttpError(400, "To restore this contact, confirm fresh consent and enter its evidence.");
   const existing = await Contact.findOne({
     tenantId,
     phone: contact.phone,
@@ -164,7 +185,7 @@ async function updateContact(tenantId, contactId, body = {}, actorId) {
   return updated;
 }
 
-async function importContacts(tenantId, contacts = []) {
+async function importContacts(tenantId, contacts = [], actorId) {
   if (!Array.isArray(contacts) || contacts.length === 0) {
     throw new HttpError(400, "At least one contact is required");
   }
@@ -187,7 +208,7 @@ async function importContacts(tenantId, contacts = []) {
 
   for (const row of contacts.slice(0, MAX_IMPORT)) {
     try {
-      const contact = normalizeContact(row);
+      const contact = normalizeContact(row, actorId);
       if (!contact.name || !contact.phone) {
         throw new HttpError(400, "Contact name and phone are required");
       }
@@ -211,6 +232,11 @@ async function importContacts(tenantId, contacts = []) {
   }
 
   if (operations.length) {
+    const hashes = operations.map(operation => require("./privacy.service").suppressionHash(tenantId, operation.updateOne.filter.phone));
+    const suppressed = new Set((await require("../models/SuppressionEntry").find({ tenantId, recipientHash: { $in: hashes } }).select("recipientHash").lean()).map(row => row.recipientHash));
+    for (let index = operations.length - 1; index >= 0; index--) if (suppressed.has(hashes[index])) {
+      operations.splice(index, 1); results.imported--; results.skipped++; results.errors.push("A previously erased recipient was not imported; fresh verified consent is required.");
+    }
     await Contact.bulkWrite(operations, { ordered: false });
   }
 

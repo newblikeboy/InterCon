@@ -302,10 +302,11 @@ test("HTTP endpoints enforce management roles and do not accept automation imper
   const simulation = await request(app).post("/api/automations/simulate").set("Authorization", "Bearer " + token).set("Origin", "http://localhost:5000").send({ flow: payload(), messages: ["Hi"] }).expect(200);
   assert.equal(simulation.body.turns[0].action, "restarted");
   const c = await current();
-  await request(app).post(`/api/inbox/conversations/${c._id}/reply`).set("Authorization", "Bearer " + agentToken).set("Origin", "http://localhost:5000")
+  const reply = await request(app).post(`/api/inbox/conversations/${c._id}/reply`).set("Authorization", "Bearer " + agentToken).set("Origin", "http://localhost:5000")
     .send({ text: "Agent reply", automationSend: true, automationExecutionId: new mongoose.Types.ObjectId(), automationStep: 0 }).expect(201);
   assert.equal((await current()).automationControl.held, true);
-  const manual = await InboxMessage.findOne({ text: "Agent reply" }); assert.equal(manual.automationExecutionId, undefined);
+  const manual = await InboxMessage.findById(reply.body.message.id);
+  assert.equal(manual.text, "Agent reply"); assert.equal(manual.automationExecutionId, undefined);
   await request(app).patch(`/api/inbox/conversations/${c._id}/automation`).set("Authorization", "Bearer " + agentToken).set("Origin", "http://localhost:5000").send({ action: "release" }).expect(200);
   assert.equal((await current()).automationControl.held, false);
 });

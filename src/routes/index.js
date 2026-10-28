@@ -22,6 +22,7 @@ router.use("/automations", automationRoutes);
 router.use("/billing", billingRoutes);
 router.use("/campaigns", campaignRoutes);
 router.use("/contacts", contactRoutes);
+router.use("/privacy", require("./privacy.routes"));
 router.use("/developer", developerRoutes);
 router.use("/health", healthRoutes);
 router.use("/inbox", inboxRoutes);

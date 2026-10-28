@@ -20,6 +20,7 @@ function sanitizeDetails(value, depth = 0) {
 }
 
 function errorHandler(error, req, res, next) {
+  if (res.headersSent) { res.destroy(); return; }
   let statusCode = error.statusCode || 500;
   if (error.name === "ValidationError" || error.name === "CastError") statusCode = 400;
   if (error.code === 11000) statusCode = 409;
@@ -36,7 +37,7 @@ function errorHandler(error, req, res, next) {
   if (env.nodeEnv !== "production") response.stack = error.stack;
 
   if (statusCode >= 500) {
-    console.error(`[${req.id || "no-request-id"}]`, error);
+    console.error("Request failed", { requestId: req.id, name: error.name, code: error.code });
   }
   res.status(statusCode).json(response);
 }

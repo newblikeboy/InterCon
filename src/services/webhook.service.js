@@ -315,17 +315,19 @@ function buildPreviewText(summary) {
 }
 
 async function resolveInboundContact(tenantId, phone, profileName) {
+  const erased = await require("../models/SuppressionEntry").exists({ tenantId,
+    recipientHash: require("./privacy.service").suppressionHash(tenantId, phone) });
   const update = {
     $setOnInsert: {
       tenantId,
       phone,
       name: profileName || phone,
       source: "whatsapp_inbound",
-      status: "active",
+      status: erased ? "opted_out" : "active",
       optIn: {
-        // A customer-initiated message constitutes opt-in within the session window.
-        status: true,
-        proof: "Customer initiated WhatsApp conversation",
+        // An enquiry opens the service window; it does not grant marketing consent.
+        status: false,
+        proof: "Inbound enquiry only; no business-initiated opt-in recorded",
         capturedAt: new Date()
       }
     }
@@ -411,7 +413,10 @@ async function processInboundMessages(tenantId, value = {}, wabaId, phoneNumberI
       ? new Date(Number(message.timestamp) * 1000)
       : new Date();
 
-    const contact = await resolveInboundContact(tenantId, fromPhone, profileName);
+    let contact = await resolveInboundContact(tenantId, fromPhone, profileName);
+    if (/^(stop|unsubscribe|opt[ -]?out|stop all|बंद)$/iu.test(summary.text.trim())) {
+      contact = await require("./contact.service").suppressContact(tenantId, { phone: fromPhone, status: "opted_out", reason: "Customer requested WhatsApp opt-out" });
+    }
 
     const stored = await storeConversationMessage(tenantId, fromPhone, contact, profileName, wabaId, phoneNumberId, {
       direction: "in", type: summary.type, text: summary.text, mediaCaption: summary.caption,
@@ -445,6 +450,8 @@ async function processInboundMessages(tenantId, value = {}, wabaId, phoneNumberI
 // Upsert a contact touched by a business-app echo. Unlike an inbound reply,
 // a business-initiated message is NOT proof of opt-in, so we don't claim it.
 async function resolveEchoContact(tenantId, phone, name) {
+  const erased = await require("../models/SuppressionEntry").exists({ tenantId,
+    recipientHash: require("./privacy.service").suppressionHash(tenantId, phone) });
   return Contact.findOneAndUpdate(
     { tenantId, phone },
     {
@@ -453,7 +460,7 @@ async function resolveEchoContact(tenantId, phone, name) {
         phone,
         name: name || phone,
         source: "whatsapp_coexistence",
-        status: "active"
+        status: erased ? "opted_out" : "active"
       }
     },
     { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }

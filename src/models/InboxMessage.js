@@ -100,4 +100,14 @@ inboxMessageSchema.index(
   { unique: true, partialFilterExpression: { metaMessageId: { $type: "string" } } }
 );
 
+inboxMessageSchema.plugin(require("./plugins/privateFields"), {
+  namespace: "InboxMessage",
+  fields: {
+    customerPhone: { lookup: true, max: 32 },
+    text: { trim: false, max: 4096 },
+    mediaCaption: { trim: false, max: 1024 },
+    error: { trim: false, max: 1000 }
+  }
+});
+
 module.exports = mongoose.model("InboxMessage", inboxMessageSchema);

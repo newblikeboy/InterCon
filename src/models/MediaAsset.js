@@ -34,6 +34,19 @@ const mediaAssetSchema = new mongoose.Schema(
       required: true,
       index: true
     },
+    purpose: { type: String, enum: ["general", "patient_report"], default: "general" },
+    deliveryScope: { type: String, enum: ["shared", "recipient"], default: "shared" },
+    recipientContactId: { type: mongoose.Schema.Types.ObjectId, ref: "Contact", index: true },
+    recipientHash: { type: String, select: false },
+    recipientVerifiedAt: Date,
+    recipientVerifiedBy: mongoose.Schema.Types.ObjectId,
+    recipientVerifiedByApiKey: mongoose.Schema.Types.ObjectId,
+    consentReference: { type: String, maxlength: 240 },
+    deliveryType: { type: String, enum: ["upload", "authenticated"], default: "upload" },
+    accessExpiresAt: Date,
+    lastProcessedAt: { type: Date, default: Date.now },
+    legalHoldUntil: Date,
+    disabledAt: Date,
     originalName: {
       type: String,
       trim: true,
@@ -76,5 +89,10 @@ const mediaAssetSchema = new mongoose.Schema(
 );
 
 mediaAssetSchema.index({ tenantId: 1, createdAt: -1 });
+mediaAssetSchema.plugin(require("./plugins/privateFields"), {
+  namespace: "MediaAsset", fields: {
+    title: { max: 140 }, description: { max: 500 }, originalName: { max: 255 }, consentReference: { max: 240 }
+  }
+});
 
 module.exports = mongoose.model("MediaAsset", mediaAssetSchema);

@@ -20,4 +20,8 @@ schema.index({ tenantId: 1, conversationId: 1, status: 1, sequence: 1 });
 schema.index({ status: 1, nextAttemptAt: 1 });
 schema.index({ tenantId: 1, createdAt: -1 });
 schema.index({ completedAt: 1 }, { expireAfterSeconds: 30 * 86400 });
+schema.plugin(require("./plugins/privateFields"), {
+  namespace: "AutomationExecution",
+  fields: { text: { max: 4096, trim: false }, plan: { json: true }, error: { max: 1000, trim: false } }
+});
 module.exports = mongoose.model("AutomationExecution", schema);

@@ -8,4 +8,8 @@ const schema = new mongoose.Schema({
   reason: { type: String, required: true, maxlength: 1000 }
 }, { timestamps: true });
 schema.index({ tenantId: 1, contactId: 1, createdAt: -1 });
+schema.plugin(require("./plugins/privateFields"), {
+  namespace: "ContactStatusEvent",
+  fields: { reason: { max: 1000, trim: false } }
+});
 module.exports = mongoose.model("ContactStatusEvent", schema);

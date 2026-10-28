@@ -260,6 +260,7 @@ function buildMetaTemplatePayload(body) {
 }
 
 function assertTemplateMediaCompatible(asset, headerType) {
+  if (require("./media.service").isRecipientMedia(asset)) throw new HttpError(400, "Use a synthetic sample PDF for template approval; recipient-specific files cannot be template samples");
   if (!asset || asset.mediaType !== headerType) {
     throw new HttpError(400, `Choose a ${headerType} from the Media Library`);
   }
@@ -284,11 +285,12 @@ function assertTemplateMediaCompatible(asset, headerType) {
 }
 
 async function createMetaHeaderHandle(accessToken, asset) {
+  assertTemplateMediaCompatible(asset, asset.mediaType);
   if (!env.facebookAppId) {
     throw new HttpError(503, "Meta App ID is required to upload a template header sample");
   }
 
-  const sourceResponse = await fetchWithPolicy(asset.secureUrl);
+  const sourceResponse = await fetchWithPolicy(require("./media.service").downloadUrl(asset));
   if (!sourceResponse.ok) {
     throw new HttpError(502, "Unable to download the selected Cloudinary media");
   }

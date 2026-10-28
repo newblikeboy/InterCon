@@ -6,6 +6,7 @@ const contactController = require("../controllers/contact.controller");
 const router = express.Router();
 
 router.use(authenticate);
+router.use(require("../middleware/privacyAudit")("contacts"));
 
 router.get("/", contactController.listContacts);
 router.post("/", authorize("owner", "admin"), contactController.createContact);

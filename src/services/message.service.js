@@ -13,6 +13,7 @@ const HttpError = require("../utils/httpError");
 const { isMetaSampleTemplate } = require("./template.service");
 const { requirePlatformAccess, sendWhatsAppWithAccess } = require("./platformAccess.service");
 const { acquireSlot, releaseDailyRecipient, reserveDailyRecipient } = require("./distributedLimit.service");
+const { lookup: privateLookup } = require("../utils/privateData");
 const { fetchWithPolicy } = require("../utils/httpClient");
 
 const wabaSendHealthCache = new Map();
@@ -199,12 +200,12 @@ async function resolveTemplateSendContext(tenantId, body = {}, options = {}) {
   }
 
   let mediaAsset = null;
-  if (template.headerType && template.headerType !== "none") {
+  if (!options.skipMedia && template.headerType && template.headerType !== "none") {
     const mediaId = String(body.mediaId || body.media_id || template.headerMediaId || "").trim();
     if (!mediaId) {
       throw new HttpError(400, `This template requires a ${template.headerType} from the Media Library`);
     }
-    mediaAsset = await MediaAsset.findOne({ tenantId, mediaId }).lean();
+    mediaAsset = await MediaAsset.findOne({ tenantId, mediaId }).select("+recipientHash").lean();
     assertSendMediaCompatible(mediaAsset, template.headerType);
   }
 
@@ -224,6 +225,8 @@ async function resolveTemplateSendContext(tenantId, body = {}, options = {}) {
 }
 
 function buildQueuedMessage(context, tenantId, contact, extra = {}) {
+  if (context.template.category === "marketing" && contact.optIn?.scope === "service_only") throw new HttpError(400, "Service-only permission does not allow marketing messages");
+  if (context.mediaAsset) require("./media.service").assertReportRecipient(context.mediaAsset, contact, context.template);
   return {
     tenantId,
     contactId: contact._id,
@@ -606,10 +609,15 @@ async function resolveContact(tenantId, body) {
   }
 
   const optInValue = body.optIn ?? body.opt_in ?? body.consent;
+  if (await require("../models/SuppressionEntry").exists({ tenantId, recipientHash: require("./privacy.service").suppressionHash(tenantId, phone) })) throw new HttpError(403, "This recipient was erased. Fresh verified permission must be recorded before messaging resumes");
   const hasOptIn = optInValue === true || ["true", "yes", "1"].includes(String(optInValue).trim().toLowerCase());
   if (!hasOptIn) {
     throw new HttpError(400, "Customer WhatsApp opt-in is required before sending");
   }
+  const capturedAt = body.optInAt || body.opt_in_at ? new Date(body.optInAt || body.opt_in_at) : new Date();
+  if (!Number.isFinite(capturedAt.getTime()) || capturedAt.getTime() > Date.now() + 300000) throw new HttpError(400, "Consent date must be valid and cannot be in the future");
+  const consentScope = body.consentScope || body.consent_scope || "business_messages";
+  if (!["business_messages", "service_only"].includes(consentScope)) throw new HttpError(400, "Choose a valid consent scope");
 
   return Contact.findOneAndUpdate(
     { tenantId, phone },
@@ -624,8 +632,11 @@ async function resolveContact(tenantId, body) {
         tags: normalizeSingleTag(body.tags, "api"),
         optIn: {
           status: true,
-          proof: body.optInProof || body.opt_in_proof || body.proof || "API consent flag",
-          capturedAt: body.optInAt || body.opt_in_at ? new Date(body.optInAt || body.opt_in_at) : new Date()
+          proof: body.optInProof || body.opt_in_proof || body.proof || "Client API declaration: permission obtained; evidence retained by the client",
+          purpose: body.consentPurpose || "WhatsApp business messages requested by the client",
+          noticeVersion: body.consentNoticeVersion || "",
+          scope: consentScope,
+          capturedAt
         },
         status: "active"
       }
@@ -747,6 +758,7 @@ async function sendTemplateMessages(tenantId, body = {}) {
   if (!key || key.length > 160) throw new HttpError(400, "A unique idempotency key of 1 to 160 characters is required for a bulk send.");
   const requestHash = bulkRequestHash(body);
   function previousResult(batch) {
+    if (batch.result?.privacyErased) throw new HttpError(410, "This request result was removed following a privacy request; the original request will not be sent again");
     if (batch.requestHash !== requestHash) throw new HttpError(409, "This request key was already used with different message details.");
     return { ...batch.result, idempotent: true };
   }
@@ -864,7 +876,7 @@ async function getSendSlotDelayMs(message) {
   const phoneInterval = Math.ceil(1000 / Math.max(0.1, Number(env.whatsappDefaultMps || 1)));
   const phoneDelay = await acquireSlot(`phone:${message.phoneNumberId}`, phoneInterval);
   const pairDelay = env.whatsappPairMinIntervalMs > 0
-    ? await acquireSlot(`pair:${message.phoneNumberId}:${message.to}`, env.whatsappPairMinIntervalMs)
+    ? await acquireSlot(`pair:${message.phoneNumberId}:${privateLookup(message.to, "redis.pair")}`, env.whatsappPairMinIntervalMs)
     : 0;
   return Math.max(phoneDelay, pairDelay);
 }
@@ -1029,7 +1041,7 @@ async function processQueuedMessage(message) {
       language: message.language,
       status: "approved"
     }).select("name language category status body parameterCount headerType").lean(),
-    Contact.findOne({ tenantId: message.tenantId, phone: message.to }).select("status optIn").lean()
+    Contact.findOne({ tenantId: message.tenantId, phone: message.to }).select("_id phone status optIn").lean()
   ]);
 
   if (!tenant) {
@@ -1038,6 +1050,10 @@ async function processQueuedMessage(message) {
   await requirePlatformAccess(message.tenantId, { tenant });
   if (!contact || contact.status !== "active" || !contact.optIn?.status) {
     return failMessage(message, "Recipient is no longer active and opted in. Message was not sent.");
+  }
+  if (await require("../models/SuppressionEntry").exists({ tenantId: message.tenantId,
+    recipientHash: require("./privacy.service").suppressionHash(message.tenantId, message.to) })) {
+    return failMessage(message, "Recipient erasure suppression remains active. Message was not sent.");
   }
   if (String(message.phoneNumberId) !== String(tenant.meta?.phoneNumberId)) {
     return failMessage(message, "The connected sending number changed after this message was queued.");
@@ -1052,10 +1068,24 @@ async function processQueuedMessage(message) {
     return failMessage(message, `Template "${message.templateName}" is not approved for language ${message.language}.`);
   }
 
-  if (template.headerType && template.headerType !== "none" && !message.mediaUrl) {
+  if (template.category === "marketing" && contact.optIn?.scope === "service_only") return failMessage(message, "Service-only permission does not allow marketing messages");
+
+  if (template.headerType && template.headerType !== "none" && !message.mediaId) {
     return failMessage(message, `Template "${message.templateName}" requires a ${template.headerType}, but this queued message has no media.`);
   }
 
+  if (message.mediaId) {
+    const asset = await MediaAsset.findOne({ tenantId: message.tenantId, mediaId: message.mediaId }).select("+recipientHash").lean();
+    if (!asset) return failMessage(message, "The attached media was removed before delivery");
+    try {
+      require("./media.service").assertReportRecipient(asset, contact, template);
+      if (require("./media.service").isRecipientMedia(asset)) {
+        await MediaAsset.updateOne({ _id: asset._id }, { $max: { lastProcessedAt: new Date() } });
+        await require("../models/SecurityAudit").create({ tenantId: message.tenantId, action: "report.delivery.attempt", resourceId: asset.mediaId });
+      }
+      message.mediaUrl = require("./media.service").downloadUrl(asset);
+    } catch (error) { return failMessage(message, error.message); }
+  }
   const capacity = await hasDailyUniqueCapacity(message);
   if (!capacity.allowed) {
     return rescheduleMessage(
@@ -1175,6 +1205,7 @@ async function processNextQueuedMessage(workerId) {
 }
 
 module.exports = {
+  resolveContact, resolveTemplateSendContext, assertSendMediaCompatible, hasResolvedTemplateVariables,
   buildMetaMessagePayload,
   getMessage,
   listBulkRecipients,

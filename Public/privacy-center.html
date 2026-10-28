@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Privacy Center | InterCon</title><link rel="stylesheet" href="/style/privacy-center.css"></head>
+<body><main><a href="/customer">← Back to your workspace</a><h1>Privacy &amp; data requests</h1>
+<p>Read the <a href="/privacy-policy">Privacy Policy</a> and <a href="/data-processing-policy">Data Processing Terms</a>. Do not enter medical results, passwords or OTPs here.</p>
+<section><h2>Workspace Data Processing Terms</h2><p id="terms-status">Loading…</p><form id="terms-form"><label><input type="checkbox" name="accepted" required> I am the authorised workspace owner and accept the Data Processing Terms for this business.</label><button>Accept current terms</button></form></section>
+<section><h2>Submit a request</h2><form id="request-form">
+<label>Whose data?<select name="subject"><option value="account">My account data</option><option value="customer">A customer/patient in my workspace</option></select></label>
+<label id="contact-field" hidden>Contact<select name="contactId"><option value="">Choose a contact</option></select></label>
+<label>Request type<select name="kind"><option value="access">Access/export</option><option value="correction">Correction</option><option value="erasure">Erasure</option><option value="withdrawal">Withdraw permission</option><option value="nomination">Nomination</option><option value="grievance">Grievance</option></select></label>
+<label>Details or external reference<textarea name="notes" maxlength="2000" rows="3" placeholder="Describe the request without including clinical information"></textarea></label><button>Submit request</button></form></section>
+<section><h2>Your requests</h2><div id="requests" aria-live="polite"></div></section>
+<section id="review-section" hidden><h2>Manage a customer request</h2><p>Verify the individual's identity and authority through your own process before recording verification. Correct records in Contacts before marking a correction completed. Erasure cannot recall already delivered attachments.</p>
+<form id="review-form"><label>Request<select name="requestId" required></select></label>
+<label>Action<select name="status"><option value="verified">Record verified identity and authority</option><option value="in_review">In review</option><option value="fulfilled">Record completed action</option><option value="rejected">Reject with explanation</option><option value="erase">Execute verified customer erasure</option></select></label>
+<label>Verification / response reference<textarea name="response" maxlength="2000" required rows="3"></textarea></label>
+<label>Legal retention hold until (only where justified)<input name="legalHoldUntil" type="date"></label>
+<label>For erasure, type ERASE<input name="confirmation" autocomplete="off"></label><button>Save action</button></form></section>
+<details id="restore-section" hidden><summary>New consent after a previous erasure</summary><form id="restore-form"><label>Full WhatsApp number including country code<input name="phone" inputmode="numeric" required pattern="[0-9]{11,15}"></label><label>New permission reference<input name="reference" required maxlength="240"></label><label><input type="checkbox" name="confirmedFreshConsent" required> I have newly verified this person's permission and authority to restore messaging.</label><button>Record fresh permission</button></form></details>
+<p id="status" role="status" aria-live="polite"></p><p>Privacy contact: <a href="mailto:support@intercon.in">support@intercon.in</a>. Patients should contact their laboratory first. Do not email report PDFs.</p>
+</main><script src="/js/privacy-center.js"></script></body></html>

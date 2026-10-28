@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>InterCon Customer Portal</title>
   <meta name="description" content="InterCon customer portal for connecting WhatsApp Business, managing contacts, creating templates, sending messages, and checking billing readiness.">
-  <link rel="stylesheet" href="style/customer-portal.css?v=20261011-messages1">
+  <link rel="stylesheet" href="style/customer-portal.css?v=20261029-delivery2">
 </head>
 <body class="portal-body console-body">
   <div class="portal-shell console-shell">
@@ -72,6 +72,7 @@
                 <strong data-profile-business-name>Loading workspace</strong>
                 <span data-profile-role>Account</span>
               </div>
+              <a href="/privacy-center">Privacy &amp; data requests</a>
               <button type="button" data-logout>Logout</button>
             </div>
           </div>
@@ -516,21 +517,79 @@ Hi
         <div class="contact-panel send-panel">
           <div class="portal-section-head compact send-panel-head">
             <div>
-              <p class="eyebrow">WhatsApp messaging</p>
-              <h2>Prepare your message</h2>
-              <p>Choose your recipients, personalise an approved template, and review the preview.</p>
+              <h2>New message</h2>
             </div>
             <div class="template-actions send-panel-actions">
               <button class="btn btn-outline btn-small" type="button" data-refresh-send-data><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1"/></svg>Refresh</button>
             </div>
           </div>
-          <div class="send-whatsapp-layout">
+          <fieldset class="recipient-delivery-mode">
+            <legend>Delivery type</legend>
+            <div class="delivery-mode-options">
+              <label><input type="radio" name="deliveryMode" value="shared" data-delivery-mode checked><span>Common Media</span></label>
+              <label><input type="radio" name="deliveryMode" value="recipient" data-delivery-mode><span>Unique Media</span></label>
+            </div>
+          </fieldset>
+          <div class="recipient-delivery-layout" data-recipient-delivery-panel hidden>
+            <form class="send-form" data-recipient-delivery-form>
+              <section class="send-recipient-section">
+                <div class="send-section-head"><h3>Recipient</h3></div>
+                <div class="send-template-fields">
+                  <label>WhatsApp number<input name="to" type="tel" required maxlength="24" placeholder="Country code + number" autocomplete="off"></label>
+                  <label><span>Recipient name <small class="optional-label">(optional)</small></span><input name="name" maxlength="120" placeholder="Name" autocomplete="off"></label>
+                </div>
+              </section>
+              <section class="send-template-section">
+                <div class="send-section-head"><h3>Message</h3></div>
+                <div class="send-template-fields">
+                  <label>File purpose<select name="purpose"><option value="general">Document, photo or video</option><option value="patient_report">Patient report (PDF)</option></select></label>
+                  <label>Approved template<select name="templateChoice" required><option value="">Choose a media template</option></select></label>
+                </div>
+                <p class="delivery-field-hint" data-recipient-template-hint>Choose a template with a matching media header.</p>
+                <div class="recipient-delivery-variables" data-recipient-delivery-variables></div>
+              </section>
+              <section class="recipient-file-section">
+                <label>Attachment<input name="file" type="file" required accept=".pdf,.jpg,.jpeg,.png,.mp4,.3gp,application/pdf,image/jpeg,image/png,video/mp4,video/3gpp"><small data-recipient-file-hint>PDF 50 MB · JPG/PNG 5 MB · MP4/3GP 16 MB</small></label>
+                <label data-recipient-reference-field hidden>Permission reference<input name="consentReference" maxlength="240" placeholder="Consent or authorisation reference"></label>
+                <p class="delivery-field-hint" data-recipient-terms-note hidden>Patient reports require accepted <a href="/privacy-center">Data Processing Terms</a>.</p>
+                <label class="recipient-delivery-permission"><input name="permissionConfirmed" type="checkbox" required><span>I have permission to send this file to this recipient.</span></label>
+              </section>
+              <div class="send-submit-area">
+                <button class="btn" type="submit">Send file</button>
+                <p class="contact-message" role="status" aria-live="polite" data-recipient-delivery-status></p>
+              </div>
+            </form>
+            <aside class="whatsapp-phone-preview recipient-delivery-preview" aria-label="Recipient file preview">
+              <div class="preview-panel-head"><strong>Message preview</strong><span class="send-preview-live"><i aria-hidden="true"></i>Live</span></div>
+              <div class="phone-shell">
+                <div class="phone-screen">
+                  <div class="phone-statusbar" aria-hidden="true"><span>Now</span><div><i></i><i></i><i></i></div></div>
+                  <div class="wa-preview-topbar">
+                    <span class="wa-back" aria-hidden="true"></span><span class="wa-avatar">IC</span>
+                    <div class="wa-contact-copy"><strong data-recipient-preview-number>Recipient</strong><small>Business Account</small></div>
+                    <span class="wa-menu-dots" aria-hidden="true"></span>
+                  </div>
+                  <div class="wa-chat-area">
+                    <div class="wa-date-chip">Today</div>
+                    <div class="wa-message-bubble">
+                      <div class="wa-preview-media" data-recipient-preview-media hidden></div>
+                      <div class="delivery-preview-document" data-recipient-preview-document hidden><b>PDF</b><div><strong data-recipient-preview-file>No file selected</strong><small data-recipient-preview-file-size></small></div></div>
+                      <p data-recipient-preview-text>Select a template to preview.</p>
+                      <span>Now</span><em aria-hidden="true"></em>
+                    </div>
+                  </div>
+                  <div class="wa-composer" aria-hidden="true"><span></span><strong>Message</strong><i></i></div>
+                </div>
+              </div>
+              <p class="send-preview-note">File access: 30 days</p>
+            </aside>
+          </div>
+          <div class="send-whatsapp-layout" data-shared-send-layout>
             <form class="send-form" data-send-message-form>
               <section class="send-recipient-picker" data-send-recipient-picker>
                 <div class="send-recipient-head">
                   <div>
                     <strong>Recipients</strong>
-                    <small>Select individual customers, complete groups, or both.</small>
                   </div>
                   <span data-send-recipient-count>0 selected</span>
                 </div>
@@ -555,7 +614,6 @@ Hi
                   <div class="send-recipient-column">
                     <div class="send-recipient-column-title">
                       <strong>Groups</strong>
-                      <small>Members are deduplicated</small>
                     </div>
                     <div class="send-recipient-list" data-send-group-list>
                       <div class="send-recipient-empty">Loading groups...</div>
@@ -566,7 +624,6 @@ Hi
               <section class="send-template-section" aria-labelledby="send-template-heading">
                 <div class="send-section-head">
                   <h3 id="send-template-heading">Message template</h3>
-                  <p>Choose the approved message you want to send.</p>
                 </div>
                 <div class="send-template-fields">
                   <label>
@@ -595,8 +652,7 @@ Hi
               </section>
               <section class="send-variable-builder">
                 <div class="send-section-head">
-                  <h3>Personalise for each recipient</h3>
-                  <p>Match each phone number with its own template values.</p>
+                  <h3>Personalise message</h3>
                 </div>
                 <div class="send-variable-editor" data-send-variable-editor>
                   <div class="send-variable-empty">Select a template to configure its variables.</div>
@@ -604,7 +660,6 @@ Hi
                 <p class="form-note" data-send-variable-hint>Select a template to see required variables.</p>
               </section>
               <div class="send-submit-area">
-                <p class="send-submit-note">Review your recipients and message before sending.</p>
                 <button class="btn" type="submit" data-send-submit disabled>Select recipients</button>
                 <p class="contact-message" role="status" aria-live="polite" data-send-message-status></p>
               </div>
@@ -612,7 +667,7 @@ Hi
 
             <aside class="whatsapp-phone-preview" aria-label="WhatsApp message preview">
               <div class="preview-panel-head">
-                <div><strong>Message preview</strong><small>What your customer sees</small></div>
+                <strong>Message preview</strong>
                 <span class="send-preview-live"><i aria-hidden="true"></i>Live</span>
               </div>
               <div class="phone-shell">
@@ -631,9 +686,6 @@ Hi
                     <span class="wa-menu-dots" aria-hidden="true"></span>
                   </div>
                   <div class="wa-chat-area">
-                    <div class="wa-encryption-note">
-                      Messages are end-to-end encrypted. This preview shows how the template may appear.
-                    </div>
                     <div class="wa-date-chip">Today</div>
                     <div class="wa-template-meta">
                       <span data-preview-template>Template preview</span>
@@ -641,7 +693,7 @@ Hi
                     </div>
                     <div class="wa-message-bubble">
                       <div class="wa-preview-media" data-preview-media hidden></div>
-                      <p data-preview-message>Select a template to preview the WhatsApp message.</p>
+                      <p data-preview-message>Select a template to preview.</p>
                       <span data-preview-bubble-time>Now</span>
                       <em aria-hidden="true"></em>
                     </div>
@@ -653,7 +705,6 @@ Hi
                   </div>
                 </div>
               </div>
-              <p class="send-preview-note">Preview your template as you fill in the details.</p>
             </aside>
           </div>
         </div>
@@ -810,11 +861,28 @@ Authorization: Bearer API_KEY
           </article>
           <article>
             <span>3</span>
-            <strong>View reports</strong>
+            <strong>Track message delivery</strong>
             <pre><code>GET /api/v1/reports?from=2026-06-01&amp;to_date=2026-06-30&amp;status=delivered&amp;page=1&amp;limit=25
 Authorization: Bearer API_KEY
 
 GET /api/v1/messages/MESSAGE_ID</code></pre>
+          </article>
+          <article>
+            <span>4</span>
+            <strong>Send a file to one number</strong>
+            <pre><code>POST /api/v1/messages/send-media
+Authorization: Bearer API_KEY
+Idempotency-Key: UNIQUE_REQUEST_ID
+Content-Type: multipart/form-data
+
+to: 919999999999
+templateName: your_document_template
+language: en
+variables: ["Customer", "INV-123"]
+purpose: general
+permissionConfirmed: true
+file: (PDF, JPG/PNG or MP4/3GP)</code></pre>
+            <small>Upload and queue one recipient's file in one request. Use a matching approved media-header template. The response includes a message ID for tracking. Retry identical requests with the same key. Patient reports use <code>purpose: patient_report</code> and a <code>consentReference</code>; current workspace terms must be accepted.</small>
           </article>
         </div>
       </section>
@@ -1333,6 +1401,12 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
               Opt-in proof <span class="optional-label">Optional</span>
               <input type="text" name="optInProof" maxlength="240" data-contact-edit-proof>
             </label>
+            <label>Permission scope
+              <select name="consentScope" data-contact-edit-scope>
+                <option value="service_only">Service messages only (for example, lab reports)</option>
+                <option value="business_messages">Business messages covered by the client's permission</option>
+              </select>
+            </label>
             <label>
               Status
               <select name="status" data-contact-edit-status>
@@ -1362,6 +1436,21 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
             </div>
           </div>
           <form class="media-upload-form" data-media-upload-form>
+            <label>Media purpose
+              <select name="purpose" required data-media-purpose>
+                <option value="">Choose a purpose</option>
+                <option value="general">General business media / synthetic sample</option>
+                <option value="patient_report">Confidential patient report</option>
+              </select>
+            </label>
+            <label>Delivery scope<select name="deliveryScope" data-media-delivery-scope><option value="shared">Shared business media</option><option value="recipient">File for one contact</option></select></label>
+            <fieldset hidden data-report-fields>
+              <legend>Intended recipient</legend>
+              <label>Recipient contact<select name="recipientContactId" data-report-recipient><option value="">Choose a contact</option></select></label>
+              <label><span data-report-reference-label>Client permission reference</span><input name="consentReference" maxlength="240" placeholder="Reference only; do not enter clinical results" data-report-consent></label>
+              <label><input type="checkbox" name="recipientVerified" data-report-verified> I verified this recipient's number and authority and have the necessary permission to send this file.</label>
+              <p>Recipient-specific files are bound to this contact and cannot be used as template samples or sent to another recipient. Download access expires after 30 days. <a href="/privacy-center">Review Data Processing Terms</a>.</p>
+            </fieldset>
             <label class="media-dropzone" data-media-dropzone>
               <input type="file" name="file" accept="image/*,video/*,application/pdf,.pdf" required data-media-file>
               <span class="media-dropzone-icon" aria-hidden="true">
@@ -1438,7 +1527,8 @@ GET /api/v1/messages/MESSAGE_ID</code></pre>
   </div>
 
   <script src="vendor/xlsx.full.min.js?v=20260906"></script>
-  <script src="js/customer-portal.js?v=20261011-messages1"></script>
+  <script src="js/customer-portal.js?v=20261029-delivery2"></script>
+  <script src="js/recipient-delivery.js?v=20261029-delivery2"></script>
   <script src="/js/dialog-accessibility.js?v=20260906" defer></script>
 </body>
 </html>

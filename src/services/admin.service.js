@@ -107,7 +107,9 @@ function recordDefinition(kind) {
 function recordsPipeline(kind, query = {}, paginate = true) {
   const definition = recordDefinition(kind), filter = {};
   const q = queryText(query.q), status = queryText(query.status), plan = queryText(query.plan), segment = queryText(query.segment);
-  if (q) filter.$or = definition.search.map(field => ({ [field]: { $regex: regexText(q), $options: "i" } }));
+  if (q) filter.$or = definition.search.map(field => kind === "messages" && field === "to"
+    ? Message.privateSearchFilter(q.toLowerCase())
+    : { [field]: { $regex: regexText(q), $options: "i" } });
   if (status) {
     const values = definition.model.schema.path("status")?.enumValues;
     if (!values?.includes(status)) throw new HttpError(400, "Invalid status filter");
@@ -163,13 +165,28 @@ function recordsPipeline(kind, query = {}, paginate = true) {
 }
 async function records(kind, query) {
   const definition = recordDefinition(kind), limit = pageSize(query.limit, 50, 100);
-  const rows = await definition.model.aggregate(recordsPipeline(kind, query));
+  let rows;
+  if (kind === "messages" && queryText(query.q)) {
+    rows = [];
+    for await (const row of exportCursor(kind, query)) {
+      rows.push(row);
+      if (rows.length > limit) break;
+    }
+  } else rows = await definition.model.aggregate(recordsPipeline(kind, query));
   const hasMore = rows.length > limit;
   if (hasMore) rows.pop();
   return { records: rows, fields: definition.fields.split(" "), nextCursor: hasMore ? String(rows.at(-1)._id) : null };
 }
-function exportCursor(kind, query) {
-  return recordDefinition(kind).model.aggregate(recordsPipeline(kind, query, false)).cursor({ batchSize: 200 });
+async function* exportCursor(kind, query) {
+  const model = recordDefinition(kind).model;
+  const search = kind === "messages" ? queryText(query.q).toLowerCase() : "";
+  const cursor = model.aggregate(recordsPipeline(kind, query, false)).cursor({ batchSize: 200 });
+  try {
+    for await (const row of cursor) {
+      if (model.revealPrivateFields) model.revealPrivateFields(row);
+      if (!search || [row.to, row.templateName].some(value => String(value || "").toLowerCase().includes(search))) yield row;
+    }
+  } finally { await cursor.close(); }
 }
 function csvCell(value) {
   let text = value == null ? "" : value instanceof Date ? value.toISOString() : String(value);

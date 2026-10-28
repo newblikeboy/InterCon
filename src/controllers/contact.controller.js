@@ -12,7 +12,7 @@ const listContacts = asyncHandler(async (req, res) => {
 });
 
 const createContact = asyncHandler(async (req, res) => {
-  const contact = await contactService.createContact(req.tenantId, req.body);
+  const contact = await contactService.createContact(req.tenantId, req.body, req.user._id);
 
   res.status(201).json({
     success: true,
@@ -31,7 +31,7 @@ const updateContact = asyncHandler(async (req, res) => {
 });
 
 const importContacts = asyncHandler(async (req, res) => {
-  const result = await contactService.importContacts(req.tenantId, req.body.contacts);
+  const result = await contactService.importContacts(req.tenantId, req.body.contacts, req.user._id);
 
   res.json({
     success: true,

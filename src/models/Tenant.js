@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 const { decryptSecret, encryptSecret } = require("../utils/crypto");
+const { lookup } = require("../utils/privateData");
+const privateRecipient = value => value ? lookup(value, "Tenant.trial.recipient") : value;
 
 const tenantSchema = new mongoose.Schema(
   {
@@ -158,14 +160,15 @@ const tenantSchema = new mongoose.Schema(
         select: false
       }
     },
+    processingTerms: { version: String, acceptedAt: Date, acceptedBy: mongoose.Schema.Types.ObjectId },
     trial: {
       initializedAt: Date,
       // Keep the old recipient ledger for migration; new usage is per Meta message.
-      recipients: { type: [String], default: [] },
+      recipients: { type: [{ type: String, set: privateRecipient }], default: [] },
       messagesInitializedAt: Date,
       sentMessages: { type: [String], default: [] },
       reservations: {
-        type: [{ _id: false, token: String, recipient: String, createdAt: Date }],
+        type: [{ _id: false, token: String, recipient: { type: String, set: privateRecipient }, createdAt: Date }],
         default: []
       }
     },

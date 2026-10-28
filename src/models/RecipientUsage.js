@@ -21,8 +21,7 @@ const recipientUsageSchema = new mongoose.Schema(
     },
     lastAcceptedAt: {
       type: Date,
-      required: true,
-      index: true
+      required: true
     }
   },
   { timestamps: true }
@@ -34,5 +33,10 @@ recipientUsageSchema.index(
 );
 recipientUsageSchema.index({ tenantId: 1, phoneNumberId: 1, lastAcceptedAt: 1 });
 recipientUsageSchema.index({ lastAcceptedAt: 1 }, { expireAfterSeconds: 2 * 24 * 60 * 60 });
+
+recipientUsageSchema.plugin(require("./plugins/privateFields"), {
+  namespace: "RecipientUsage",
+  fields: { recipient: { lookup: true, max: 32 } }
+});
 
 module.exports = mongoose.model("RecipientUsage", recipientUsageSchema);

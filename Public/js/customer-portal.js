@@ -1889,6 +1889,8 @@ async function loadApprovedTemplates() {
 
 function isCompatibleWhatsAppMedia(asset, type, approvalSample = false) {
   if (!asset || asset.mediaType !== type) return false;
+  if (asset.accessExpiresAt && new Date(asset.accessExpiresAt) <= new Date()) return false;
+  if (approvalSample && (asset.purpose === "patient_report" || asset.recipientContactId || asset.deliveryScope === "recipient")) return false;
   const mimeType = String(asset.mimeType || "").toLowerCase();
   const maximumBytes = type === "image" ? 5 * 1024 * 1024 : type === "document" ? 100 * 1024 * 1024 : 16 * 1024 * 1024;
   const withinSizeLimit = Number(asset.bytes || 0) <= maximumBytes;
@@ -1922,7 +1924,7 @@ function renderSendMediaOptions() {
     return;
   }
 
-  const assets = mediaState.assets.filter((asset) => isCompatibleWhatsAppMedia(asset, headerType));
+  const assets = mediaState.assets.filter((asset) => !asset.recipientContactId && asset.deliveryScope !== "recipient" && isCompatibleWhatsAppMedia(asset, headerType));
   sendMediaField.hidden = false;
   sendMediaSelect.required = true;
   sendMediaSelect.disabled = !assets.length;
@@ -1941,8 +1943,8 @@ function renderSendMediaOptions() {
   }
   if (sendMediaHint) {
     sendMediaHint.textContent = assets.length
-      ? `Required ${headerType} header. The selected Cloudinary asset is sent with this approved template.`
-      : `No compatible ${headerType} found. Add one in Media Library first.`;
+      ? "This file is shared with all selected recipients."
+      : `Add a matching ${headerType} in Media Library.`;
   }
   updateSendRecipientSummary();
 }
@@ -1998,13 +2000,15 @@ function updateSendVariableHint() {
   }
   sendVariableHint.textContent = parameterCount > 10
     ? "Bulk file sending supports templates with up to 10 variables."
-    : `Upload one CSV or Excel row per customer. Phone uniquely matches that row's ${parameterCount} value${parameterCount === 1 ? "" : "s"}; sending is blocked if any eligible selected phone is missing.`;
+    : "Include every selected number and its variable values.";
   renderSendVariableEditor();
   updateWhatsAppPreview();
 }
 
 function renderSendVariableEditor() {
   if (!sendVariableEditor) return;
+  const builder = sendVariableEditor.closest(".send-variable-builder");
+  if (builder) builder.hidden = !sendTemplateSelect?.value || !sendVariableDataState.parameterCount;
   if (!sendTemplateSelect?.value) {
     sendVariableEditor.innerHTML = `<div class="send-variable-empty">Select a template to configure its variables.</div>`;
     updateSendRecipientSummary();
@@ -2051,7 +2055,7 @@ function renderSendVariableEditor() {
           : "No variable file uploaded"}</strong>
         <small>${sendVariableDataState.rows.length
           ? `${escapeHtml(sendVariableDataState.fileName || "file")} - ${knownMatchCount} currently visible selected contact${knownMatchCount === 1 ? "" : "s"} matched`
-          : "Download the prepared CSV, fill every variable column, then upload CSV/XLSX/XLS."}</small>
+          : "Fill the recipient CSV, then upload CSV or Excel."}</small>
       </div>
       ${previewRows.length ? `
         <div class="send-variable-preview">
@@ -2435,7 +2439,7 @@ async function openBulkPreviewModal() {
 }
 
 function fillTemplatePreview(body, variables) {
-  const fallbackBody = "Select a template to preview the WhatsApp message.";
+  const fallbackBody = "Select a template to preview.";
   const text = String(body || "").trim() || fallbackBody;
 
   return text.replace(/\{\{\s*(\d+)\s*\}\}/g, (match, indexText) => {
@@ -2459,6 +2463,7 @@ function updateWhatsAppPreview() {
   const selectedMedia = sendMediaSelect?.selectedOptions?.[0];
   const mediaUrl = selectedMedia?.dataset.url || "";
   const mediaType = selectedMedia?.dataset.mediaType || "";
+  const mediaAsset = mediaState.assets.find(asset => asset.mediaId === selectedMedia?.value);
 
   if (previewContact) {
     const extraCount = Math.max(getSendRecipientEstimate() - 1, 0);
@@ -2471,12 +2476,13 @@ function updateWhatsAppPreview() {
 
   if (previewMedia) {
     previewMedia.hidden = !mediaUrl;
+    previewMedia.classList.toggle("is-document", mediaType === "document");
     previewMedia.innerHTML = !mediaUrl
       ? ""
       : mediaType === "video"
         ? `<video src="${escapeHtml(mediaUrl)}" muted playsinline controls></video>`
         : mediaType === "document"
-          ? `<a href="${escapeHtml(mediaUrl)}" target="_blank" rel="noopener">PDF document</a>`
+          ? `<a class="delivery-preview-document" href="${escapeHtml(mediaUrl)}" target="_blank" rel="noopener"><b>PDF</b><div><strong>${escapeHtml(mediaAsset?.title || "PDF document")}</strong><small>${escapeHtml(formatMediaBytes(mediaAsset?.bytes || 0))}</small></div></a>`
           : `<img src="${escapeHtml(mediaUrl)}" alt="Template header preview">`;
   }
 
@@ -4390,9 +4396,35 @@ async function loadMediaLibrary(force = false) {
   }
 }
 
+function syncReportFields() {
+  const report = mediaUploadForm?.elements.purpose?.value === "patient_report";
+  const scope = document.querySelector("[data-media-delivery-scope]");
+  if (scope) { if (report) scope.value = "recipient"; scope.disabled = report; }
+  const specific = report || scope?.value === "recipient";
+  const container = document.querySelector("[data-report-fields]");
+  if (container) container.hidden = !specific;
+  for (const selector of ["[data-report-recipient]", "[data-report-consent]", "[data-report-verified]"]) {
+    const input = document.querySelector(selector);
+    if (input) { input.required = selector === "[data-report-consent]" ? report : specific; input.disabled = !specific; }
+  }
+  const label = document.querySelector("[data-report-reference-label]");
+  if (label) label.textContent = report ? "Client permission reference" : "Client permission reference (optional)";
+  if (specific) requestAllPages("/api/contacts", "contacts").then(data => {
+    const select = document.querySelector("[data-report-recipient]");
+    const previous = select.value;
+    select.innerHTML = '<option value="">Choose a contact</option>' + (data.contacts || []).filter(contact => contact.status === "active").map(contact =>
+      `<option value="${escapeHtml(contact._id)}">${escapeHtml(contact.name)} - ${escapeHtml(contact.phone)}</option>`).join("");
+    select.value = previous;
+  }).catch(error => setMediaUploadStatus(error.message, true));
+}
+
+document.querySelector("[data-media-purpose]")?.addEventListener("change", syncReportFields);
+document.querySelector("[data-media-delivery-scope]")?.addEventListener("change", syncReportFields);
+
 function openMediaModal() {
   if (!mediaModal) return;
   mediaUploadForm?.reset();
+  syncReportFields();
   if (mediaFileLabel) mediaFileLabel.textContent = "Choose a photo, video, or PDF";
   setMediaUploadStatus("");
   mediaModal.hidden = false;
@@ -6544,6 +6576,8 @@ function openContactEditModal(contactId) {
   if (contactEditTag) contactEditTag.value = contact.tags?.[0] || "";
   if (contactEditOptIn) contactEditOptIn.checked = Boolean(contact.optIn?.status);
   if (contactEditProof) contactEditProof.value = contact.optIn?.proof || "";
+  const consentScope = document.querySelector("[data-contact-edit-scope]");
+  if (consentScope) consentScope.value = contact.optIn?.scope || "business_messages";
   if (contactEditStatus) contactEditStatus.value = contact.status || "active";
   if (contactEditSave) contactEditSave.disabled = false;
   setContactEditMessage("");
@@ -6570,6 +6604,7 @@ function getContactEditPayload() {
     tags: tag ? [tag.replace(/^#/, "")] : [],
     optIn: Boolean(contactEditOptIn?.checked),
     optInProof: contactEditProof?.value.trim() || "",
+    consentScope: document.querySelector("[data-contact-edit-scope]")?.value || "service_only",
     status: contactEditStatus?.value || "active"
   };
 }

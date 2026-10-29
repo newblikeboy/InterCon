@@ -1,20 +1,90 @@
 <!doctype html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Privacy Center | InterCon</title><link rel="stylesheet" href="/style/privacy-center.css"></head>
-<body><main><a href="/customer">← Back to your workspace</a><h1>Privacy &amp; data requests</h1>
-<p>Read the <a href="/privacy-policy">Privacy Policy</a> and <a href="/data-processing-policy">Data Processing Terms</a>. Do not enter medical results, passwords or OTPs here.</p>
-<section><h2>Workspace Data Processing Terms</h2><p id="terms-status">Loading…</p><form id="terms-form"><label><input type="checkbox" name="accepted" required> I am the authorised workspace owner and accept the Data Processing Terms for this business.</label><button>Accept current terms</button></form></section>
-<section><h2>Submit a request</h2><form id="request-form">
-<label>Whose data?<select name="subject"><option value="account">My account data</option><option value="customer">A customer/patient in my workspace</option></select></label>
-<label id="contact-field" hidden>Contact<select name="contactId"><option value="">Choose a contact</option></select></label>
-<label>Request type<select name="kind"><option value="access">Access/export</option><option value="correction">Correction</option><option value="erasure">Erasure</option><option value="withdrawal">Withdraw permission</option><option value="nomination">Nomination</option><option value="grievance">Grievance</option></select></label>
-<label>Details or external reference<textarea name="notes" maxlength="2000" rows="3" placeholder="Describe the request without including clinical information"></textarea></label><button>Submit request</button></form></section>
-<section><h2>Your requests</h2><div id="requests" aria-live="polite"></div></section>
-<section id="review-section" hidden><h2>Manage a customer request</h2><p>Verify the individual's identity and authority through your own process before recording verification. Correct records in Contacts before marking a correction completed. Erasure cannot recall already delivered attachments.</p>
-<form id="review-form"><label>Request<select name="requestId" required></select></label>
-<label>Action<select name="status"><option value="verified">Record verified identity and authority</option><option value="in_review">In review</option><option value="fulfilled">Record completed action</option><option value="rejected">Reject with explanation</option><option value="erase">Execute verified customer erasure</option></select></label>
-<label>Verification / response reference<textarea name="response" maxlength="2000" required rows="3"></textarea></label>
-<label>Legal retention hold until (only where justified)<input name="legalHoldUntil" type="date"></label>
-<label>For erasure, type ERASE<input name="confirmation" autocomplete="off"></label><button>Save action</button></form></section>
-<details id="restore-section" hidden><summary>New consent after a previous erasure</summary><form id="restore-form"><label>Full WhatsApp number including country code<input name="phone" inputmode="numeric" required pattern="[0-9]{11,15}"></label><label>New permission reference<input name="reference" required maxlength="240"></label><label><input type="checkbox" name="confirmedFreshConsent" required> I have newly verified this person's permission and authority to restore messaging.</label><button>Record fresh permission</button></form></details>
-<p id="status" role="status" aria-live="polite"></p><p>Privacy contact: <a href="mailto:support@intercon.in">support@intercon.in</a>. Patients should contact their laboratory first. Do not email report PDFs.</p>
-</main><script src="/js/privacy-center.js"></script></body></html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Data &amp; Privacy | InterCon</title>
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/style/privacy-center.css?v=20261029-3">
+</head>
+<body>
+  <a class="skip-link" href="#privacy-content">Skip to content</a>
+  <header class="privacy-topbar">
+    <a class="privacy-brand" href="/customer" aria-label="InterCon workspace"><img src="/InterIcon.jpg" alt=""><span>InterCon</span></a>
+    <a class="back-link" href="/customer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>Back to workspace</a>
+  </header>
+  <main class="privacy-shell" id="privacy-content">
+    <div class="privacy-page-heading">
+      <div><p class="eyebrow">Workspace settings</p><h1>Data &amp; privacy</h1><p>Manage permissions and requests for your account and customer data.</p></div>
+      <span class="workspace-label" id="workspace-label">Your workspace</span>
+    </div>
+    <p id="status" class="feedback" role="status" aria-live="polite"></p>
+    <div class="privacy-layout">
+      <aside class="privacy-sidebar" aria-label="Workspace privacy information">
+        <section class="privacy-card terms-card" aria-labelledby="terms-heading">
+          <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 4-8 9-8 9s-8-5-8-9V6l8-3Z"/><path d="m9 12 2 2 4-4"/></svg></div>
+          <h2 id="terms-heading">Data Processing Terms</h2>
+          <p class="card-description">The terms that govern how InterCon processes data for your business.</p>
+          <span class="terms-badge" id="terms-badge">Checking status</span>
+          <p id="terms-status" class="terms-status">Loading workspace terms...</p>
+          <form id="terms-form" hidden>
+            <label class="checkbox-field"><input type="checkbox" name="accepted" required><span>I am the authorised workspace owner and accept the <a href="/data-processing-policy" target="_blank" rel="noopener">Data Processing Terms</a> for this business.</span></label>
+            <button type="submit">Accept current terms</button>
+          </form>
+        </section>
+        <section class="privacy-card resources-card" aria-labelledby="resources-heading">
+          <h2 id="resources-heading">Policies &amp; support</h2>
+          <a class="resource-link" href="/privacy-policy" target="_blank" rel="noopener"><span>Privacy Policy<small>How information is collected and used</small></span><span aria-hidden="true">↗</span></a>
+          <a class="resource-link" href="/data-processing-policy" target="_blank" rel="noopener"><span>Data Processing Terms<small>Responsibilities and safeguards</small></span><span aria-hidden="true">↗</span></a>
+          <div class="privacy-support"><strong>Need help with a request?</strong><a href="mailto:support@intercon.in">support@intercon.in</a><p>Patients should contact their laboratory first. Do not email report PDFs.</p></div>
+        </section>
+      </aside>
+      <div class="privacy-content">
+        <section class="privacy-card" aria-labelledby="request-heading">
+          <div class="card-heading"><div><h2 id="request-heading">Submit a request</h2><p>Choose whose data the request concerns and how we can help.</p></div></div>
+          <form id="request-form">
+            <div class="form-row">
+              <label>Whose data?<select name="subject"><option value="account">My account data</option><option value="customer" disabled>A customer or patient in my workspace</option></select></label>
+              <label>Request type<select name="kind"><option value="access">Access / export</option><option value="correction">Correction</option><option value="erasure">Erasure</option><option value="withdrawal">Withdraw permission</option><option value="nomination">Nomination</option><option value="grievance">Grievance</option></select></label>
+            </div>
+            <label id="contact-field" hidden>Contact<select name="contactId"><option value="">Choose a contact</option></select></label>
+            <label><span>Details or reference <span class="optional">Optional</span></span><textarea name="notes" maxlength="2000" rows="4" aria-describedby="request-note" placeholder="Briefly describe your request or provide an external reference"></textarea></label>
+            <p class="field-hint" id="request-note">Leave out medical results, passwords and OTPs.</p>
+            <div class="form-footer"><button type="submit">Submit request<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></button></div>
+          </form>
+        </section>
+        <section class="privacy-card requests-card" aria-labelledby="requests-heading">
+          <div class="card-heading"><div><h2 id="requests-heading">Your requests <span class="count-badge" id="request-count">0</span></h2><p>Track the status and response to each request.</p></div></div>
+          <div id="requests" aria-live="polite" aria-busy="true"><p class="loading-state">Loading your requests...</p></div>
+        </section>
+        <section class="privacy-card" id="review-section" hidden aria-labelledby="review-heading">
+          <div class="card-heading"><div><p class="eyebrow">Workspace management</p><h2 id="review-heading">Manage a customer request</h2><p>Verify the individual's identity and authority through your own process before recording verification.</p></div></div>
+          <form id="review-form">
+            <label>Request<select name="requestId" required></select></label>
+            <label>Action<select name="status"><option value="verified">Record verified identity and authority</option><option value="in_review">In review</option><option value="fulfilled">Record completed action</option><option value="rejected">Reject with explanation</option><option value="erase">Execute verified customer erasure</option></select></label>
+            <label>Verification / response reference<textarea name="response" maxlength="2000" required rows="3" placeholder="Record the verification or response reference"></textarea></label>
+            <div class="form-row">
+              <label><span>Legal retention hold until <span class="optional">Only where justified</span></span><input name="legalHoldUntil" type="date"></label>
+              <label>For erasure, type ERASE<input name="confirmation" autocomplete="off" placeholder="ERASE"></label>
+            </div>
+            <p class="field-hint">Correct records in Contacts before marking a correction completed. Erasure cannot recall already delivered attachments.</p>
+            <div class="form-footer"><button type="submit">Save action</button></div>
+          </form>
+        </section>
+        <details class="privacy-card restore-card" id="restore-section" hidden>
+          <summary><span>New consent after a previous erasure<small>Record fresh permission to restore messaging.</small></span><span class="details-chevron" aria-hidden="true">⌄</span></summary>
+          <form id="restore-form">
+            <label>WhatsApp number<input name="phone" inputmode="numeric" required pattern="[0-9]{11,15}" placeholder="Full number including country code"></label>
+            <label>New permission reference<input name="reference" required maxlength="240" placeholder="Consent or authorisation reference"></label>
+            <label class="checkbox-field"><input type="checkbox" name="confirmedFreshConsent" required><span>I have newly verified this person's permission and authority to restore messaging.</span></label>
+            <div class="form-footer"><button type="submit">Record fresh permission</button></div>
+          </form>
+        </details>
+      </div>
+    </div>
+  </main>
+  <footer class="privacy-footer">InterCon <span aria-hidden="true">·</span> Workspace data &amp; privacy</footer>
+  <script src="/js/privacy-center.js?v=20261029-3"></script>
+</body>
+</html>

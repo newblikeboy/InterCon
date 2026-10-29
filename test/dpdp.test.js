@@ -9,6 +9,7 @@ const mongoose = require("mongoose");
 const { MongoMemoryReplSet } = require("mongodb-memory-server");
 const request = require("supertest"), app = require("../src/app");
 const { v2: cloudinary } = require("cloudinary");
+const metaMedia = require("../src/services/metaMedia.service");
 const Tenant = require("../src/models/Tenant"), User = require("../src/models/User"), Contact = require("../src/models/Contact");
 const Media = require("../src/models/MediaAsset"), Message = require("../src/models/Message"), Conversation = require("../src/models/Conversation");
 const Inbox = require("../src/models/InboxMessage"), Template = require("../src/models/Template"), Webhook = require("../src/models/WebhookEvent"), Batch = require("../src/models/MessageBatch");
@@ -36,10 +37,8 @@ async function report(t) {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), "intercon-dpdp-test-"));
   const filePath = path.join(folder, "report.pdf"); fs.writeFileSync(filePath, "%PDF-1.4\nSynthetic test report\n");
   t.after(() => { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); fs.rmdirSync(folder); });
-  t.mock.method(cloudinary.uploader, "upload", async (_file, options) => {
-    assert.equal(options.type, "authenticated");
-    return { public_id: "private/report.pdf", asset_id: "test-asset", secure_url: "https://res.cloudinary.com/privacy-test/raw/authenticated/report.pdf", bytes: 40 };
-  });
+  t.mock.method(metaMedia, "upload", async () => ({ metaMediaId: "12345001", metaPhoneNumberId: "123456", metaMediaExpiresAt: new Date(Date.now() + 30 * 86400000 - 300000) }));
+  t.mock.method(metaMedia, "remove", async () => {});
   return media.createMedia(tenant._id, { path: filePath, originalname: "test-patient-report.pdf", size: 40 }, {
     purpose: "patient_report", recipientContactId: String(contact._id), recipientVerified: true, consentReference: "LAB-CONSENT-TEST", title: "Private lab report"
   });
@@ -49,6 +48,7 @@ test("patient PDFs use authenticated storage, encrypted metadata and a single ve
   assert.match(asset.url, /^\/api\/media\//);
   const stored = await Media.collection.findOne({ mediaId: asset.mediaId });
   assert.equal(stored.deliveryType, "authenticated"); assert.ok(!JSON.stringify(stored).includes("LAB-CONSENT-TEST"));
+  assert.equal(stored.storageProvider, "meta");
   const loaded = await Media.findOne({ mediaId: asset.mediaId }).lean();
   assert.throws(() => media.assertReportRecipient(loaded, { _id: new mongoose.Types.ObjectId() }, { category: "utility" }), /different recipient/);
   assert.throws(() => media.assertReportRecipient(loaded, contact, { category: "marketing" }), /utility/);
@@ -69,8 +69,10 @@ test("patient-report content checks tenant and role, emits no public URL, and ex
   await request(app).get(asset.url).set("Authorization", `Bearer ${signAuthToken(other)}`).expect(404);
   const agent = await User.create({ tenantId: tenant._id, name: "Agent", email: "agent@example.test", passwordHash: "unused", role: "agent" });
   await request(app).get(asset.url).set("Authorization", `Bearer ${signAuthToken(agent)}`).expect(403);
-  t.mock.method(global, "fetch", async url => {
-    const parsed = new URL(url); assert.ok(Number(parsed.searchParams.get("expires_at")) <= Date.now() / 1000 + 305);
+  t.mock.method(global, "fetch", async (url, options) => {
+    const parsed = new URL(url);
+    assert.equal(options.headers.Authorization, "Bearer test-token");
+    if (parsed.hostname === "graph.facebook.com") return new Response(JSON.stringify({ url: "https://lookaside.fbsbx.com/report" }), { status: 200 });
     return new Response("%PDF-1.4\nSynthetic", { status: 200, headers: { "Content-Type": "application/pdf" } });
   });
   const response = await request(app).get(asset.url).set("Authorization", `Bearer ${signAuthToken(owner)}`).expect(200);

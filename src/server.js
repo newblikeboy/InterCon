@@ -10,6 +10,7 @@ const mongoose = require("mongoose");
 async function startServer() {
   assertProductionEnvironment();
   await Promise.all([connectDatabase(), connectRedis()]);
+  const stopUploadCleanup = require("./utils/privateUploads").startCleanup();
 
   const server = http.createServer(app);
   server.keepAliveTimeout = 65000;
@@ -23,6 +24,7 @@ async function startServer() {
   });
 
   async function shutdown(signal) {
+    stopUploadCleanup();
     console.log(`${signal} received. Closing HTTP server.`);
     const forceTimer = setTimeout(() => process.exit(1), 15000);
     forceTimer.unref();

@@ -64,7 +64,7 @@ function buildTemplateComponents(message, template = {}) {
       parameters: [{
         type: template.headerType,
         [template.headerType]: {
-          link: message.mediaUrl
+          ...(message.metaMediaId ? { id: message.metaMediaId } : { link: message.mediaUrl })
         }
       }]
     });
@@ -187,7 +187,7 @@ async function resolveTemplateSendContext(tenantId, body = {}, options = {}) {
 
   const [tenant, template] = await Promise.all([
     Tenant.findById(tenantId).select("+meta.accessToken"),
-    Template.findOne(templateFilter).select("name language category status body parameterCount headerType headerMediaId").lean()
+    Template.findOne(templateFilter).select("name language category status body parameterCount headerType headerMediaId mediaMode").lean()
   ]);
 
   if (!template) {
@@ -201,12 +201,14 @@ async function resolveTemplateSendContext(tenantId, body = {}, options = {}) {
 
   let mediaAsset = null;
   if (!options.skipMedia && template.headerType && template.headerType !== "none") {
-    const mediaId = String(body.mediaId || body.media_id || template.headerMediaId || "").trim();
+    const mediaId = String(body.mediaId || body.media_id || (template.mediaMode === "unique" ? "" : template.headerMediaId) || "").trim();
     if (!mediaId) {
       throw new HttpError(400, `This template requires a ${template.headerType} from the Media Library`);
     }
     mediaAsset = await MediaAsset.findOne({ tenantId, mediaId }).select("+recipientHash").lean();
     assertSendMediaCompatible(mediaAsset, template.headerType);
+    require("./media.service").assertTemplateMediaMode(mediaAsset, template);
+    if (require("./metaMedia.service").isMeta(mediaAsset)) require("./metaMedia.service").assertAvailable(mediaAsset, tenant);
   }
 
   const accessToken = tenant?.getMetaAccessToken();
@@ -239,7 +241,7 @@ function buildQueuedMessage(context, tenantId, contact, extra = {}) {
     ...(context.mediaAsset ? {
       mediaId: context.mediaAsset.mediaId,
       mediaType: context.mediaAsset.mediaType,
-      mediaUrl: context.mediaAsset.secureUrl
+      ...(context.mediaAsset.storageProvider === "meta" ? { metaMediaId: context.mediaAsset.metaMediaId } : { mediaUrl: context.mediaAsset.secureUrl })
     } : {}),
     status: "queued",
     nextAttemptAt: new Date(),
@@ -765,6 +767,7 @@ async function sendTemplateMessages(tenantId, body = {}) {
   const previous = await MessageBatch.findOne({ tenantId, key }).lean();
   if (previous) return previousResult(previous);
   const context = await resolveTemplateSendContext(tenantId, body, { perRecipientVariables: true });
+  if (context.template.mediaMode === "unique") throw new HttpError(400, "Unique Media templates require one recipient's file per delivery; use the Unique Media send flow");
   const recipients = await resolveBulkRecipients(tenantId, body);
   const expectedVariableCount = Number(context.template.parameterCount || 0);
   const recipientVariableMap = buildRecipientVariableMap(body.recipientVariables, expectedVariableCount);
@@ -1040,7 +1043,7 @@ async function processQueuedMessage(message) {
       name: message.templateName,
       language: message.language,
       status: "approved"
-    }).select("name language category status body parameterCount headerType").lean(),
+    }).select("name language category status body parameterCount headerType mediaMode").lean(),
     Contact.findOne({ tenantId: message.tenantId, phone: message.to }).select("_id phone status optIn").lean()
   ]);
 
@@ -1078,12 +1081,20 @@ async function processQueuedMessage(message) {
     const asset = await MediaAsset.findOne({ tenantId: message.tenantId, mediaId: message.mediaId }).select("+recipientHash").lean();
     if (!asset) return failMessage(message, "The attached media was removed before delivery");
     try {
+      require("./media.service").assertTemplateMediaMode(asset, template);
       require("./media.service").assertReportRecipient(asset, contact, template);
       if (require("./media.service").isRecipientMedia(asset)) {
         await MediaAsset.updateOne({ _id: asset._id }, { $max: { lastProcessedAt: new Date() } });
         await require("../models/SecurityAudit").create({ tenantId: message.tenantId, action: "report.delivery.attempt", resourceId: asset.mediaId });
       }
-      message.mediaUrl = require("./media.service").downloadUrl(asset);
+      if (require("./metaMedia.service").isMeta(asset)) {
+        require("./metaMedia.service").assertAvailable(asset, tenant);
+        message.metaMediaId = asset.metaMediaId;
+        message.mediaUrl = undefined;
+      } else {
+        message.metaMediaId = undefined;
+        message.mediaUrl = require("./media.service").downloadUrl(asset);
+      }
     } catch (error) { return failMessage(message, error.message); }
   }
   const capacity = await hasDailyUniqueCapacity(message);

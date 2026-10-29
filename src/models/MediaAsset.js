@@ -35,7 +35,7 @@ const mediaAssetSchema = new mongoose.Schema(
       index: true
     },
     purpose: { type: String, enum: ["general", "patient_report"], default: "general" },
-    deliveryScope: { type: String, enum: ["shared", "recipient"], default: "shared" },
+    deliveryScope: { type: String, enum: ["shared", "unique", "recipient"], default: "shared" },
     recipientContactId: { type: mongoose.Schema.Types.ObjectId, ref: "Contact", index: true },
     recipientHash: { type: String, select: false },
     recipientVerifiedAt: Date,
@@ -43,6 +43,10 @@ const mediaAssetSchema = new mongoose.Schema(
     recipientVerifiedByApiKey: mongoose.Schema.Types.ObjectId,
     consentReference: { type: String, maxlength: 240 },
     deliveryType: { type: String, enum: ["upload", "authenticated"], default: "upload" },
+    storageProvider: { type: String, enum: ["cloudinary", "meta"], default: "cloudinary" },
+    metaMediaId: String,
+    metaPhoneNumberId: String,
+    metaMediaExpiresAt: Date,
     accessExpiresAt: Date,
     lastProcessedAt: { type: Date, default: Date.now },
     legalHoldUntil: Date,
@@ -81,7 +85,7 @@ const mediaAssetSchema = new mongoose.Schema(
     },
     secureUrl: {
       type: String,
-      required: true,
+      required: function() { return this.storageProvider !== "meta"; },
       trim: true
     }
   },

@@ -170,6 +170,8 @@ function buildMetaTemplatePayload(body) {
   const category = normalizeCategory(body.category);
   const language = normalizeLanguage(body.language);
   const headerType = normalizeHeaderType(body.headerType || body.header_type);
+  const mediaMode = String(body.mediaMode || "common").trim().toLowerCase();
+  if (!["common", "unique"].includes(mediaMode)) throw new HttpError(400, "Choose common or unique media for this template");
   const headerMediaId = String(body.headerMediaId || body.header_media_id || "").trim();
   const text = String(body.body || body.messageBody || body.message_body || "").trim();
 
@@ -249,6 +251,7 @@ function buildMetaTemplatePayload(body) {
     parameterCount: placeholders.length,
     sampleValues: bodyText ? bodyText[0].map((value) => String(value)) : [],
     headerType,
+    mediaMode: headerType === "none" ? undefined : mediaMode,
     headerMediaId,
     buttons: buttons.map((button) => ({
       type: button.type,
@@ -260,10 +263,11 @@ function buildMetaTemplatePayload(body) {
 }
 
 function assertTemplateMediaCompatible(asset, headerType) {
-  if (require("./media.service").isRecipientMedia(asset)) throw new HttpError(400, "Use a synthetic sample PDF for template approval; recipient-specific files cannot be template samples");
+  if (asset?.recipientContactId || asset?.deliveryScope === "recipient") throw new HttpError(400, "Use a synthetic sample for template approval; recipient-assigned files cannot be template samples");
   if (!asset || asset.mediaType !== headerType) {
     throw new HttpError(400, `Choose a ${headerType} from the Media Library`);
   }
+  if (asset.disabledAt || asset.accessExpiresAt && new Date(asset.accessExpiresAt) <= new Date()) throw new HttpError(410, "This sample is no longer available");
 
   const allowedMimeTypes = headerType === "image"
     ? ["image/jpeg", "image/png"]
@@ -290,9 +294,9 @@ async function createMetaHeaderHandle(accessToken, asset) {
     throw new HttpError(503, "Meta App ID is required to upload a template header sample");
   }
 
-  const sourceResponse = await fetchWithPolicy(require("./media.service").downloadUrl(asset));
+  const sourceResponse = await require("./media.service").fetchMediaContent(asset);
   if (!sourceResponse.ok) {
-    throw new HttpError(502, "Unable to download the selected Cloudinary media");
+    throw new HttpError(502, "Unable to download the selected media sample");
   }
   const buffer = Buffer.from(await sourceResponse.arrayBuffer());
   const maximumBytes = asset.mediaType === "image" ? 5 * 1024 * 1024 : asset.mediaType === "document" ? 100 * 1024 * 1024 : 16 * 1024 * 1024;
@@ -535,10 +539,12 @@ async function createTemplateDraft(tenantId, body) {
         parameterCount: payload.parameterCount,
         sampleValues: payload.sampleValues,
         headerType: payload.headerType,
+        mediaMode: payload.mediaMode,
         headerMediaId: payload.headerMediaId,
         buttons: payload.buttons,
         status: "draft"
-      }
+      },
+      ...(payload.headerType === "none" ? { $unset: { mediaMode: "" } } : {})
     },
     { returnDocument: "after", upsert: true, setDefaultsOnInsert: true }
   );
@@ -609,11 +615,13 @@ async function submitTemplateForMetaReview(tenantId, body) {
         parameterCount: payload.parameterCount,
         sampleValues: payload.sampleValues,
         headerType: payload.headerType,
+        mediaMode: payload.mediaMode,
         headerMediaId: payload.headerMediaId,
         buttons: payload.buttons,
         status: "in_review",
         metaTemplateId: metaResponse.id || metaResponse.message_template_id || ""
-      }
+      },
+      ...(payload.headerType === "none" ? { $unset: { mediaMode: "" } } : {})
     },
     { returnDocument: "after", upsert: true, setDefaultsOnInsert: true }
   );

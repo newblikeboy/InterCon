@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>InterCon Customer Portal</title>
   <meta name="description" content="InterCon customer portal for connecting WhatsApp Business, managing contacts, creating templates, sending messages, and checking billing readiness.">
-  <link rel="stylesheet" href="style/customer-portal.css?v=20261029-delivery2">
+  <link rel="stylesheet" href="style/customer-portal.css?v=20261029-meta-media4">
 </head>
 <body class="portal-body console-body">
   <div class="portal-shell console-shell">
@@ -72,7 +72,7 @@
                 <strong data-profile-business-name>Loading workspace</strong>
                 <span data-profile-role>Account</span>
               </div>
-              <a href="/privacy-center">Privacy &amp; data requests</a>
+              <a href="/privacy-center"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v6c0 4 8 9 8 9s8-5 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg><span>Data &amp; privacy</span></a>
               <button type="button" data-logout>Logout</button>
             </div>
           </div>
@@ -549,7 +549,8 @@ Hi
                 <div class="recipient-delivery-variables" data-recipient-delivery-variables></div>
               </section>
               <section class="recipient-file-section">
-                <label>Attachment<input name="file" type="file" required accept=".pdf,.jpg,.jpeg,.png,.mp4,.3gp,application/pdf,image/jpeg,image/png,video/mp4,video/3gpp"><small data-recipient-file-hint>PDF 50 MB · JPG/PNG 5 MB · MP4/3GP 16 MB</small></label>
+                <label>Unique file from Media Library<select name="mediaId" data-recipient-library-file><option value="">Upload a new file instead</option></select></label>
+                <label data-recipient-upload-field>Attachment<input name="file" type="file" required accept=".pdf,.jpg,.jpeg,.png,.mp4,.3gp,application/pdf,image/jpeg,image/png,video/mp4,video/3gpp"><small data-recipient-file-hint>PDF 50 MB · JPG/PNG 5 MB · MP4/3GP 16 MB</small></label>
                 <label data-recipient-reference-field hidden>Permission reference<input name="consentReference" maxlength="240" placeholder="Consent or authorisation reference"></label>
                 <p class="delivery-field-hint" data-recipient-terms-note hidden>Patient reports require accepted <a href="/privacy-center">Data Processing Terms</a>.</p>
                 <label class="recipient-delivery-permission"><input name="permissionConfirmed" type="checkbox" required><span>I have permission to send this file to this recipient.</span></label>
@@ -581,7 +582,7 @@ Hi
                   <div class="wa-composer" aria-hidden="true"><span></span><strong>Message</strong><i></i></div>
                 </div>
               </div>
-              <p class="send-preview-note">File access: 30 days</p>
+              <p class="send-preview-note">Temporary file · available for up to 30 days. Keep the original in your system.</p>
             </aside>
           </div>
           <div class="send-whatsapp-layout" data-shared-send-layout>
@@ -1057,9 +1058,9 @@ file: (PDF, JPG/PNG or MP4/3GP)</code></pre>
       <section class="portal-view" id="media-library" data-portal-view hidden>
         <div class="media-library-head">
           <div>
-            <p class="eyebrow">Cloudinary assets</p>
+            <p class="eyebrow">Your workspace</p>
             <h2>Media library</h2>
-            <p>Upload photos, videos, and PDFs once, then reuse their unique media IDs.</p>
+            <p>Keep reusable assets and individual files organised in one place.</p>
           </div>
           <div class="media-library-actions">
             <select data-media-filter aria-label="Filter media">
@@ -1071,6 +1072,13 @@ file: (PDF, JPG/PNG or MP4/3GP)</code></pre>
             <button class="btn btn-outline btn-small" type="button" data-refresh-media>Refresh</button>
             <button class="btn" type="button" data-open-media-modal>Add media</button>
           </div>
+        </div>
+        <div class="media-library-toolbar">
+          <div class="media-scope-tabs" role="group" aria-label="Media category">
+            <button type="button" class="is-active" data-media-category="shared" aria-pressed="true">Common Media <span data-media-count="shared">0</span></button>
+            <button type="button" data-media-category="unique" aria-pressed="false">Unique Media <span data-media-count="unique">0</span></button>
+          </div>
+          <p data-media-category-hint>Reusable photos, videos and PDFs for your messages and templates.</p>
         </div>
         <p class="contact-message" data-media-status></p>
         <div class="media-library-grid" data-media-grid>
@@ -1213,13 +1221,20 @@ file: (PDF, JPG/PNG or MP4/3GP)</code></pre>
                   <option value="document">PDF header</option>
                 </select>
               </label>
-              <label data-template-header-media-field hidden>
-                Choose media
-                <select data-template-header-media>
+              <label data-template-media-mode-field hidden>
+                Media delivery
+                <select name="mediaMode" data-template-media-mode>
+                  <option value="common">Common Media</option>
+                  <option value="unique">Unique Media</option>
+                </select>
+              </label>
+              <div class="template-header-media-picker" data-template-header-media-field hidden>
+                <label for="template-header-media">Choose media</label>
+                <select id="template-header-media" aria-describedby="template-header-media-hint" data-template-header-media>
                   <option value="">Choose from Media Library</option>
                 </select>
-                <small>Meta uses this sample during approval. You can choose another compatible asset when sending.</small>
-              </label>
+                <small id="template-header-media-hint" role="status" data-template-header-media-hint>Choose an approval sample from Media Library. Select the delivered file when sending.</small>
+              </div>
             </div>
 
             <label>
@@ -1430,42 +1445,39 @@ file: (PDF, JPG/PNG or MP4/3GP)</code></pre>
           <button class="modal-close" type="button" aria-label="Close media upload" data-close-media-modal>&times;</button>
           <div class="portal-section-head compact">
             <div>
-              <p class="eyebrow">Cloudinary upload</p>
+              <p class="eyebrow">Media library</p>
               <h2 id="media-modal-title">Add media</h2>
               <p>Upload one photo, video, or PDF, up to 50 MB.</p>
             </div>
           </div>
           <form class="media-upload-form" data-media-upload-form>
-            <label>Media purpose
+            <fieldset class="media-category-options">
+              <legend>Media category</legend>
+              <label><input type="radio" name="deliveryScope" value="shared" checked data-media-delivery-scope><span><strong>Common Media</strong><small>Reuse across messages and templates</small></span></label>
+              <label><input type="radio" name="deliveryScope" value="unique" data-media-delivery-scope><span><strong>Unique Media</strong><small>Individual file; choose recipient when sending</small></span></label>
+            </fieldset>
+            <label hidden data-media-purpose-field>File purpose
               <select name="purpose" required data-media-purpose>
-                <option value="">Choose a purpose</option>
-                <option value="general">General business media / synthetic sample</option>
-                <option value="patient_report">Confidential patient report</option>
+                <option value="general">Business file</option>
+                <option value="patient_report">Confidential patient report (PDF)</option>
               </select>
             </label>
-            <label>Delivery scope<select name="deliveryScope" data-media-delivery-scope><option value="shared">Shared business media</option><option value="recipient">File for one contact</option></select></label>
-            <fieldset hidden data-report-fields>
-              <legend>Intended recipient</legend>
-              <label>Recipient contact<select name="recipientContactId" data-report-recipient><option value="">Choose a contact</option></select></label>
-              <label><span data-report-reference-label>Client permission reference</span><input name="consentReference" maxlength="240" placeholder="Reference only; do not enter clinical results" data-report-consent></label>
-              <label><input type="checkbox" name="recipientVerified" data-report-verified> I verified this recipient's number and authority and have the necessary permission to send this file.</label>
-              <p>Recipient-specific files are bound to this contact and cannot be used as template samples or sent to another recipient. Download access expires after 30 days. <a href="/privacy-center">Review Data Processing Terms</a>.</p>
-            </fieldset>
+            <p class="media-upload-note" data-media-upload-note>Common media can be reused for multiple recipients.</p>
             <label class="media-dropzone" data-media-dropzone>
               <input type="file" name="file" accept="image/*,video/*,application/pdf,.pdf" required data-media-file>
               <span class="media-dropzone-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0-4 4m4-4 4 4M5 14v5h14v-5"/></svg>
               </span>
               <strong data-media-file-label>Choose a photo, video, or PDF</strong>
-              <small>JPG, PNG, WEBP, GIF, MP4, MOV, WEBM or PDF</small>
+              <small data-media-file-types>JPG, PNG, WEBP, GIF, MP4, MOV, WEBM or PDF</small>
             </label>
             <label>
               Media title
               <input type="text" name="title" maxlength="140" placeholder="Summer campaign banner" required data-media-title>
             </label>
             <label>
-              Description <span class="optional-label">Optional</span>
-              <textarea name="description" maxlength="500" rows="3" placeholder="Where this asset is used"></textarea>
+              <span>Description <span class="optional-label">Optional</span></span>
+              <textarea name="description" maxlength="500" rows="2" placeholder="Where this asset is used"></textarea>
             </label>
             <p class="contact-message" data-media-upload-status></p>
             <div class="template-actions">
@@ -1527,8 +1539,8 @@ file: (PDF, JPG/PNG or MP4/3GP)</code></pre>
   </div>
 
   <script src="vendor/xlsx.full.min.js?v=20260906"></script>
-  <script src="js/customer-portal.js?v=20261029-delivery2"></script>
-  <script src="js/recipient-delivery.js?v=20261029-delivery2"></script>
+  <script src="js/customer-portal.js?v=20261029-meta-media4"></script>
+  <script src="js/recipient-delivery.js?v=20261029-meta-media4"></script>
   <script src="/js/dialog-accessibility.js?v=20260906" defer></script>
 </body>
 </html>

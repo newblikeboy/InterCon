@@ -4,12 +4,13 @@ const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
 const HttpError = require("../utils/httpError");
+const privateUploads = require("../utils/privateUploads");
 
 const upload = multer({
   storage: multer.diskStorage({
     destination(req, file, callback) {
       fs.mkdtemp(path.join(os.tmpdir(), "intercon-private-"), (error, directory) => {
-        if (directory) req.privateUploadDirectory = directory;
+        if (directory) { req.privateUploadDirectory = directory; privateUploads.track(directory); }
         callback(error, directory);
       });
     },
@@ -25,7 +26,10 @@ const upload = multer({
 module.exports = function uploadSingle(req, res, next) {
   const cleanup = async () => {
     if (req.file?.path) await fs.promises.unlink(req.file.path).catch(() => {});
-    if (req.privateUploadDirectory) await fs.promises.rmdir(req.privateUploadDirectory).catch(() => {});
+    if (req.privateUploadDirectory) {
+      await fs.promises.rmdir(req.privateUploadDirectory).catch(() => {});
+      privateUploads.release(req.privateUploadDirectory);
+    }
   };
   res.once("finish", cleanup); res.once("close", cleanup);
   upload.single("file")(req, res, async error => {

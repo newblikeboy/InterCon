@@ -62,6 +62,7 @@ const messageSchema = new mongoose.Schema(
       type: String,
       trim: true
     },
+    metaMediaId: String,
     batchId: {
       type: String,
       trim: true,

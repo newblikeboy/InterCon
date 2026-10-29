@@ -9,17 +9,67 @@ patient reports. Each request accepts one number and one file.
 
 Open **Send WhatsApp**, choose **Unique Media**, then enter the number,
 choose an approved media-header template, fill its text variables and choose
-the recipient's file. Confirm the necessary authority/permission and review the
+an existing Unique Media library file or upload a new file. Confirm the necessary authority/permission and review the
 number, file and text before queueing. Repeat for the next recipient/file.
 
 **Shared media / bulk message** retains the existing shared-asset sending flow.
-Recipient-specific files do not appear in the shared-media selector or template
-sample picker. The new feature does not add CSV-to-file mapping for bulk sends.
+Recipient-specific files do not appear in the shared-media selector. The template
+sample picker lists recipient-assigned files as unavailable for approval.
+The new feature does not add CSV-to-file mapping for bulk sends.
 
-Media Library also supports **File for one contact** when uploading business
-media. Patient reports always use recipient scope. An uploaded recipient file
-can be sent by its existing `mediaId` through the template API, provided the
-recipient matches. The portal's new direct-upload form takes the file itself.
+Media Library separates **Common Media** (reusable assets) and **Unique Media**
+(individual files). Uploading Unique Media does not ask for a contact or bind
+the file to one. The recipient is assigned atomically when it is first sent;
+later sends must match that recipient and their original number. Unique files
+are excluded from common-media send selectors. Existing bound
+files remain in Unique Media. Patient reports use Unique Media, require accepted
+Data Processing Terms at upload, and require the permission reference at send time.
+
+## File storage
+
+New Unique Media uploads, from the library or the send endpoint, go directly to
+the workspace's connected WhatsApp phone number using Meta's media API. Messages
+reference the returned media ID. InterCon keeps delivery metadata, recipient
+binding and request receipts in the database, without a Cloudinary copy of the
+file. Connect WhatsApp before uploading Unique Media. Common Media continues to
+use Cloudinary; existing Cloudinary files remain compatible and are not migrated
+or deleted by this change. Cloudinary quotas apply only to Cloudinary assets.
+
+Meta media is temporary, available for up to 30 days from upload. Assigning a
+library file to a recipient does not restart that period. After expiry, upload
+the original again for a new delivery; the client's software remains the archive
+for invoices and reports. Availability is also subject to the connected number,
+token and provider. The API streams the local temporary upload to Meta and
+removes the local file after success or failure. An hourly cleanup, also run on
+server startup, removes abandoned InterCon upload files older than 24 hours.
+
+The upload and media-ID delivery behavior follows
+[Meta's media messaging documentation](https://whatsappbusiness.com/blog/media-messages-via-app/).
+
+## Template setup and approval samples
+
+The template builder lists library files by header type: PDF, image or video,
+across both Common Media and Unique Media. Unsupported formats, expired files,
+files already assigned to recipients remain listed with a reason and cannot be
+selected as approval samples. Unassigned samples can be selected from either
+library category, including report-purpose PDFs. A purpose label by itself does
+not disable a compatible unassigned sample. The selected file is uploaded to
+Meta during submission; use sample data without real recipient information.
+
+**Media delivery** is a separate template field, saved as `mediaMode`:
+
+- `common`: a reusable file, shared across the selected recipients.
+- `unique`: an individual file for each recipient, using the Unique Media send flow.
+
+Meta has no Common/Unique template-media field. InterCon sends Meta the normal
+template category, header format and approval sample; `mediaMode` is stored and
+enforced locally, survives Meta synchronization, and is never sent as an
+unsupported Meta API parameter. The approval sample is not a delivery default
+for Unique Media templates. Older/imported templates without `mediaMode` retain
+their existing behavior.
+
+Checked on 29 October 2026 against [Meta's published template API schema](https://github.com/facebook/facebook-python-business-sdk/blob/main/facebook_business/adobjects/whatsappbusinessaccount.py)
+and the [WhatsApp Business Messaging Policy](https://business.whatsapp.com/policy).
 
 ## API: upload and queue in one request
 
@@ -32,7 +82,8 @@ An opaque `Idempotency-Key` header of 8–160 permitted characters is required.
 | Field | Meaning |
 | --- | --- |
 | `to` | One WhatsApp number, preferably including country code. An Indian 10-digit number is normalised to +91. Arrays, multiple numbers and contact/group overrides are rejected. |
-| `file` | One binary PDF, JPG/PNG photo or MP4/3GP video. Remote URLs and base64 JSON uploads are not accepted. |
+| `file` | One binary PDF, JPG/PNG photo or MP4/3GP video. Supply either `file` or `mediaId`. Remote URLs and base64 JSON uploads are not accepted. |
+| `mediaId` | Existing Unique Media library file in this workspace. It is assigned to `to` on first send and is not uploaded again. Common Media cannot be used here. |
 | `templateName` | A Meta-approved template belonging to this workspace, with a matching document/image/video header. |
 | `language` | Template language, recommended explicitly to avoid ambiguity. |
 | `variables` | JSON array of text values matching the template's body placeholders, e.g. `["Priya","INV-123"]`. Use `[]` for a template without variables. |
@@ -104,7 +155,9 @@ Review `accepted`, `delivered`, `read`, `failed` and `uncertain` states as appli
 ## Binding and retries
 
 Files use authenticated provider storage. Each recipient-specific file is bound
-to the workspace contact and the normalised number at upload. Both enqueue and
+to the workspace contact and the normalised number when queued for sending.
+Direct-upload deliveries assign the recipient as part of uploading and queueing;
+Unique Media library uploads remain unassigned until their first send. Both enqueue and
 delivery checks enforce the binding; changing a contact's number does not move
 an older file to the new number. Browser downloads require workspace owner/admin
 access. Recipient files cannot be used as template-approval samples.
@@ -119,8 +172,9 @@ An active request may return 409 while processing; wait briefly and retry the
 same request. Processing leases expire after ten minutes, allowing safe recovery
 with the same file/key; the message uniqueness guard prevents a second queued
 message for that request. A known upload failure can be retried earlier.
-Failed/interrupted attempts may retain a private file for safe retry; review
-these records and provider assets before cleanup. No exactly-once guarantee is
+Failed/interrupted attempts may retain a temporary Meta media ID and delivery
+metadata for safe retry. Retry with the original file if the upload was not
+recorded successfully. Review these records before cleanup. No exactly-once guarantee is
 made for an external provider's network delivery outcome.
 
 Erasure preserves minimal keyed request receipts and suppressions so an old
@@ -144,13 +198,17 @@ overhead. For Nginx, review the active site configuration, for example
 Validate with `sudo nginx -t` before reloading. Match the app's existing upstream
 and TLS configuration; do not replace the whole site config with these snippets.
 
-Downloads and new sends for recipient-specific files expire after 30 days.
+Downloads and new sends for new Meta-backed files expire within 30 days of upload;
+legacy Cloudinary recipient files retain their existing access-expiry rules.
 Expiry does not delete already delivered copies or bypass applicable retention
 and legal holds. `npm run privacy:maintenance -- media-expiry` inspects eligible
 expired recipient files; `--apply` deletes only eligible records/provider assets
 after review. The existing `reports` task remains an alias for compatibility.
 The eligibility minimum is 366 days since last processing and no active hold.
-No scheduler is installed automatically. Plan storage capacity for retained files.
+This metadata/legacy-storage maintenance task is not scheduled automatically.
+Meta's temporary binary storage expires independently; it does not provide a
+permanent archive or override retention requirements for client-held originals
+and InterCon's processing records.
 
 Use `npm run privacy:maintenance -- review` to inspect failed/stalled delivery
 counts. `npm run privacy:maintenance -- deliveries` inspects expired processing

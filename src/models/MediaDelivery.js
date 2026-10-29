@@ -3,6 +3,8 @@ const schema = new mongoose.Schema({
   tenantId: { type: mongoose.Schema.Types.ObjectId, required: true },
   keyHash: { type: String, required: true },
   fingerprint: { type: String, required: true },
+  reportBindings: { type: [mongoose.Schema.Types.Mixed], default: undefined },
+  reportMetadataHash: String,
   status: { type: String, enum: ["processing", "queued", "failed", "erased"], required: true },
   contactId: mongoose.Schema.Types.ObjectId,
   mediaId: String,

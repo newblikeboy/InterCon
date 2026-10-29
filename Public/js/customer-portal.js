@@ -68,6 +68,7 @@ const templateBodyInput = document.querySelector("[data-template-body]");
 const templateSamplesInput = document.querySelector("[data-template-samples]");
 const templateVariableSamplesHost = document.querySelector("[data-template-variable-samples]");
 const templateHeaderTypeSelect = document.querySelector("[data-template-header-type]");
+const templateMediaModeSelect = document.querySelector("[data-template-media-mode]");
 const templateHeaderMediaField = document.querySelector("[data-template-header-media-field]");
 const templateHeaderMediaSelect = document.querySelector("[data-template-header-media]");
 const templateAddCtaButton = document.querySelector("[data-template-add-cta]");
@@ -213,7 +214,7 @@ const setupState = {
   },
   plans: []
 };
-const mediaState = { assets: [], loaded: false, loading: false };
+const mediaState = { assets: [], loaded: false, loading: false, category: "shared", loadPromise: null, loadError: "" };
 const sendRecipientState = {
   contactIds: new Set(),
   groupIds: new Set(),
@@ -401,7 +402,7 @@ function openTemplateModal({ reset = false } = {}) {
   if (reset) resetTemplateBuilder();
   templateModal.hidden = false;
   setTemplateMessage("");
-  loadMediaLibrary().then(updateTemplateHeaderControls).catch(() => updateTemplateHeaderControls());
+  loadMediaLibrary(true).then(updateTemplateHeaderControls);
   templateModal.scrollIntoView({ behavior: "smooth", block: "start" });
   setTimeout(() => {
     templateModal.querySelector("[data-template-category]")?.focus();
@@ -1837,6 +1838,7 @@ async function loadContacts() {
 
 function renderApprovedTemplateOptions(templates) {
   if (!sendTemplateSelect) return;
+  templates = templates.filter(template => template.mediaMode !== "unique");
 
   if (!templates.length) {
     sendTemplateSelect.innerHTML = `<option value="">No approved templates available</option>`;
@@ -1890,7 +1892,8 @@ async function loadApprovedTemplates() {
 function isCompatibleWhatsAppMedia(asset, type, approvalSample = false) {
   if (!asset || asset.mediaType !== type) return false;
   if (asset.accessExpiresAt && new Date(asset.accessExpiresAt) <= new Date()) return false;
-  if (approvalSample && (asset.purpose === "patient_report" || asset.recipientContactId || asset.deliveryScope === "recipient")) return false;
+  if (approvalSample && (asset.recipientContactId || asset.deliveryScope === "recipient")) return false;
+  if (asset.disabledAt) return false;
   const mimeType = String(asset.mimeType || "").toLowerCase();
   const maximumBytes = type === "image" ? 5 * 1024 * 1024 : type === "document" ? 100 * 1024 * 1024 : 16 * 1024 * 1024;
   const withinSizeLimit = Number(asset.bytes || 0) <= maximumBytes;
@@ -1924,7 +1927,7 @@ function renderSendMediaOptions() {
     return;
   }
 
-  const assets = mediaState.assets.filter((asset) => !asset.recipientContactId && asset.deliveryScope !== "recipient" && isCompatibleWhatsAppMedia(asset, headerType));
+  const assets = mediaState.assets.filter((asset) => !isUniqueMedia(asset) && isCompatibleWhatsAppMedia(asset, headerType));
   sendMediaField.hidden = false;
   sendMediaSelect.required = true;
   sendMediaSelect.disabled = !assets.length;
@@ -2555,7 +2558,7 @@ function renderTemplateStatusRows(templates) {
   templateStatusList.innerHTML = header + visible.map((template) => {
     const meta = templateStatusMeta(template.status);
     const headerLabel = template.headerType && template.headerType !== "none"
-      ? `${template.category} · ${template.headerType} header`
+      ? `${template.category} · ${template.headerType} header${template.mediaMode ? ` · ${template.mediaMode === "unique" ? "Unique" : "Common"} Media` : ""}`
       : template.category;
     return `
       <div class="table-row template-table-row">
@@ -3083,6 +3086,7 @@ function resetTemplateBuilder() {
   if (templateBodyInput) templateBodyInput.value = "";
   if (templateSamplesInput) templateSamplesInput.value = "";
   if (templateHeaderTypeSelect) templateHeaderTypeSelect.value = "none";
+  if (templateMediaModeSelect) templateMediaModeSelect.value = "common";
   if (templateHeaderMediaSelect) templateHeaderMediaSelect.value = "";
   if (templateCtaList) templateCtaList.innerHTML = "";
   closeTemplateCtaMenu();
@@ -3099,27 +3103,41 @@ function getTemplatePayload() {
     body: templateBodyInput?.value || "",
     variableSamples: templateSamplesInput?.value || "",
     headerType: templateHeaderTypeSelect?.value || "none",
+    mediaMode: templateHeaderTypeSelect?.value !== "none" ? templateMediaModeSelect?.value || "common" : undefined,
     headerMediaId: templateHeaderMediaSelect?.value || "",
     buttons: getTemplateCtas()
   };
+}
+
+function templateSampleIssue(asset, headerType) {
+  if (asset.recipientContactId || asset.deliveryScope === "recipient") return "Recipient-assigned file: use a sample";
+  if (asset.disabledAt || asset.accessExpiresAt && new Date(asset.accessExpiresAt) <= new Date()) return "Unavailable";
+  if (!isCompatibleWhatsAppMedia(asset, headerType, true)) return headerType === "image" ? "Requires JPG/PNG, up to 5 MB" : headerType === "video" ? "Requires MP4, up to 16 MB" : "Requires PDF, up to 100 MB";
+  return "";
 }
 
 function renderTemplateHeaderMediaOptions() {
   if (!templateHeaderMediaSelect) return;
   const headerType = templateHeaderTypeSelect?.value || "none";
   const previousMediaId = templateHeaderMediaSelect.value;
-  const assets = mediaState.assets.filter((asset) => isCompatibleWhatsAppMedia(asset, headerType, true));
+  const assets = mediaState.assets.filter((asset) => asset.mediaType === headerType);
+  const label = headerType === "document" ? "PDF" : headerType === "image" ? "JPG or PNG" : "MP4";
+  const loading = mediaState.loading && !mediaState.loaded;
+  const placeholder = loading ? "Loading media..." : assets.length ? "Choose from Media Library" : mediaState.loadError ? "Media could not be loaded" : `No ${label} media in library`;
 
   templateHeaderMediaSelect.innerHTML = [
-    `<option value="">Choose from Media Library</option>`,
-    ...assets.map((asset) => (
-      `<option value="${escapeHtml(asset.mediaId)}">${escapeHtml(asset.title)} · ${escapeHtml(formatMediaBytes(asset.bytes))}</option>`
-    ))
+    `<option value="">${placeholder}</option>`,
+    ...assets.map((asset) => {
+      const issue = templateSampleIssue(asset, headerType);
+      return `<option value="${escapeHtml(asset.mediaId)}"${issue ? " disabled" : ""}>${escapeHtml(asset.title)} · ${escapeHtml(formatMediaBytes(asset.bytes))}${issue ? ` — ${escapeHtml(issue)}` : ""}</option>`;
+    })
   ].join("");
-  if (assets.some((asset) => asset.mediaId === previousMediaId)) {
+  if (assets.some((asset) => asset.mediaId === previousMediaId && !templateSampleIssue(asset, headerType))) {
     templateHeaderMediaSelect.value = previousMediaId;
   }
-  templateHeaderMediaSelect.disabled = !assets.length;
+  templateHeaderMediaSelect.disabled = loading;
+  const hint = document.querySelector("[data-template-header-media-hint]");
+  if (hint) hint.textContent = loading ? "Loading library media..." : mediaState.loadError ? `Could not load media: ${mediaState.loadError}. Reselect the header type to retry.` : assets.length ? "The selected file is uploaded to Meta for approval. Use a sample without real recipient data." : `No ${label} media in Media Library. Add a sample there, then reopen this template.`;
 }
 
 function updateTemplateHeaderControls() {
@@ -3131,6 +3149,9 @@ function updateTemplateHeaderControls() {
   if (ctaBuilder) ctaBuilder.hidden = isAuthentication;
   if (isAuthentication && templateCtaList) templateCtaList.innerHTML = "";
   const headerType = templateHeaderTypeSelect.value || "none";
+  const modeField = document.querySelector("[data-template-media-mode-field]");
+  if (modeField) modeField.hidden = headerType === "none";
+  if (templateMediaModeSelect) { templateMediaModeSelect.disabled = headerType === "none"; templateMediaModeSelect.required = headerType !== "none"; }
   templateHeaderMediaField.hidden = headerType === "none";
   if (headerType === "none") {
     if (templateHeaderMediaSelect) {
@@ -4135,7 +4156,10 @@ submitTemplateButtons.forEach((button) => {
   });
 });
 
-templateHeaderTypeSelect?.addEventListener("change", updateTemplateHeaderControls);
+templateHeaderTypeSelect?.addEventListener("change", () => {
+  updateTemplateHeaderControls();
+  if (templateHeaderTypeSelect.value !== "none") loadMediaLibrary(true);
+});
 templateHeaderMediaSelect?.addEventListener("change", updateTemplateDraftPreview);
 templateNameInput?.addEventListener("input", updateTemplateDraftPreview);
 templateLanguageSelect?.addEventListener("change", updateTemplateDraftPreview);
@@ -4289,7 +4313,7 @@ portalViews.forEach((view) => {
 });
 
 // ============================================================
-// Media Library: tenant-scoped Cloudinary photos, videos, and PDFs.
+// Media Library: reusable Cloudinary assets and temporary Unique Media.
 // ============================================================
 function setMediaStatus(message, isError = false) {
   if (!mediaStatus) return;
@@ -4316,19 +4340,38 @@ function formatMediaDuration(seconds) {
   return `${minutes}:${String(value % 60).padStart(2, "0")}`;
 }
 
+function isUniqueMedia(asset) {
+  return ["unique", "recipient"].includes(asset.deliveryScope) || Boolean(asset.recipientContactId) || asset.purpose === "patient_report";
+}
+
+function setMediaCategory(category) {
+  mediaState.category = category === "unique" ? "unique" : "shared";
+  renderMediaLibrary();
+}
+
 function renderMediaLibrary() {
   if (!mediaGrid) return;
   const filter = mediaFilter?.value || "all";
-  const assets = filter === "all"
-    ? mediaState.assets
-    : mediaState.assets.filter((asset) => asset.mediaType === filter);
+  const unique = mediaState.category === "unique";
+  document.querySelectorAll("[data-media-category]").forEach(button => {
+    const active = button.dataset.mediaCategory === mediaState.category;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  document.querySelectorAll("[data-media-count]").forEach(count => {
+    count.textContent = mediaState.assets.filter(asset => isUniqueMedia(asset) === (count.dataset.mediaCount === "unique")).length;
+  });
+  const hint = document.querySelector("[data-media-category-hint]");
+  if (hint) hint.textContent = unique ? "Individual files. Choose the recipient in Send WhatsApp when you are ready." : "Reusable photos, videos and PDFs for your messages and templates.";
+  const categoryAssets = mediaState.assets.filter(asset => isUniqueMedia(asset) === unique);
+  const assets = categoryAssets.filter(asset => filter === "all" || asset.mediaType === filter);
 
   if (!assets.length) {
     mediaGrid.innerHTML = `
       <div class="media-library-empty">
         <span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM7 15l3-3 2 2 2-2 3 3M9 9h.01"/></svg></span>
-        <strong>${mediaState.assets.length ? "No media matches this filter" : "Your media library is empty"}</strong>
-        <small>${mediaState.assets.length ? "Choose another media type." : "Add a photo, video, or PDF to create your first reusable asset."}</small>
+        <strong>${categoryAssets.length ? "No media matches this filter" : `No ${unique ? "unique" : "common"} media yet`}</strong>
+        <small>${categoryAssets.length ? "Choose another media type." : unique ? "Upload an individual file. Choose who receives it when sending." : "Add a photo, video, or PDF to reuse in your messages."}</small>
       </div>`;
     return;
   }
@@ -4339,7 +4382,8 @@ function renderMediaLibrary() {
     const detail = [asset.format?.toUpperCase(), dimensions, duration, formatMediaBytes(asset.bytes)]
       .filter(Boolean)
       .join(" · ");
-    const preview = asset.mediaType === "video"
+    const expired = asset.accessExpiresAt && new Date(asset.accessExpiresAt) <= new Date();
+    const preview = expired ? '<div class="media-document-preview media-expired-preview">File expired</div>' : asset.mediaType === "video"
       ? `<video src="${escapeHtml(asset.url)}" preload="metadata" controls playsinline></video>`
       : asset.mediaType === "document"
         ? `<a class="media-document-preview" href="${escapeHtml(asset.url)}" target="_blank" rel="noopener">PDF</a>`
@@ -4362,6 +4406,8 @@ function renderMediaLibrary() {
           </div>
           ${asset.description ? `<p>${escapeHtml(asset.description)}</p>` : ""}
           <small class="media-card-detail">${escapeHtml(detail)}</small>
+          ${isUniqueMedia(asset) ? `<span class="media-assignment-badge${asset.recipientContactId ? " is-assigned" : ""}">${asset.recipientContactId ? "Recipient assigned" : "Ready to assign when sending"}</span>` : ""}
+          ${asset.storageProvider === "meta" ? `<small class="media-card-detail">${expired ? "Upload the original again to send" : `Temporary file · expires ${escapeHtml(new Date(asset.accessExpiresAt).toLocaleDateString())}`}</small>` : ""}
           <div class="media-id-row">
             <code title="${escapeHtml(asset.mediaId)}">${escapeHtml(asset.mediaId)}</code>
             <button type="button" data-copy-media-id="${escapeHtml(asset.mediaId)}" aria-label="Copy media ID" title="Copy media ID">
@@ -4373,12 +4419,16 @@ function renderMediaLibrary() {
   }).join("");
 }
 
-async function loadMediaLibrary(force = false) {
-  if (!mediaGrid || mediaState.loading || (mediaState.loaded && !force)) return;
+function loadMediaLibrary(force = false) {
+  if (mediaState.loading) return mediaState.loadPromise;
+  if (!mediaGrid || (mediaState.loaded && !force)) return Promise.resolve();
   mediaState.loading = true;
+  mediaState.loadError = "";
   if (!mediaState.loaded) mediaGrid.innerHTML = `<div class="media-library-empty">Loading media...</div>`;
   setMediaStatus("");
+  updateTemplateHeaderControls();
 
+  mediaState.loadPromise = (async () => {
   try {
     const data = await requestAllPages("/api/media", "media");
     mediaState.assets = data.media || [];
@@ -4386,44 +4436,44 @@ async function loadMediaLibrary(force = false) {
     renderMediaLibrary();
     renderSendMediaOptions();
     updateTemplateHeaderControls();
+    document.dispatchEvent(new Event("media-library-updated"));
   } catch (error) {
+    mediaState.loadError = error.message;
     setMediaStatus(error.message, true);
     if (!mediaState.loaded) {
       mediaGrid.innerHTML = `<div class="media-library-empty">Media could not be loaded.</div>`;
     }
   } finally {
     mediaState.loading = false;
+    updateTemplateHeaderControls();
   }
+  })();
+  return mediaState.loadPromise;
 }
 
 function syncReportFields() {
-  const report = mediaUploadForm?.elements.purpose?.value === "patient_report";
-  const scope = document.querySelector("[data-media-delivery-scope]");
-  if (scope) { if (report) scope.value = "recipient"; scope.disabled = report; }
-  const specific = report || scope?.value === "recipient";
-  const container = document.querySelector("[data-report-fields]");
-  if (container) container.hidden = !specific;
-  for (const selector of ["[data-report-recipient]", "[data-report-consent]", "[data-report-verified]"]) {
-    const input = document.querySelector(selector);
-    if (input) { input.required = selector === "[data-report-consent]" ? report : specific; input.disabled = !specific; }
-  }
-  const label = document.querySelector("[data-report-reference-label]");
-  if (label) label.textContent = report ? "Client permission reference" : "Client permission reference (optional)";
-  if (specific) requestAllPages("/api/contacts", "contacts").then(data => {
-    const select = document.querySelector("[data-report-recipient]");
-    const previous = select.value;
-    select.innerHTML = '<option value="">Choose a contact</option>' + (data.contacts || []).filter(contact => contact.status === "active").map(contact =>
-      `<option value="${escapeHtml(contact._id)}">${escapeHtml(contact.name)} - ${escapeHtml(contact.phone)}</option>`).join("");
-    select.value = previous;
-  }).catch(error => setMediaUploadStatus(error.message, true));
+  const unique = mediaUploadForm?.elements.deliveryScope.value === "unique";
+  const purpose = mediaUploadForm?.elements.purpose;
+  if (!unique && purpose) purpose.value = "general";
+  const field = document.querySelector("[data-media-purpose-field]");
+  if (field) field.hidden = !unique;
+  const report = purpose?.value === "patient_report";
+  if (mediaFileInput) mediaFileInput.accept = report ? ".pdf,application/pdf" : "image/*,video/*,application/pdf,.pdf";
+  if (mediaFileInput && unique && !report) mediaFileInput.accept = ".jpg,.jpeg,.png,.mp4,.3gp,.pdf,image/jpeg,image/png,video/mp4,video/3gpp,application/pdf";
+  const types = document.querySelector("[data-media-file-types]");
+  if (types) types.textContent = report ? "PDF · Up to 50 MB" : unique ? "JPG/PNG · Up to 5 MB | MP4/3GP · Up to 16 MB | PDF · Up to 50 MB" : "JPG, PNG, WEBP, GIF, MP4, MOV, WEBM or PDF";
+  const note = document.querySelector("[data-media-upload-note]");
+  if (note) note.textContent = report ? "PDF only. Choose the recipient and record permission when sending. Available for up to 30 days; keep the original in your system. Your workspace must have accepted Data Processing Terms." : unique ? "Choose the recipient when sending. Files are available for up to 30 days; keep the original in your system." : "Common media can be reused for multiple recipients.";
 }
 
 document.querySelector("[data-media-purpose]")?.addEventListener("change", syncReportFields);
-document.querySelector("[data-media-delivery-scope]")?.addEventListener("change", syncReportFields);
+document.querySelectorAll("[data-media-delivery-scope]").forEach(input => input.addEventListener("change", syncReportFields));
+document.querySelectorAll("[data-media-category]").forEach(button => button.addEventListener("click", () => setMediaCategory(button.dataset.mediaCategory)));
 
 function openMediaModal() {
   if (!mediaModal) return;
   mediaUploadForm?.reset();
+  if (mediaUploadForm) mediaUploadForm.elements.deliveryScope.value = mediaState.category;
   syncReportFields();
   if (mediaFileLabel) mediaFileLabel.textContent = "Choose a photo, video, or PDF";
   setMediaUploadStatus("");
@@ -4442,6 +4492,10 @@ function closeMediaModal() {
 async function uploadMedia() {
   if (!mediaUploadForm || !mediaFileInput?.files?.[0]) return;
   const file = mediaFileInput.files[0];
+  if (mediaUploadForm.elements.purpose.value === "patient_report" && !/\.pdf$/i.test(file.name)) {
+    setMediaUploadStatus("Choose a PDF for a patient report.", true);
+    return;
+  }
   if (file.size > 50 * 1024 * 1024) {
     setMediaUploadStatus("Media must be 50 MB or smaller.", true);
     return;
@@ -4449,7 +4503,7 @@ async function uploadMedia() {
 
   const formData = new FormData(mediaUploadForm);
   if (mediaUploadSubmit) mediaUploadSubmit.disabled = true;
-  setMediaUploadStatus("Uploading securely to Cloudinary...");
+  setMediaUploadStatus("Uploading media...");
 
   try {
     const data = await requestJson("/api/media", {
@@ -4457,10 +4511,14 @@ async function uploadMedia() {
       body: formData
     });
     mediaState.assets.unshift(data.media);
+    mediaState.category = isUniqueMedia(data.media) ? "unique" : "shared";
+    if (mediaFilter) mediaFilter.value = "all";
     mediaState.loaded = true;
+    mediaState.loadError = "";
     renderMediaLibrary();
     renderSendMediaOptions();
     updateTemplateHeaderControls();
+    document.dispatchEvent(new Event("media-library-updated"));
     if (mediaUploadSubmit) mediaUploadSubmit.disabled = false;
     closeMediaModal();
     setMediaStatus("Media uploaded.");
@@ -4474,7 +4532,7 @@ async function deleteMediaAsset(mediaId, title) {
   const confirmed = await showConfirmModal({
     eyebrow: "Media library",
     title: `Delete "${title || "this media"}"?`,
-    message: "This permanently deletes the asset from both InterCon and Cloudinary.",
+    message: "This deletes the file and its library record. Copies already delivered are unaffected.",
     confirmText: "Delete media"
   });
   if (!confirmed) return;
@@ -4484,6 +4542,7 @@ async function deleteMediaAsset(mediaId, title) {
   renderMediaLibrary();
   renderSendMediaOptions();
   updateTemplateHeaderControls();
+  document.dispatchEvent(new Event("media-library-updated"));
   setMediaStatus("Media deleted.");
 }
 

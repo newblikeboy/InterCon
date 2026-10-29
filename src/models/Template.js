@@ -36,6 +36,8 @@ const templateSchema = new mongoose.Schema(
       min: 0,
       max: 100
     },
+    // Administrator-owned mapping for desktop report sends, never filled by the operator.
+    reportBindings: { type: [mongoose.Schema.Types.Mixed], default: undefined },
     // Example values for {{1}}..{{n}}, shown as fill-in guidance when sending.
     sampleValues: {
       type: [String],
@@ -51,6 +53,9 @@ const templateSchema = new mongoose.Schema(
       trim: true,
       maxlength: 80
     },
+    // InterCon delivery setting; Meta does not expose a common/unique media flag.
+    // Missing on older/imported templates, which retain their existing send behavior.
+    mediaMode: { type: String, enum: ["common", "unique"] },
     buttons: {
       type: [{
         type: {

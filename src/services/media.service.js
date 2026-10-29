@@ -11,6 +11,11 @@ const { cursorFilter, pageSize } = require("../utils/pagination");
 const { fetchWithPolicy } = require("../utils/httpClient");
 const { Readable } = require("stream");
 const { pipeline } = require("stream/promises");
+const metaMedia = require("./metaMedia.service");
+
+function fetchMediaContent(asset, headers = {}) {
+  return metaMedia.isMeta(asset) ? metaMedia.content(asset, headers) : fetchWithPolicy(downloadUrl(asset), { headers });
+}
 
 function downloadUrl(asset) {
   assertCloudinaryConfigured();
@@ -20,8 +25,13 @@ function downloadUrl(asset) {
   });
 }
 
-function isRecipientMedia(asset) { return asset?.deliveryScope === "recipient" || asset?.purpose === "patient_report" || Boolean(asset?.recipientContactId); }
+function isRecipientMedia(asset) { return ["unique", "recipient"].includes(asset?.deliveryScope) || asset?.purpose === "patient_report" || Boolean(asset?.recipientContactId); }
 function recipientHash(tenantId, phone) { return require("../utils/privateData").lookup(String(phone), `MediaAsset.recipient:${tenantId}`); }
+function assertTemplateMediaMode(asset, template) {
+  if (!asset || !template?.mediaMode) return;
+  if (template.mediaMode === "common" && isRecipientMedia(asset)) throw new HttpError(400, "This Common Media template requires a reusable common file");
+  if (template.mediaMode === "unique" && !isRecipientMedia(asset)) throw new HttpError(400, "This Unique Media template requires a file for the intended recipient");
+}
 function assertReportRecipient(asset, contact, template) {
   if (asset.disabledAt || asset.accessExpiresAt && new Date(asset.accessExpiresAt) <= new Date()) throw new HttpError(410, "This media is no longer available");
   if (isRecipientMedia(asset)) {
@@ -40,13 +50,16 @@ async function streamMedia(req, res) {
   const asset = await MediaAsset.findOne({ tenantId: req.tenantId, mediaId: req.params.mediaId }).select("+recipientHash").lean();
   if (!asset) throw new HttpError(404, "Media not found");
   if (isRecipientMedia(asset) && !["owner", "admin"].includes(req.user.role)) throw new HttpError(403, "Only workspace owners and admins may download recipient-specific media");
-  const recipient = isRecipientMedia(asset) ? await require("../models/Contact").findOne({ _id: asset.recipientContactId, tenantId: req.tenantId }).select("phone").lean() : null;
-  if (isRecipientMedia(asset) && !recipient) throw new HttpError(410, "The media recipient is no longer available");
-  assertReportRecipient(asset, recipient, { category: "utility" });
+  const recipient = asset.recipientContactId ? await require("../models/Contact").findOne({ _id: asset.recipientContactId, tenantId: req.tenantId }).select("phone").lean() : null;
+  const unassigned = asset.deliveryScope === "unique" && !asset.recipientContactId;
+  if (isRecipientMedia(asset) && !recipient && !unassigned) throw new HttpError(410, "The media recipient is no longer available");
+  if (unassigned) {
+    if (asset.disabledAt || asset.accessExpiresAt && new Date(asset.accessExpiresAt) <= new Date()) throw new HttpError(410, "This media is no longer available");
+  } else assertReportRecipient(asset, recipient, { category: "utility" });
   await require("../models/SecurityAudit").create({ tenantId: req.tenantId, actorId: req.user._id,
     action: "media.read", resourceId: asset.mediaId, requestId: req.id });
   await MediaAsset.updateOne({ _id: asset._id }, { $max: { lastProcessedAt: new Date() } });
-  const upstream = await fetchWithPolicy(downloadUrl(asset), { headers: req.headers.range ? { Range: req.headers.range } : {} });
+  const upstream = await fetchMediaContent(asset, req.headers.range ? { Range: req.headers.range } : {});
   if (![200, 206].includes(upstream.status) || !upstream.body) throw new HttpError(502, "Unable to retrieve media");
   res.status(upstream.status);
   res.set({ "Cache-Control": "no-store, private", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff",
@@ -84,8 +97,9 @@ function publicMedia(asset) {
     height: asset.height || null,
     duration: asset.duration || null,
     url: `/api/media/${encodeURIComponent(asset.mediaId)}/content`,
-    purpose: asset.purpose || "general", deliveryScope: isRecipientMedia(asset) ? "recipient" : "shared", recipientContactId: asset.recipientContactId, accessExpiresAt: asset.accessExpiresAt,
-    createdAt: asset.createdAt
+    purpose: asset.purpose || "general", deliveryScope: asset.deliveryScope === "unique" && !asset.recipientContactId ? "unique" : isRecipientMedia(asset) ? "recipient" : "shared", recipientContactId: asset.recipientContactId, accessExpiresAt: asset.accessExpiresAt,
+    disabledAt: asset.disabledAt, createdAt: asset.createdAt,
+    storageProvider: asset.storageProvider || "cloudinary"
   };
 }
 
@@ -139,7 +153,6 @@ async function listMedia(tenantId, query = {}) {
 }
 
 async function createMedia(tenantId, file, body = {}, actorId, apiKeyId) {
-  assertCloudinaryConfigured();
   if (!file?.path) throw new HttpError(400, "Choose a photo, video, or PDF to upload");
 
   const detected = await detectMediaType(file.path);
@@ -151,8 +164,10 @@ async function createMedia(tenantId, file, body = {}, actorId, apiKeyId) {
   const purpose = String(body.purpose || "general");
   if (mediaType === "document" && !body.purpose) throw new HttpError(400, "Classify this PDF as general business media or a patient report");
   if (!["general", "patient_report"].includes(purpose)) throw new HttpError(400, "Choose a valid media purpose");
-  const deliveryScope = purpose === "patient_report" || body.recipientContactId ? "recipient" : String(body.deliveryScope || "shared");
-  if (!["shared", "recipient"].includes(deliveryScope)) throw new HttpError(400, "Choose shared or recipient-specific media");
+  const requestedScope = String(body.deliveryScope || "shared");
+  if (!["shared", "unique", "recipient"].includes(requestedScope)) throw new HttpError(400, "Choose common or unique media");
+  if (body.recipientContactId && body.deliveryScope && requestedScope !== "recipient") throw new HttpError(400, "Choose the recipient when sending unique media, not during library upload");
+  const deliveryScope = body.recipientContactId ? "recipient" : purpose === "patient_report" && requestedScope === "shared" ? "recipient" : requestedScope;
   let recipient;
   if (purpose === "patient_report") {
     if (!await require("../models/Tenant").exists({ _id: tenantId, "processingTerms.version": "2026-10-29" })) throw new HttpError(409, "The workspace owner must accept the Data Processing Terms in the Privacy Center before uploading patient reports");
@@ -170,10 +185,35 @@ async function createMedia(tenantId, file, body = {}, actorId, apiKeyId) {
   if (!title) throw new HttpError(400, "Media title is required");
   if (title.length > 140 || description.length > 500 || String(body.consentReference || "").length > 240) throw new HttpError(400, "Media metadata exceeds its maximum length");
 
+  if (deliveryScope !== "shared") {
+    require("./message.service").assertSendMediaCompatible({ mediaType, mimeType: detected.mimeType, bytes: file.size }, mediaType);
+    let uploaded;
+    const draft = new MediaAsset({ tenantId, title, description, purpose, deliveryScope, deliveryType: "authenticated", storageProvider: "meta",
+      mediaType, originalName: file.originalname, mimeType: detected.mimeType, bytes: file.size,
+      ...(recipient ? { recipientContactId: recipient._id, recipientVerifiedAt: new Date(), recipientHash: recipientHash(tenantId, recipient.phone),
+        recipientVerifiedBy: actorId, recipientVerifiedByApiKey: apiKeyId, consentReference: String(body.consentReference || "").trim() } : {})
+    });
+    // Existing installations have a unique index on this legacy field. A namespaced
+    // metadata placeholder avoids null collisions without changing/deleting old files.
+    draft.cloudinaryPublicId = `meta:${draft.mediaId}`;
+    try {
+      uploaded = await metaMedia.upload(tenantId, file, detected.mimeType);
+      Object.assign(draft, uploaded, { accessExpiresAt: uploaded.metaMediaExpiresAt });
+      await draft.save();
+      return publicMedia(draft);
+    } catch (error) {
+      if (uploaded) await metaMedia.remove({ ...uploaded, tenantId }).catch(() => null);
+      throw error;
+    } finally { await fs.promises.unlink(file.path).catch(() => {}); }
+  }
+
+  assertCloudinaryConfigured();
+
+  const cloudinaryFilter = { tenantId, storageProvider: { $ne: "meta" } };
   const [assetCount, storage] = await Promise.all([
-    MediaAsset.countDocuments({ tenantId }),
+    MediaAsset.countDocuments(cloudinaryFilter),
     MediaAsset.aggregate([
-      { $match: { tenantId: new mongoose.Types.ObjectId(String(tenantId)) } },
+      { $match: { tenantId: new mongoose.Types.ObjectId(String(tenantId)), storageProvider: { $ne: "meta" } } },
       { $group: { _id: null, bytes: { $sum: "$bytes" } } }
     ])
   ]);
@@ -241,7 +281,6 @@ async function createMedia(tenantId, file, body = {}, actorId, apiKeyId) {
 }
 
 async function deleteMedia(tenantId, mediaId) {
-  assertCloudinaryConfigured();
   const asset = await MediaAsset.findOne({ tenantId, mediaId });
   if (!asset) throw new HttpError(404, "Media not found");
   if (asset.legalHoldUntil && asset.legalHoldUntil > new Date()) throw new HttpError(409, "This media is subject to a legal retention hold");
@@ -257,13 +296,18 @@ async function deleteMedia(tenantId, mediaId) {
     throw new HttpError(409, "This media is attached to a queued WhatsApp message. Wait for it to finish before deleting the asset.");
   }
 
-  const result = await cloudinary.uploader.destroy(asset.cloudinaryPublicId, {
-    type: asset.deliveryType || "upload",
-    resource_type: asset.mediaType === "document" ? "raw" : asset.mediaType,
-    invalidate: true
-  });
-  if (!["ok", "not found"].includes(result.result)) {
-    throw new HttpError(502, "Cloudinary could not delete this media");
+  if (metaMedia.isMeta(asset)) {
+    await metaMedia.remove(asset);
+  } else {
+    assertCloudinaryConfigured();
+    const result = await cloudinary.uploader.destroy(asset.cloudinaryPublicId, {
+      type: asset.deliveryType || "upload",
+      resource_type: asset.mediaType === "document" ? "raw" : asset.mediaType,
+      invalidate: true
+    });
+    if (!["ok", "not found"].includes(result.result)) {
+      throw new HttpError(502, "Cloudinary could not delete this media");
+    }
   }
 
   await Template.updateMany(
@@ -275,8 +319,8 @@ async function deleteMedia(tenantId, mediaId) {
 }
 
 module.exports = {
-  isRecipientMedia, recipientHash, detectMediaType,
-  downloadUrl, assertReportRecipient, streamMedia,
+  isRecipientMedia, recipientHash, detectMediaType, assertTemplateMediaMode,
+  downloadUrl, fetchMediaContent, assertReportRecipient, streamMedia,
   listMedia,
   createMedia,
   deleteMedia

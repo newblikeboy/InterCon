@@ -11,7 +11,7 @@ const HttpError = require("../utils/httpError");
 const yes = value => [true, "true", "on"].includes(value);
 const LEASE_MS = 10 * 60 * 1000;
 
-function input(body, key) {
+function input(body, key, reportMetadataHash) {
   if (typeof key !== "string" || !/^[A-Za-z0-9._:-]{8,160}$/.test(key)) throw new HttpError(400, "Provide a unique Idempotency-Key of 8 to 160 letters, digits, dots, colons, hyphens or underscores");
   if (body.idempotencyKey && body.idempotencyKey !== key) throw new HttpError(400, "Conflicting idempotency keys");
   if (body.contactIds || body.groupIds || body.recipients || body.contactId || body.recipientContactId) throw new HttpError(400, "Send exactly one number in to; recipient lists and contact overrides are not accepted");
@@ -32,7 +32,8 @@ function input(body, key) {
   if (name.length > 120 || reference.length > 240) throw new HttpError(400, "Recipient name or permission reference is too long");
   return { to, name, purpose, variables: variables.map(value => value.trim()),
     templateName: String(body.templateName || "").trim(), language: String(body.language || "").trim(),
-    consentScope: String(body.consentScope || "service_only"), consentReference: reference };
+    consentScope: String(body.consentScope || "service_only"), consentReference: reference,
+    ...(reportMetadataHash ? { reportMetadataHash } : {}) };
 }
 
 async function digestFile(file) {
@@ -51,17 +52,28 @@ async function reconcile(receipt) {
   return result(receipt, message, true);
 }
 
-async function sendMedia(tenantId, file, body, key, actor = {}) {
-  const payload = input(body, key);
-  if (!file?.path) throw new HttpError(400, "Attach one photo, video or PDF in the file field");
-  const fileHash = await digestFile(file);
+async function sendMedia(tenantId, file, body, key, actor = {}, reportOptions = {}) {
+  const libraryId = String(body.mediaId || "").trim();
+  if (libraryId && file?.path) throw new HttpError(400, "Choose a library file or upload a file, not both");
+  let libraryAsset;
+  if (libraryId) {
+    libraryAsset = await Media.findOne({ tenantId, mediaId: libraryId }).select("+recipientHash").lean();
+    if (!libraryAsset || !media.isRecipientMedia(libraryAsset)) throw new HttpError(400, "Choose a unique file from this workspace's media library");
+    if (body.purpose && body.purpose !== libraryAsset.purpose) throw new HttpError(400, "The selected file has a different media purpose");
+    body = { ...body, purpose: libraryAsset.purpose, consentReference: body.consentReference || libraryAsset.consentReference };
+  }
+  const payload = input(body, key, reportOptions.reportMetadataHash);
+  if (!file?.path && !libraryAsset) throw new HttpError(400, "Attach one photo, video or PDF, or choose a unique library file");
+  if (libraryAsset) payload.mediaId = libraryId;
+  const fileHash = libraryAsset ? `library:${libraryId}` : await digestFile(file);
   const keyHash = lookup(`delivery:${key}`, `MediaDelivery.key:${tenantId}`);
   const fingerprint = lookup(JSON.stringify({ ...payload, fileHash }), `MediaDelivery.request:${tenantId}`);
   const token = crypto.randomUUID();
   let receipt;
   try {
     receipt = await Receipt.create({ tenantId, keyHash, fingerprint, status: "processing", leaseToken: token,
-      leaseUntil: new Date(Date.now() + LEASE_MS), actorId: actor.userId, apiKeyId: actor.apiKeyId });
+      leaseUntil: new Date(Date.now() + LEASE_MS), actorId: actor.userId, apiKeyId: actor.apiKeyId,
+      reportBindings: reportOptions.reportBindings, reportMetadataHash: reportOptions.reportMetadataHash });
   } catch (error) {
     if (error.code !== 11000) throw error;
     receipt = await Receipt.findOne({ tenantId, keyHash });
@@ -77,10 +89,13 @@ async function sendMedia(tenantId, file, body, key, actor = {}) {
   }
   try {
     const context = await messages.resolveTemplateSendContext(tenantId, payload, { skipMedia: true });
+    if (context.template.mediaMode === "common") throw new HttpError(400, "This template is configured for Common Media; choose a Unique Media template for an individual file");
     if (!["image", "video", "document"].includes(context.template.headerType)) throw new HttpError(400, "Choose an approved template with an image, video or document header");
-    const detected = await media.detectMediaType(file.path);
-    messages.assertSendMediaCompatible(detected && { ...detected, bytes: file.size }, context.template.headerType);
+    const detected = libraryAsset || await media.detectMediaType(file.path);
+    if (libraryAsset && require("./metaMedia.service").isMeta(libraryAsset)) require("./metaMedia.service").assertAvailable(libraryAsset, context.tenant);
+    messages.assertSendMediaCompatible(libraryAsset || detected && { ...detected, bytes: file.size }, context.template.headerType);
     if (payload.purpose === "patient_report" && (detected.mediaType !== "document" || context.template.category !== "utility")) throw new HttpError(400, "Patient reports require a PDF and an approved utility template");
+    if (payload.purpose === "patient_report" && !payload.consentReference) throw new HttpError(400, "Provide the client's permission reference for this report");
     const contact = await messages.resolveContact(tenantId, { phone: payload.to, name: payload.name, optIn: true,
       consentScope: payload.consentScope, optInProof: payload.consentReference || "Client delivery declaration: necessary permission obtained; evidence retained by client" });
     if (contact.status !== "active" || !contact.optIn?.status) throw new HttpError(403, "The recipient must be active and have the necessary recorded messaging permission");
@@ -88,8 +103,19 @@ async function sendMedia(tenantId, file, body, key, actor = {}) {
     if (!messages.hasResolvedTemplateVariables(context.variables, contact)) throw new HttpError(400, "Required template variables are missing");
     const saved = await Receipt.updateOne({ _id: receipt._id, leaseToken: token, status: "processing" }, { $set: { contactId: contact._id } });
     if (!saved.matchedCount) throw new HttpError(409, "This delivery is being recovered; retry the same request");
-    let asset = receipt.mediaId ? await Media.findOne({ tenantId, mediaId: receipt.mediaId }).select("+recipientHash").lean() : null;
+    let asset = receipt.mediaId ? await Media.findOne({ tenantId, mediaId: receipt.mediaId }).select("+recipientHash").lean() : libraryAsset;
     if (receipt.mediaId && !asset) throw new HttpError(410, "This delivery's media was removed; use a new request key for a new delivery");
+    if (asset?.deliveryScope === "unique" && !asset.recipientContactId) {
+      if (asset.disabledAt || asset.accessExpiresAt && new Date(asset.accessExpiresAt) <= new Date()) throw new HttpError(410, "This media is no longer available");
+      // Assign once, atomically: competing sends cannot move the file to another number.
+      await Media.updateOne({ _id: asset._id, tenantId, deliveryScope: "unique", recipientContactId: null, disabledAt: null }, { $set: {
+        deliveryScope: "recipient", recipientContactId: contact._id, recipientHash: media.recipientHash(tenantId, contact.phone),
+        recipientVerifiedAt: new Date(), recipientVerifiedBy: actor.userId, recipientVerifiedByApiKey: actor.apiKeyId,
+        consentReference: payload.consentReference, accessExpiresAt: new Date(Math.min(Date.now() + 30 * 86400000, asset.metaMediaExpiresAt ? new Date(asset.metaMediaExpiresAt).getTime() : Infinity))
+      } });
+      asset = await Media.findOne({ _id: asset._id, tenantId }).select("+recipientHash").lean();
+      if (!asset) throw new HttpError(410, "This media is no longer available");
+    }
     if (!asset) {
       const created = await media.createMedia(tenantId, file, { purpose: payload.purpose, deliveryScope: "recipient",
         recipientContactId: contact._id, recipientVerified: true, consentReference: payload.consentReference,

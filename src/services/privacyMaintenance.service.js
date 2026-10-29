@@ -6,7 +6,7 @@ require("./media.service"); // Configure the provider, without making requests.
 
 async function media({ apply = false } = {}) {
   const result = { pending: 0, migrated: 0 };
-  for await (const raw of Media.collection.find({ deliveryType: { $ne: "authenticated" } })) {
+  for await (const raw of Media.collection.find({ storageProvider: { $ne: "meta" }, deliveryType: { $ne: "authenticated" } })) {
     result.pending++;
     if (!apply) continue;
     const options = { resource_type: raw.mediaType === "document" ? "raw" : raw.mediaType,

@@ -162,7 +162,7 @@ async function eraseContact(actor, requestId, body) {
       await Batch.updateMany({ tenantId, _id: { $in: batchIds } }, { $set: { result: { privacyErased: true } } }, { session });
       await Contact.deleteOne({ _id: contact._id, tenantId }, { session });
       await require("../models/MediaDelivery").updateMany({ tenantId, contactId: contact._id }, {
-        $set: { status: "erased" }, $unset: { contactId: "", mediaId: "", messageId: "", leaseToken: "", leaseUntil: "" }
+        $set: { status: "erased" }, $unset: { contactId: "", mediaId: "", messageId: "", leaseToken: "", leaseUntil: "", reportBindings: "" }
       }, { session });
       request.status = "fulfilled"; request.resolvedAt = new Date(); request.notes = "Verified customer erasure request";
       request.response = "Operational contact data and linked reports erased. Minimal suppression and security/legal evidence remain; copies already delivered to recipients cannot be recalled.";

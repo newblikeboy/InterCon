@@ -2725,6 +2725,57 @@ address {
   opacity: 0.65;
 }
 
+.report-mapping-preview {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f6f8f7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+
+.report-mapping-fields {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  margin: 18px 0;
+  padding: 0;
+  border: 0;
+}
+
+.report-mapping-fields legend {
+  margin-bottom: 12px;
+  font-weight: 700;
+}
+
+.report-mapping-row, .report-mapping-row label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.report-mapping-row label[hidden] { display: none; }
+
+.report-mapping-row input, .report-mapping-row select {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+}
+
+.report-mapping-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .template-modal[hidden] {
   display: none;
 }
@@ -4359,6 +4410,74 @@ address {
 .api-panel,
 .api-docs-panel {
   padding: 18px;
+}
+
+.integration-panel .portal-section-head p:last-child {
+  max-width: 640px;
+}
+
+.integration-list-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 22px 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.integration-template-list {
+  display: grid;
+  gap: 10px;
+}
+
+.integration-template-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 18px;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbfcff;
+}
+
+.integration-template-info {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.integration-template-info strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.integration-template-info > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.integration-template-row .status-pill {
+  justify-self: start;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .integration-template-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+  }
+
+  .integration-template-info {
+    grid-column: 1 / -1;
+  }
+
+  .integration-template-row .btn {
+    justify-self: end;
+  }
 }
 
 .api-key-form {

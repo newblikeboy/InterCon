@@ -4,7 +4,18 @@ const mediaDelivery = require("./mediaDelivery.service");
 const Receipt = require("../models/MediaDelivery");
 const { lookup } = require("../utils/privateData");
 
-const SOURCES = new Set(["patientName", "reportId", "labName", "testName", "collectedAt"]);
+const REPORT_FIELDS = [
+  { value: "patientName", label: "Patient Name" },
+  { value: "reportId", label: "Report ID" },
+  { value: "labName", label: "Lab Name" },
+  { value: "testName", label: "Test Name" },
+  { value: "collectedAt", label: "Collection Date" }
+];
+const SOURCES = new Set(REPORT_FIELDS.map(field => field.value));
+function isReportTemplate(template) {
+  return template.status === "approved" && template.category === "utility" &&
+    template.headerType === "document" && template.mediaMode !== "common";
+}
 function validateBindings(bindings, count) {
   if (!Array.isArray(bindings) || bindings.length !== count || count > 100 || bindings.some(binding =>
     typeof binding === "string" ? !SOURCES.has(binding) :
@@ -49,4 +60,4 @@ async function sendReport(tenantId, file, body, key, actor) {
     variables, purpose: "patient_report", consentScope: "service_only", permissionConfirmed: body.permissionConfirmed,
     consentReference: body.consentReference }, key, actor, { reportBindings: bindings, reportMetadataHash });
 }
-module.exports = { sendReport, isConfigured, validateBindings };
+module.exports = { sendReport, isConfigured, validateBindings, isReportTemplate, REPORT_FIELDS };

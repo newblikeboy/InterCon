@@ -305,7 +305,8 @@ const VIEW_PARENT = {
   groups: "setup",
   blacklist: "setup",
   billing: "payments",
-  "developer-api": "api"
+  "developer-api": "api",
+  integration: "api"
 };
 const VIEW_META = {
   connect: { title: "Connected WABA", related: ["templates", "contacts", "coexistence"] },
@@ -320,7 +321,8 @@ const VIEW_META = {
   "send-whatsapp": { title: "Send WhatsApp", related: ["templates", "contacts"] },
   chatbot: { title: "ChatBot Builder", related: ["inbox", "templates", "contacts"] },
   billing: { title: "Billing & Plan", related: ["connect"] },
-  "developer-api": { title: "API Access", related: ["contacts", "templates"] }
+  "developer-api": { title: "API Access", related: ["contacts", "templates"] },
+  integration: { title: "Integration", related: ["developer-api", "templates"] }
 };
 
 function setActiveNav(viewId) {
@@ -532,6 +534,7 @@ function renderAuthenticatedProfile(user = {}) {
   if (profileBusinessName) profileBusinessName.textContent = displayName;
   if (profileRole) profileRole.textContent = formatAccountRole(user.role);
   if (profileAvatar) profileAvatar.textContent = getInitials(displayName);
+  renderIntegrationTemplates();
 }
 
 function getSetupSteps() {
@@ -2571,6 +2574,179 @@ function renderTemplateStatusRows(templates) {
     `;
   }).join("");
 }
+
+const integrationTemplatesState = { templates: [], loaded: false, loading: false, error: "" };
+const integrationTemplatesList = document.querySelector("[data-integration-templates]");
+const integrationMessage = document.querySelector("[data-integration-message]");
+const refreshIntegrationButton = document.querySelector("[data-refresh-integration]");
+
+function setIntegrationMessage(message, error = false) {
+  if (!integrationMessage) return;
+  integrationMessage.textContent = message;
+  integrationMessage.classList.toggle("error", error);
+}
+
+function renderIntegrationTemplates() {
+  if (!integrationTemplatesList) return;
+  const templates = integrationTemplatesState.templates.filter(template => template.status === "approved" && template.reportMappingEligible);
+  const canEdit = ["owner", "admin"].includes(setupState.user?.role);
+  const count = document.querySelector("[data-integration-count]");
+  if (count) count.textContent = `${templates.length} ${templates.length === 1 ? "template" : "templates"}`;
+  if (!integrationTemplatesState.loaded) {
+    integrationTemplatesList.innerHTML = `<div class="empty-row">${integrationTemplatesState.error ? "Templates could not be loaded. Use Refresh to try again." : "Loading approved report templates..."}</div>`;
+    return;
+  }
+  if (!templates.length) {
+    integrationTemplatesList.innerHTML = '<div class="empty-row">No eligible templates yet. Approved Utility templates with a PDF header and Unique Media appear here.</div>';
+    return;
+  }
+  integrationTemplatesList.innerHTML = templates.map(template => {
+    const count = Number(template.parameterCount || 0);
+    return `<article class="integration-template-row">
+      <div class="integration-template-info">
+        <strong>${escapeText(template.name)}</strong>
+        <span>${escapeText(template.language)} <span aria-hidden="true">·</span> ${count} ${count === 1 ? "placeholder" : "placeholders"}</span>
+      </div>
+      <span class="status-pill ${template.reportConfigured ? "approved" : "pending"}">${count === 0 ? "No mapping needed" : template.reportConfigured ? "Mapping ready" : "Mapping pending"}</span>
+      ${canEdit ? `<button class="btn btn-outline btn-small" type="button" data-report-mapping="${escapeText(template._id || template.id)}" aria-label="${count === 0 ? "View fields for" : template.reportConfigured ? "Edit mapping for" : "Map fields for"} ${escapeText(template.name)} (${escapeText(template.language)})">${count === 0 ? "View fields" : template.reportConfigured ? "Edit mapping" : "Map fields"}</button>` : ""}
+    </article>`;
+  }).join("");
+}
+
+async function loadIntegrationTemplates() {
+  if (!integrationTemplatesList || integrationTemplatesState.loading) return;
+  integrationTemplatesState.loading = true;
+  integrationTemplatesState.error = "";
+  if (refreshIntegrationButton) refreshIntegrationButton.disabled = true;
+  setIntegrationMessage("Loading approved report templates...");
+  try {
+    const data = await requestJson("/api/templates/approved");
+    integrationTemplatesState.templates = data.templates || [];
+    integrationTemplatesState.loaded = true;
+    setIntegrationMessage(["owner", "admin"].includes(setupState.user?.role) ? "" : "Workspace owners and admins can configure report field mappings.");
+  } catch (error) {
+    integrationTemplatesState.error = error.message;
+    setIntegrationMessage(error.message, true);
+  } finally {
+    integrationTemplatesState.loading = false;
+    if (refreshIntegrationButton) refreshIntegrationButton.disabled = false;
+    renderIntegrationTemplates();
+  }
+}
+
+refreshIntegrationButton?.addEventListener("click", loadIntegrationTemplates);
+
+const reportMappingModal = document.querySelector("[data-report-mapping-modal]");
+const reportMappingForm = document.querySelector("[data-report-mapping-form]");
+const reportMappingFields = document.querySelector("[data-report-mapping-fields]");
+const reportMappingMessage = document.querySelector("[data-report-mapping-message]");
+let reportMappingTemplateId = null;
+let reportMappingSaving = false;
+
+function setReportMappingMessage(message, error = false) {
+  reportMappingMessage.textContent = message;
+  reportMappingMessage.classList.toggle("error", error);
+}
+
+function closeReportMapping() {
+  if (reportMappingSaving) return;
+  reportMappingModal.hidden = true;
+  reportMappingTemplateId = null;
+  document.body.classList.remove("modal-open");
+}
+
+async function openReportMapping(templateId) {
+  if (!reportMappingModal || !["owner", "admin"].includes(setupState.user?.role)) return;
+  reportMappingTemplateId = templateId;
+  reportMappingForm.hidden = true;
+  reportMappingFields.innerHTML = "";
+  reportMappingModal.querySelector("[data-report-mapping-name]").textContent = "";
+  reportMappingModal.querySelector("[data-report-mapping-body]").textContent = "";
+  setReportMappingMessage("Loading report mapping...");
+  reportMappingModal.hidden = false;
+  document.body.classList.add("modal-open");
+  try {
+    const { template, fields } = await requestJson(`/api/templates/${encodeURIComponent(templateId)}/report-mapping`);
+    if (reportMappingTemplateId !== templateId || reportMappingModal.hidden) return;
+    reportMappingModal.querySelector("[data-report-mapping-name]").textContent = `${template.name} · ${template.language}`;
+    reportMappingModal.querySelector("[data-report-mapping-body]").textContent = template.body || "";
+    reportMappingFields.innerHTML = '<legend>Placeholder fields</legend>' + Array.from({ length: template.parameterCount }, (_, index) => {
+      const binding = template.reportBindings[index];
+      const literal = binding && typeof binding === "object" && typeof binding.literal === "string";
+      const selected = literal ? "literal" : typeof binding === "string" ? binding : "";
+      return `<div class="report-mapping-row">
+        <label>Placeholder {{${index + 1}}}<select required data-report-source="${index}">
+          <option value="">Select a report field</option>
+          ${fields.map(field => `<option value="${escapeText(field.value)}"${selected === field.value ? " selected" : ""}>${escapeText(field.label)}</option>`).join("")}
+          <option value="literal"${literal ? " selected" : ""}>Fixed text</option>
+        </select></label>
+        <label data-report-literal-label${literal ? "" : " hidden"}>Fixed text for {{${index + 1}}}
+          <input data-report-literal maxlength="300" value="${escapeText(literal ? binding.literal : "")}"${literal ? " required" : " disabled"}>
+        </label>
+      </div>`;
+    }).join("");
+    reportMappingForm.hidden = template.parameterCount === 0;
+    setReportMappingMessage(template.parameterCount === 0
+      ? "This template has no placeholders. No mapping is required; it is ready for report delivery."
+      : template.reportConfigured ? "Saved mapping loaded. You can update the fields below." : "Select a field for every placeholder to enable automatic report delivery.");
+  } catch (error) {
+    if (reportMappingTemplateId === templateId && !reportMappingModal.hidden) setReportMappingMessage(error.message, true);
+  }
+}
+
+reportMappingFields?.addEventListener("change", event => {
+  if (!event.target.matches("[data-report-source]")) return;
+  const row = event.target.closest(".report-mapping-row");
+  const literal = event.target.value === "literal";
+  row.querySelector("[data-report-literal-label]").hidden = !literal;
+  const input = row.querySelector("[data-report-literal]");
+  input.disabled = !literal;
+  input.required = literal;
+});
+
+reportMappingForm?.addEventListener("submit", async event => {
+  event.preventDefault();
+  if (reportMappingSaving || !reportMappingTemplateId) return;
+  const bindings = [...reportMappingFields.querySelectorAll("[data-report-source]")].map(select =>
+    select.value === "literal" ? { literal: select.closest(".report-mapping-row").querySelector("[data-report-literal]").value.trim() } : select.value);
+  if (bindings.some(binding => !binding || (typeof binding === "object" && !binding.literal))) {
+    setReportMappingMessage("Select a field or enter fixed text for every placeholder.", true);
+    return;
+  }
+  reportMappingSaving = true;
+  reportMappingFields.disabled = true;
+  reportMappingModal.querySelectorAll("button").forEach(button => { button.disabled = true; });
+  setReportMappingMessage("Saving report mapping...");
+  let saved = false;
+  try {
+    const data = await requestJson(`/api/templates/${encodeURIComponent(reportMappingTemplateId)}/report-mapping`, {
+      method: "PATCH", body: JSON.stringify({ bindings })
+    });
+    const template = setupState.templates.find(item => String(item._id || item.id) === reportMappingTemplateId);
+    if (template) template.reportConfigured = data.template.reportConfigured;
+    const integrationTemplate = integrationTemplatesState.templates.find(item => String(item._id || item.id) === reportMappingTemplateId);
+    if (integrationTemplate) integrationTemplate.reportConfigured = data.template.reportConfigured;
+    renderIntegrationTemplates();
+    setIntegrationMessage("Report field mapping saved. The template is ready for automatic report delivery.");
+    saved = true;
+  } catch (error) {
+    setReportMappingMessage(error.message, true);
+  } finally {
+    reportMappingSaving = false;
+    reportMappingFields.disabled = false;
+    reportMappingModal.querySelectorAll("button").forEach(button => { button.disabled = false; });
+    if (saved) closeReportMapping();
+  }
+});
+
+document.addEventListener("click", event => {
+  const trigger = event.target.closest("[data-report-mapping]");
+  if (trigger) openReportMapping(trigger.dataset.reportMapping);
+  if (event.target.closest("[data-close-report-mapping]")) closeReportMapping();
+});
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && reportMappingModal && !reportMappingModal.hidden) closeReportMapping();
+});
 
 async function loadTemplates() {
   if (!templateStatusList) return;
@@ -5434,6 +5610,9 @@ function onPortalViewShown(viewId) {
   }
   if (viewId === "developer-api" || viewId === "api") {
     loadApiKeys().catch((error) => setApiMessage(error.message, true));
+  }
+  if (viewId === "integration") {
+    loadIntegrationTemplates();
   }
   if (viewId === "home" || viewId === "setup") {
     Promise.allSettled([

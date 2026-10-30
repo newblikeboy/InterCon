@@ -13,7 +13,11 @@ The operator sees only server, API key, template and Connect/Connection successf
 
 ## Administrator configuration
 
-Configure mappings on the server, not on each lab computer. Create a JSON configuration such as:
+In InterCon, open **API** and select the **Integration** card to the right of **API Access**. It opens a separate Integration screen listing all approved utility/PDF templates eligible for report mapping, with their language and **Mapping pending** or **Mapping ready** status. Select **Map fields** or **Edit mapping** to open **Report Field Mapping**. Workspace owners and admins can link each `{{1}}`…`{{n}}` placeholder to Patient Name, Report ID, Lab Name, Test Name or Collection Date, or enter fixed business text. Save the mapping once per template and language. Zero-placeholder templates are ready without configuration. Common Media, unapproved and non-utility/non-document templates are not eligible. Mapping controls and status do not appear in Manage Template or API Access.
+
+The dashboard uses session-authenticated, tenant-scoped `GET` and `PATCH /api/templates/:templateId/report-mapping` endpoints restricted to owner/admin roles. PATCH accepts `{ "bindings": ["patientName", "labName"] }`; the placeholder count and supported fields are validated before saving. Mapping definitions are excluded from general template lists and desktop discovery. The dedicated admin GET returns the saved bindings and available source fields. The desktop's next template lookup reflects the saved configuration; reconnect Pathlogy if its template list was already loaded.
+
+The server CLI remains available as an alternative. Create a JSON configuration such as:
 
 ```json
 {

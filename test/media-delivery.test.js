@@ -333,6 +333,73 @@ test("desktop setup authenticates the workspace and exposes only approved utilit
   assert.equal(incomplete.body.processingTermsAccepted, false);
 });
 
+test("dashboard admins can configure report mappings and immediately enable desktop reports", async t => {
+  mockUpload(t);
+  const template = await Template.findOne({ tenantId: tenant._id, name: "file_document" });
+  const path = `/api/templates/${template._id}/report-mapping`;
+  const token = signAuthToken(owner);
+  const read = () => request(app).get(path).set("Authorization", `Bearer ${token}`);
+  const save = bindings => request(app).patch(path).set("Origin", "http://localhost:5000")
+    .set("Authorization", `Bearer ${token}`).send({ bindings, tenantId: new mongoose.Types.ObjectId() });
+  const pending = await read().expect(200);
+  assert.equal(pending.body.template.reportConfigured, false);
+  assert.deepEqual(pending.body.fields.map(field => field.value), ["patientName", "reportId", "labName", "testName", "collectedAt"]);
+  assert.equal(pending.headers["cache-control"], "no-store");
+  for (const invalid of [undefined, [], ["unknown"], ["patientName", "reportId"], [{ literal: " " }], [{ literal: "a".repeat(301) }], [{ literal: "ok", extra: true }]]) {
+    await save(invalid).expect(400);
+  }
+  assert.equal((await read()).body.template.reportConfigured, false);
+  await save(["patientName"]).expect(200);
+  assert.deepEqual((await read()).body.template.reportBindings, ["patientName"]);
+  const desktop = await request(app).get("/api/v1/templates/approved").set("Authorization", `Bearer ${key}`).expect(200);
+  assert.equal(desktop.body.templates[0].reportConfigured, true);
+  assert.equal(desktop.body.templates[0].reportBindings, undefined);
+  const sent = await report().expect(202);
+  assert.deepEqual((await Message.findById(sent.body.messageId)).variables, ["Synthetic Recipient"]);
+  await save([{ literal: "Synthetic Lab" }]).expect(200);
+  assert.deepEqual((await read()).body.template.reportBindings, [{ literal: "Synthetic Lab" }]);
+  t.mock.method(require("../src/services/template.service"), "listTemplates", async () => Template.find({ tenantId: tenant._id }).lean());
+  const list = await request(app).get("/api/templates").set("Authorization", `Bearer ${token}`).expect(200);
+  const listed = list.body.templates.find(item => item.name === "file_document");
+  assert.equal(listed.reportMappingEligible, true);
+  assert.equal(listed.reportConfigured, true);
+  assert.ok(list.body.templates.every(item => !("reportBindings" in item)));
+});
+
+test("report mapping enforces dashboard roles, tenant isolation and template eligibility", async () => {
+  const template = await Template.findOne({ tenantId: tenant._id, name: "file_document" });
+  const path = `/api/templates/${template._id}/report-mapping`;
+  await request(app).get(path).expect(401);
+  await request(app).get(path).set("Authorization", `Bearer ${key}`).expect(401);
+  const agent = await User.create({ tenantId: tenant._id, name: "Agent", email: "agent@example.test", passwordHash: "unused", role: "agent" });
+  for (const method of ["get", "patch"]) {
+    await request(app)[method](path).set("Origin", "http://localhost:5000")
+      .set("Authorization", `Bearer ${signAuthToken(agent)}`).send({ bindings: ["patientName"] }).expect(403);
+  }
+  const admin = await User.create({ tenantId: tenant._id, name: "Admin", email: "admin@example.test", passwordHash: "unused", role: "admin" });
+  await request(app).patch(path).set("Origin", "http://localhost:5000").set("Authorization", `Bearer ${signAuthToken(admin)}`)
+    .send({ bindings: ["reportId"] }).expect(200);
+  const token = signAuthToken(owner);
+  await request(app).patch(path).set("Authorization", `Bearer ${token}`).send({ bindings: ["patientName"] }).expect(403);
+  const other = await Template.create({ tenantId: new mongoose.Types.ObjectId(), name: "other_workspace", category: "utility", status: "approved", headerType: "document" });
+  for (const method of ["get", "patch"]) {
+    await request(app)[method](`/api/templates/${other._id}/report-mapping`).set("Origin", "http://localhost:5000")
+      .set("Authorization", `Bearer ${token}`).send({ bindings: [] }).expect(404);
+  }
+  await request(app).get("/api/templates/invalid/report-mapping").set("Authorization", `Bearer ${token}`).expect(400);
+  for (const change of [{ status: "in_review" }, { status: "paused" }, { category: "marketing" }, { headerType: "image" }, { mediaMode: "common" }]) {
+    await Template.updateOne({ _id: template._id }, { $set: { status: "approved", category: "utility", headerType: "document", mediaMode: "unique", ...change } });
+    for (const method of ["get", "patch"]) {
+      await request(app)[method](path).set("Origin", "http://localhost:5000").set("Authorization", `Bearer ${token}`)
+        .send({ bindings: ["patientName"] }).expect(409);
+    }
+  }
+  await Template.updateOne({ _id: template._id }, { $set: { mediaMode: "unique", parameterCount: 0 }, $unset: { reportBindings: "" } });
+  const zero = await request(app).get(path).set("Authorization", `Bearer ${token}`).expect(200);
+  assert.equal(zero.body.template.reportConfigured, true);
+  await request(app).patch(path).set("Origin", "http://localhost:5000").set("Authorization", `Bearer ${token}`).send({ bindings: [] }).expect(200);
+});
+
 function report(fields = {}, idempotency = "report-request-0001", endpoint = "/api/v1/messages/send-media") {
   let req = request(app).post(endpoint).set("Authorization", `Bearer ${key}`).set("Idempotency-Key", idempotency);
   for (const [name, value] of Object.entries({ reportMode: "automatic", to: phone, templateName: "file_document", language: "en", reportId: "REPORT-SYNTHETIC-1",

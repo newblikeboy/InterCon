@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>InterCon Customer Portal</title>
   <meta name="description" content="InterCon customer portal for connecting WhatsApp Business, managing contacts, creating templates, sending messages, and checking billing readiness.">
-  <link rel="stylesheet" href="style/customer-portal.css?v=20261029-meta-media4">
+  <link rel="stylesheet" href="style/customer-portal.css?v=20261030-integration">
 </head>
 <body class="portal-body console-body">
   <div class="portal-shell console-shell">
@@ -421,6 +421,13 @@ Hi
               </span>
               <strong>API Access</strong>
               <small>Create keys for CRM, ERP, and custom systems.</small>
+            </a>
+            <a class="launch-card" href="#integration">
+              <span class="launch-icon tint-blue" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/><path d="M7 10v7h7M10 7h7v7"/></svg>
+              </span>
+              <strong>Integration</strong>
+              <small>Map approved templates to your report fields.</small>
             </a>
           </div>
         </section>
@@ -888,6 +895,27 @@ file: (PDF, JPG/PNG or MP4/3GP)</code></pre>
         </div>
       </section>
 
+      <section class="portal-section portal-view" id="integration" data-portal-view hidden>
+        <section class="api-panel integration-panel" aria-labelledby="integration-title" data-integration-panel>
+          <div class="portal-section-head compact">
+            <div>
+              <p class="eyebrow">Report delivery</p>
+              <h2 id="integration-title">Integration</h2>
+              <p>Connect template placeholders to your report fields once, then use the template in your integration.</p>
+            </div>
+            <button class="btn btn-outline btn-small" type="button" data-refresh-integration>Refresh</button>
+          </div>
+          <div class="integration-list-head">
+            <span>Approved report templates</span>
+            <span data-integration-count>0 templates</span>
+          </div>
+          <div class="integration-template-list" data-integration-templates>
+            <div class="empty-row">Loading approved report templates...</div>
+          </div>
+          <p class="contact-message" role="status" aria-live="polite" data-integration-message></p>
+        </section>
+      </section>
+
       <section class="portal-section portal-view billing-view" id="billing" data-portal-view hidden>
         <section class="recipient-usage" data-trial-usage aria-labelledby="recipient-usage-title" hidden>
           <div class="recipient-usage-intro">
@@ -1319,6 +1347,31 @@ file: (PDF, JPG/PNG or MP4/3GP)</code></pre>
         </section>
       </div>
 
+      <div class="template-modal" role="dialog" aria-modal="true" aria-labelledby="report-mapping-title" hidden data-report-mapping-modal>
+        <div class="modal-backdrop" data-close-report-mapping></div>
+        <section class="template-modal-card report-mapping-card">
+          <button class="modal-close" type="button" aria-label="Close report field mapping" data-close-report-mapping>&times;</button>
+          <div class="portal-section-head compact">
+            <div>
+              <p class="eyebrow">Automatic report delivery</p>
+              <h2 id="report-mapping-title">Report Field Mapping</h2>
+              <p data-report-mapping-name></p>
+            </div>
+          </div>
+          <p>Link each placeholder to the information supplied with a report. Save once for this template and language.</p>
+          <pre class="report-mapping-preview" data-report-mapping-body></pre>
+          <form data-report-mapping-form hidden>
+            <fieldset class="report-mapping-fields" data-report-mapping-fields></fieldset>
+            <p class="lib-hint">Use fixed text only for shared business wording, never for patient-specific information.</p>
+            <div class="report-mapping-actions">
+              <button class="btn btn-outline" type="button" data-close-report-mapping>Cancel</button>
+              <button class="btn" type="submit" data-save-report-mapping>Save mapping</button>
+            </div>
+          </form>
+          <p class="contact-message" role="status" aria-live="polite" data-report-mapping-message></p>
+        </section>
+      </div>
+
       <div class="template-modal" role="dialog" aria-modal="true" aria-labelledby="group-modal-title" hidden data-group-modal>
         <div class="modal-backdrop" data-close-group-modal></div>
         <section class="template-modal-card group-modal-card">
@@ -1539,7 +1592,7 @@ file: (PDF, JPG/PNG or MP4/3GP)</code></pre>
   </div>
 
   <script src="vendor/xlsx.full.min.js?v=20260906"></script>
-  <script src="js/customer-portal.js?v=20261029-meta-media4"></script>
+  <script src="js/customer-portal.js?v=20261030-integration"></script>
   <script src="js/recipient-delivery.js?v=20261029-meta-media4"></script>
   <script src="/js/dialog-accessibility.js?v=20260906" defer></script>
 </body>

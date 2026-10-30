@@ -1,4 +1,4 @@
-// Administrator CLI: configure once on the backend, without exposing mappings to lab operators.
+// Administrator CLI alternative to the dashboard's Report Field Mapping editor.
 const fs = require("fs");
 const mongoose = require("mongoose");
 const env = require("../config/env");
@@ -13,7 +13,7 @@ async function main() {
   await mongoose.connect(env.mongoUri);
   try {
     const template = await Template.findOne({ tenantId: config.tenantId, name: config.templateName, language: config.language,
-      status: "approved", category: "utility", headerType: "document" });
+      status: "approved", category: "utility", headerType: "document", mediaMode: { $ne: "common" } });
     if (!template) throw new Error("Approved utility PDF template not found in that workspace");
     template.reportBindings = validateBindings(config.bindings, template.parameterCount);
     await template.save();

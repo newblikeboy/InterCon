@@ -13,6 +13,8 @@ router.post("/drafts", authorize("owner", "admin"), templateController.createTem
 router.get("/approved", templateController.listApprovedTemplates);
 router.get("/library", templateController.browseTemplateLibrary);
 router.post("/library", authorize("owner", "admin"), templateController.createTemplateFromLibrary);
+router.get("/:templateId/report-mapping", authorize("owner", "admin"), templateController.getReportMapping);
+router.patch("/:templateId/report-mapping", authorize("owner", "admin"), templateController.saveReportMapping);
 router.delete("/:templateId", authorize("owner", "admin"), templateController.deleteTemplate);
 
 module.exports = router;

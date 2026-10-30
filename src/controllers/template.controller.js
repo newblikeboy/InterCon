@@ -1,12 +1,19 @@
 const asyncHandler = require("../utils/asyncHandler");
 const templateService = require("../services/template.service");
 
+function withReportStatus(templates) {
+  const { isReportTemplate, isConfigured } = require("../services/reportDelivery.service");
+  return templates.map(({ reportBindings, ...template }) => ({ ...template,
+    reportMappingEligible: isReportTemplate(template),
+    reportConfigured: isReportTemplate(template) && isConfigured({ ...template, reportBindings }) }));
+}
+
 const listTemplates = asyncHandler(async (req, res) => {
   const templates = await templateService.listTemplates(req.tenantId);
 
   res.json({
     success: true,
-    templates
+    templates: withReportStatus(templates)
   });
 });
 
@@ -15,8 +22,18 @@ const listApprovedTemplates = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    templates
+    templates: withReportStatus(templates)
   });
+});
+
+const getReportMapping = asyncHandler(async (req, res) => {
+  const result = await templateService.getReportMapping(req.tenantId, req.params.templateId);
+  res.set("Cache-Control", "no-store").json({ success: true, ...result });
+});
+
+const saveReportMapping = asyncHandler(async (req, res) => {
+  const result = await templateService.saveReportMapping(req.tenantId, req.params.templateId, req.body);
+  res.set("Cache-Control", "no-store").json({ success: true, message: "Report field mapping saved", ...result });
 });
 
 const createTemplateDraft = asyncHandler(async (req, res) => {
@@ -79,6 +96,8 @@ const deleteTemplate = asyncHandler(async (req, res) => {
 module.exports = {
   listTemplates,
   listApprovedTemplates,
+  getReportMapping,
+  saveReportMapping,
   createTemplateDraft,
   submitTemplateForMetaReview,
   browseTemplateLibrary,

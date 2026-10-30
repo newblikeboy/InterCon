@@ -524,6 +524,30 @@ async function listApprovedTemplates(tenantId) {
   }).sort({ name: 1 }).lean();
 }
 
+async function getReportMapping(tenantId, templateId) {
+  if (!mongoose.isValidObjectId(templateId)) throw new HttpError(400, "Invalid template ID");
+  const template = await Template.findOne({ _id: templateId, tenantId }).lean();
+  if (!template) throw new HttpError(404, "Template not found");
+  const { isReportTemplate, isConfigured, REPORT_FIELDS } = require("./reportDelivery.service");
+  if (!isReportTemplate(template)) throw new HttpError(409, "Report mapping requires an approved utility PDF template using Unique Media");
+  return { template: { _id: template._id, name: template.name, language: template.language,
+    body: template.body, parameterCount: template.parameterCount,
+    reportBindings: template.reportBindings ?? [], reportConfigured: isConfigured(template) }, fields: REPORT_FIELDS };
+}
+
+async function saveReportMapping(tenantId, templateId, body) {
+  const { template } = await getReportMapping(tenantId, templateId);
+  const { validateBindings } = require("./reportDelivery.service");
+  let bindings;
+  try { bindings = validateBindings(body?.bindings, template.parameterCount); }
+  catch { throw new HttpError(400, "Select a report field or non-empty fixed text (up to 300 characters) for every placeholder"); }
+  const updated = await Template.findOneAndUpdate({ _id: templateId, tenantId, status: "approved",
+    category: "utility", headerType: "document", mediaMode: { $ne: "common" }, parameterCount: template.parameterCount },
+  { $set: { reportBindings: bindings } }, { returnDocument: "after", runValidators: true }).lean();
+  if (!updated) throw new HttpError(409, "Template changed. Reopen Report Field Mapping and try again");
+  return { template: { _id: updated._id, reportConfigured: true } };
+}
+
 async function createTemplateDraft(tenantId, body) {
   const payload = buildMetaTemplatePayload(body);
 
@@ -839,6 +863,8 @@ module.exports = {
   createMetaHeaderHandle,
   listTemplates,
   listApprovedTemplates,
+  getReportMapping,
+  saveReportMapping,
   createTemplateDraft,
   submitTemplateForMetaReview,
   browseMetaTemplateLibrary,
